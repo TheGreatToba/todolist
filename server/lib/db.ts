@@ -1,8 +1,6 @@
-// Use default import for ESM compatibility with Vite/Vitest
-import pkg from '@prisma/client';
-const { PrismaClient } = pkg;
+import { PrismaClient } from '@prisma/client';
 
-let prisma: InstanceType<typeof PrismaClient>;
+let prisma: PrismaClient;
 
 if (process.env.NODE_ENV === 'production') {
   prisma = new PrismaClient();
