@@ -1,0 +1,104 @@
+/**
+ * Shared code between client and server
+ * Useful to share types between client and server
+ * and/or small pure JS functions that can be used on both client and server
+ */
+
+/**
+ * Example response type for /api/demo
+ */
+export interface DemoResponse {
+  message: string;
+}
+
+// Auth types
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: 'EMPLOYEE' | 'MANAGER';
+  teamId?: string;
+}
+
+export interface AuthResponse {
+  token: string;
+  user: User;
+}
+
+export interface LoginRequest {
+  email: string;
+  password: string;
+}
+
+export interface SignupRequest {
+  name: string;
+  email: string;
+  password: string;
+  role: 'EMPLOYEE' | 'MANAGER';
+}
+
+// Task types
+export interface TaskTemplate {
+  id: string;
+  title: string;
+  description?: string;
+  workstationId?: string;
+  assignedToEmployeeId?: string;
+  isRecurring: boolean;
+  notifyEmployee: boolean;
+  createdAt: string;
+}
+
+export interface DailyTask {
+  id: string;
+  taskTemplateId: string;
+  employeeId: string;
+  date: string;
+  isCompleted: boolean;
+  completedAt?: string;
+  taskTemplate: {
+    id: string;
+    title: string;
+    description?: string;
+    workstation?: {
+      id: string;
+      name: string;
+    };
+  };
+}
+
+export interface CreateTaskTemplateRequest {
+  title: string;
+  description?: string;
+  workstationId?: string;
+  assignedToEmployeeId?: string;
+  isRecurring?: boolean;
+  notifyEmployee?: boolean;
+}
+
+export interface UpdateDailyTaskRequest {
+  isCompleted: boolean;
+}
+
+export interface ManagerDashboard {
+  team: {
+    id: string;
+    name: string;
+    members: Array<{
+      id: string;
+      name: string;
+      email: string;
+    }>;
+  };
+  date: string;
+  dailyTasks: Array<DailyTask & {
+    employee: {
+      id: string;
+      name: string;
+    };
+  }>;
+  workstations: Array<{
+    id: string;
+    name: string;
+  }>;
+}

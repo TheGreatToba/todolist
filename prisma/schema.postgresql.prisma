@@ -1,0 +1,121 @@
+// PostgreSQL schema for production.
+// To use: copy to schema.prisma and set DATABASE_URL="postgresql://user:pass@host:5432/dbname"
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Team {
+  id        String   @id @default(cuid())
+  name      String
+  managerId String
+  manager   User     @relation("ManagerOfTeam", fields: [managerId], references: [id], onDelete: Cascade)
+  members   User[]   @relation("TeamMembers")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([managerId])
+}
+
+model Workstation {
+  id        String   @id @default(cuid())
+  name      String   @unique
+
+  employees      EmployeeWorkstation[]
+  taskTemplates  TaskTemplate[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model EmployeeWorkstation {
+  id            String       @id @default(cuid())
+  employeeId    String
+  employee      User         @relation("EmployeeWorkstations", fields: [employeeId], references: [id], onDelete: Cascade)
+  workstationId String
+  workstation   Workstation  @relation(fields: [workstationId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([employeeId, workstationId])
+  @@index([employeeId])
+  @@index([workstationId])
+}
+
+model User {
+  id              String   @id @default(cuid())
+  name            String
+  email           String   @unique
+  passwordHash    String
+  role            String   @default("EMPLOYEE")
+
+  teamId          String?
+  team            Team?    @relation("TeamMembers", fields: [teamId], references: [id], onDelete: SetNull)
+
+  workstations    EmployeeWorkstation[] @relation("EmployeeWorkstations")
+
+  managedTeams    Team[]         @relation("ManagerOfTeam")
+  dailyTasks      DailyTask[]
+  createdTasks    TaskTemplate[] @relation("TaskCreator")
+  assignedTasks   TaskTemplate[] @relation("AssignedTasks")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([teamId])
+}
+
+model TaskTemplate {
+  id              String   @id @default(cuid())
+  title           String
+  description     String?
+
+  workstationId   String?
+  workstation     Workstation? @relation(fields: [workstationId], references: [id], onDelete: Cascade)
+
+  assignedToEmployeeId String?
+  assignedToEmployee   User?   @relation("AssignedTasks", fields: [assignedToEmployeeId], references: [id], onDelete: Cascade)
+
+  createdById     String
+  createdBy       User     @relation("TaskCreator", fields: [createdById], references: [id], onDelete: Cascade)
+
+  isRecurring     Boolean  @default(true)
+  notifyEmployee  Boolean  @default(true)
+  dailyTasks      DailyTask[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([workstationId])
+  @@index([assignedToEmployeeId])
+  @@index([createdById])
+}
+
+model DailyTask {
+  id              String   @id @default(cuid())
+
+  taskTemplateId  String
+  taskTemplate    TaskTemplate @relation(fields: [taskTemplateId], references: [id], onDelete: Cascade)
+
+  employeeId      String
+  employee        User     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  date            DateTime
+  isCompleted     Boolean  @default(false)
+  completedAt     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([taskTemplateId, employeeId, date])
+  @@index([employeeId])
+  @@index([taskTemplateId])
+  @@index([date])
+}
