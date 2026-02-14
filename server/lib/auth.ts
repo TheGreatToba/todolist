@@ -1,7 +1,25 @@
 import jwt from 'jsonwebtoken';
 import bcryptjs from 'bcryptjs';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production';
+let _jwtSecret: string | null = null;
+
+function getJwtSecret(): string {
+  if (_jwtSecret) return _jwtSecret;
+  const secret = process.env.JWT_SECRET;
+  if (!secret || secret.trim() === '') {
+    throw new Error(
+      'JWT_SECRET is required. Set it in your environment (e.g. .env file) before starting the server.'
+    );
+  }
+  _jwtSecret = secret;
+  return _jwtSecret;
+}
+
+/** Call at server startup to fail fast if JWT_SECRET is missing. */
+export function ensureAuthConfig(): void {
+  getJwtSecret();
+}
+
 const JWT_EXPIRY = '7d';
 
 export interface JwtPayload {
@@ -20,12 +38,12 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
 }
 
 export function generateToken(payload: JwtPayload): string {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRY });
+  return jwt.sign(payload, getJwtSecret(), { expiresIn: JWT_EXPIRY });
 }
 
 export function verifyToken(token: string): JwtPayload | null {
   try {
-    return jwt.verify(token, JWT_SECRET) as JwtPayload;
+    return jwt.verify(token, getJwtSecret()) as JwtPayload;
   } catch {
     return null;
   }

@@ -1,5 +1,8 @@
 import "dotenv/config";
 import express, { Express } from "express";
+import { ensureAuthConfig } from "./lib/auth";
+
+ensureAuthConfig();
 import cors from "cors";
 import { createServer as createHttpServer, Server as HttpServer } from "http";
 import { Server as SocketIOServer } from "socket.io";

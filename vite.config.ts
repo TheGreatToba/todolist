@@ -1,6 +1,7 @@
 import { defineConfig, Plugin } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
+import type { Server as HttpServer } from "http";
 import { createApp, attachSocketIO } from "./server";
 
 // https://vitejs.dev/config/
@@ -34,7 +35,7 @@ function expressPlugin(): Plugin {
 
       // Attach Socket.IO to Vite's HTTP server for real-time in dev
       if (server.httpServer) {
-        attachSocketIO(server.httpServer, app);
+        attachSocketIO(server.httpServer as HttpServer, app);
       }
 
       server.middlewares.use(app);

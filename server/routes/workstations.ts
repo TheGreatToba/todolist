@@ -19,7 +19,7 @@ const UpdateEmployeeWorkstationsSchema = z.object({
   workstationIds: z.array(z.string()),
 });
 
-// Get all workstations for a manager's team with employees
+// Get all workstations used by the manager's team (filtered by team scope)
 export const handleGetWorkstations: RequestHandler = async (req, res) => {
   try {
     const authHeader = req.headers.authorization;
@@ -36,9 +36,26 @@ export const handleGetWorkstations: RequestHandler = async (req, res) => {
       return;
     }
 
+    const team = await prisma.team.findFirst({
+      where: { managerId: payload.userId },
+    });
+
+    if (!team) {
+      res.status(404).json({ error: 'Team not found' });
+      return;
+    }
+
+    // Return workstations: used by the manager's team OR unassigned (for assignment when creating employees)
     const workstations = await prisma.workstation.findMany({
+      where: {
+        OR: [
+          { employees: { some: { employee: { teamId: team.id } } } },
+          { employees: { none: {} } },
+        ],
+      },
       include: {
         employees: {
+          where: { employee: { teamId: team.id } },
           include: {
             employee: {
               select: {
@@ -143,15 +160,35 @@ export const handleCreateEmployee: RequestHandler = async (req, res) => {
       return;
     }
 
-    // Verify that all workstations exist
-    const workstations = await prisma.workstation.findMany({
+    // Verify that all workstations exist and are in the manager's scope:
+    // - Used by at least one employee of the manager's team, OR
+    // - Unassigned (no employees) - allows bootstrap when creating first team member
+    const requestedWorkstations = await prisma.workstation.findMany({
       where: { id: { in: body.workstationIds } },
+      include: {
+        employees: { include: { employee: { select: { teamId: true } } } },
+      },
     });
 
-    if (workstations.length !== body.workstationIds.length) {
+    if (requestedWorkstations.length !== body.workstationIds.length) {
       res.status(400).json({ error: 'One or more workstations not found' });
       return;
     }
+
+    const allowed = requestedWorkstations.every((ws) => {
+      if (ws.employees.length === 0) return true; // Unassigned - ok for bootstrap
+      return ws.employees.some((e) => e.employee.teamId === team.id);
+    });
+
+    if (!allowed) {
+      res.status(403).json({
+        error:
+          'One or more workstations are exclusively used by other teams. You can only assign workstations used by your team or unassigned workstations.',
+      });
+      return;
+    }
+
+    const workstations = requestedWorkstations;
 
     // Hash password
     const passwordHash = await hashPassword(body.password);
@@ -378,13 +415,29 @@ export const handleUpdateEmployeeWorkstations: RequestHandler = async (req, res)
       return;
     }
 
-    // Verify all workstations exist
-    const workstations = await prisma.workstation.findMany({
+    // Verify all workstations exist and are in manager's scope (team-used or unassigned)
+    const requestedWorkstations = await prisma.workstation.findMany({
       where: { id: { in: body.workstationIds } },
+      include: {
+        employees: { include: { employee: { select: { teamId: true } } } },
+      },
     });
 
-    if (workstations.length !== body.workstationIds.length) {
+    if (requestedWorkstations.length !== body.workstationIds.length) {
       res.status(400).json({ error: 'One or more workstations not found' });
+      return;
+    }
+
+    const allowed = requestedWorkstations.every((ws) => {
+      if (ws.employees.length === 0) return true;
+      return ws.employees.some((e) => e.employee.teamId === managerTeam.id);
+    });
+
+    if (!allowed) {
+      res.status(403).json({
+        error:
+          'One or more workstations are exclusively used by other teams. You can only assign workstations used by your team or unassigned workstations.',
+      });
       return;
     }
 

@@ -280,11 +280,19 @@ export const handleCreateTaskTemplate: RequestHandler = async (req, res) => {
 };
 
 // Cron: assign daily tasks for recurring templates (call each morning)
+// CRON_SECRET is required; the endpoint is disabled if not configured.
 export const handleDailyTaskAssignment: RequestHandler = async (req, res) => {
   try {
-    const secret = req.headers['x-cron-secret'] || req.query.secret;
     const expectedSecret = process.env.CRON_SECRET;
-    if (expectedSecret && secret !== expectedSecret) {
+    if (!expectedSecret || expectedSecret.trim() === '') {
+      res.status(503).json({
+        error: 'Cron endpoint is disabled. Set CRON_SECRET in your environment to enable it.',
+      });
+      return;
+    }
+
+    const secret = req.headers['x-cron-secret'] || req.query.secret;
+    if (secret !== expectedSecret) {
       res.status(401).json({ error: 'Unauthorized' });
       return;
     }
@@ -393,8 +401,14 @@ export const handleGetManagerDashboard: RequestHandler = async (req, res) => {
       orderBy: [{ employee: { name: 'asc' } }, { createdAt: 'asc' }],
     });
 
-    // Get workstations
+    // Get workstations: used by the manager's team OR unassigned (filtered by team scope)
     const workstations = await prisma.workstation.findMany({
+      where: {
+        OR: [
+          { employees: { some: { employee: { teamId: team.id } } } },
+          { employees: { none: {} } },
+        ],
+      },
       select: {
         id: true,
         name: true,
