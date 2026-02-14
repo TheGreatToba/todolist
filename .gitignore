@@ -25,6 +25,10 @@ dist-ssr
 
 .config/
 
+# Database (local dev)
+prisma/*.db
+prisma/*.db-journal
+
 # Secrets (do not commit)
 .env
 .env.local
