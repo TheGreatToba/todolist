@@ -1,11 +1,12 @@
 import "dotenv/config";
 import express, { Express } from "express";
-import { ensureAuthConfig } from "./lib/auth";
+import { ensureAuthConfig, verifyToken } from "./lib/auth";
 
 ensureAuthConfig();
 import cors from "cors";
 import { createServer as createHttpServer, Server as HttpServer } from "http";
 import { Server as SocketIOServer } from "socket.io";
+import prisma from "./lib/db";
 import { handleDemo } from "./routes/demo";
 import { handleSignup, handleLogin, handleProfile } from "./routes/auth";
 import {
@@ -68,14 +69,15 @@ export function createApp(): Express {
 
 function setupSocketIO(io: SocketIOServer, app: Express): void {
   io.on("connection", (socket) => {
-    console.log("Client connected:", socket.id);
+    const { userId, teamIds } = socket.data as { userId: string; teamIds: string[] };
+    socket.join(`user:${userId}`);
+    for (const teamId of teamIds) {
+      socket.join(`team:${teamId}`);
+    }
+    console.log("Client connected:", socket.id, "user:", userId);
 
     socket.on("disconnect", () => {
       console.log("Client disconnected:", socket.id);
-    });
-
-    socket.on("task:completed", (data) => {
-      io.emit("task:updated", data);
     });
   });
 
@@ -90,6 +92,38 @@ export function attachSocketIO(httpServer: HttpServer, app: Express): SocketIOSe
       methods: ["GET", "POST"],
     },
   });
+
+  // Auth middleware: require valid JWT token to connect
+  io.use(async (socket, next) => {
+    const token = socket.handshake.auth.token as string | undefined;
+    if (!token) {
+      return next(new Error("Authentication required"));
+    }
+    const payload = verifyToken(token);
+    if (!payload) {
+      return next(new Error("Invalid token"));
+    }
+
+    const teamIds: string[] = [];
+    if (payload.role === "EMPLOYEE") {
+      const user = await prisma.user.findUnique({
+        where: { id: payload.userId },
+        select: { teamId: true },
+      });
+      if (user?.teamId) teamIds.push(user.teamId);
+    } else if (payload.role === "MANAGER") {
+      const teams = await prisma.team.findMany({
+        where: { managerId: payload.userId },
+        select: { id: true },
+      });
+      teamIds.push(...teams.map((t) => t.id));
+    }
+
+    (socket.data as { userId: string; teamIds: string[] }).userId = payload.userId;
+    (socket.data as { userId: string; teamIds: string[] }).teamIds = teamIds;
+    next();
+  });
+
   setupSocketIO(io, app);
   return io;
 }

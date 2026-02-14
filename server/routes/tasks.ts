@@ -136,17 +136,23 @@ export const handleUpdateDailyTask: RequestHandler = async (req, res) => {
       },
     });
 
-    // Emit socket.io event to notify managers
+    // Emit socket.io event to notify manager (team room only)
     const app = (global as any).app;
     if (app?.io) {
-      const taskTemplate = (updatedTask as { taskTemplate?: { title: string } }).taskTemplate;
-      const taskTitle = taskTemplate?.title ?? 'Task';
-      app.io.emit('task:updated', {
-        taskId: updatedTask.id,
-        employeeId: updatedTask.employeeId,
-        isCompleted: updatedTask.isCompleted,
-        taskTitle,
+      const employee = await prisma.user.findUnique({
+        where: { id: updatedTask.employeeId },
+        select: { teamId: true },
       });
+      if (employee?.teamId) {
+        const taskTemplate = (updatedTask as { taskTemplate?: { title: string } }).taskTemplate;
+        const taskTitle = taskTemplate?.title ?? 'Task';
+        app.io.to(`team:${employee.teamId}`).emit('task:updated', {
+          taskId: updatedTask.id,
+          employeeId: updatedTask.employeeId,
+          isCompleted: updatedTask.isCompleted,
+          taskTitle,
+        });
+      }
     }
 
     res.json(updatedTask);
@@ -252,10 +258,10 @@ export const handleCreateTaskTemplate: RequestHandler = async (req, res) => {
           });
 
           if (employee) {
-            // Emit socket event for real-time notification
+            // Emit socket event to the assigned employee only
             const app = (global as any).app;
             if (app?.io) {
-              app.io.emit('task:assigned', {
+              app.io.to(`user:${employeeId}`).emit('task:assigned', {
                 taskId: taskTemplate.id,
                 employeeId,
                 employeeName: employee.name,
@@ -304,8 +310,8 @@ export const handleDailyTaskAssignment: RequestHandler = async (req, res) => {
       return;
     }
 
-    const secret = req.headers['x-cron-secret'] || req.query.secret;
-    if (secret !== expectedSecret) {
+    const secret = req.headers['x-cron-secret'];
+    if (!secret || secret !== expectedSecret) {
       res.status(401).json({ error: 'Unauthorized' });
       return;
     }

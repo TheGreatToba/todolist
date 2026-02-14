@@ -2,7 +2,6 @@ import { defineConfig, Plugin } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import type { Server as HttpServer } from "http";
-import { createApp, attachSocketIO } from "./server";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
@@ -30,7 +29,9 @@ function expressPlugin(): Plugin {
   return {
     name: "express-plugin",
     apply: "serve",
-    configureServer(server) {
+    async configureServer(server) {
+      // Dynamic import: avoid loading server/Prisma when Vitest loads this config
+      const { createApp, attachSocketIO } = await import("./server");
       const app = createApp();
 
       // Attach Socket.IO to Vite's HTTP server for real-time in dev

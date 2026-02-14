@@ -1,12 +1,16 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
+import { useAuth } from '@/contexts/AuthContext';
 
 export function useSocket() {
+  const { token } = useAuth();
   const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
-    // Initialize socket connection
+    if (!token) return;
+
     const socket = io(window.location.origin, {
+      auth: { token },
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
@@ -17,16 +21,21 @@ export function useSocket() {
       console.log('Socket connected:', socket.id);
     });
 
-    socket.on('disconnect', () => {
-      console.log('Socket disconnected');
+    socket.on('disconnect', (reason) => {
+      console.log('Socket disconnected:', reason);
+    });
+
+    socket.on('connect_error', (err) => {
+      console.warn('Socket connect error:', err.message);
     });
 
     socketRef.current = socket;
 
     return () => {
       socket.disconnect();
+      socketRef.current = null;
     };
-  }, []);
+  }, [token]);
 
   const on = useCallback((event: string, callback: (...args: any[]) => void) => {
     if (socketRef.current) {

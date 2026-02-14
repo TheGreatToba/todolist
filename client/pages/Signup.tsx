@@ -11,7 +11,6 @@ export default function Signup() {
     email: '',
     password: '',
     confirmPassword: '',
-    role: 'EMPLOYEE' as const,
   });
   const [localError, setLocalError] = useState<string | null>(null);
 
@@ -139,17 +138,11 @@ export default function Signup() {
             />
           </div>
 
-          <div>
-            <label htmlFor="role" className="block text-sm font-medium text-foreground mb-2">
-              Role
-            </label>
-            <div className="bg-secondary/50 border border-border rounded-lg p-3">
-              <p className="text-foreground font-medium">Manager</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Only managers can sign up directly. Employees are created by their manager from the dashboard.
-              </p>
-            </div>
-            <input type="hidden" name="role" value="MANAGER" />
+          <div className="bg-secondary/50 border border-border rounded-lg p-3">
+            <p className="text-foreground font-medium">Manager account</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Only managers can sign up directly. Employees are created by their manager from the dashboard.
+            </p>
           </div>
 
           <button
