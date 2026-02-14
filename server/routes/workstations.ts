@@ -19,6 +19,12 @@ const UpdateEmployeeWorkstationsSchema = z.object({
   workstationIds: z.array(z.string()),
 });
 
+function paramString(value: string | string[] | undefined): string | null {
+  if (typeof value === 'string' && value) return value;
+  if (Array.isArray(value) && value[0]) return value[0];
+  return null;
+}
+
 // Get all workstations used by the manager's team (filtered by team scope)
 export const handleGetWorkstations: RequestHandler = async (req, res) => {
   try {
@@ -290,7 +296,11 @@ export const handleDeleteWorkstation: RequestHandler = async (req, res) => {
       return;
     }
 
-    const { workstationId } = req.params;
+    const workstationId = paramString(req.params.workstationId);
+    if (!workstationId) {
+      res.status(400).json({ error: 'Invalid workstation ID' });
+      return;
+    }
 
     // Check if workstation has employees
     const employeeCount = await prisma.employeeWorkstation.count({
@@ -391,7 +401,12 @@ export const handleUpdateEmployeeWorkstations: RequestHandler = async (req, res)
       return;
     }
 
-    const { employeeId } = req.params;
+    const employeeId = paramString(req.params.employeeId);
+    if (!employeeId) {
+      res.status(400).json({ error: 'Invalid employee ID' });
+      return;
+    }
+
     const body = UpdateEmployeeWorkstationsSchema.parse(req.body);
 
     // Verify employee exists and belongs to manager's team
@@ -473,14 +488,19 @@ export const handleUpdateEmployeeWorkstations: RequestHandler = async (req, res)
       },
     });
 
+    const workstations =
+      updatedEmployee && 'workstations' in updatedEmployee && Array.isArray(updatedEmployee.workstations)
+        ? updatedEmployee.workstations.map((ew: { workstationId: string; workstation: { name: string } }) => ({
+            id: ew.workstationId,
+            name: ew.workstation.name,
+          }))
+        : [];
+
     res.json({
       id: updatedEmployee?.id,
       name: updatedEmployee?.name,
       email: updatedEmployee?.email,
-      workstations: updatedEmployee?.workstations.map((ew) => ({
-        id: ew.workstationId,
-        name: ew.workstation.name,
-      })),
+      workstations,
     });
   } catch (error) {
     if (error instanceof z.ZodError) {

@@ -20,6 +20,12 @@ const UpdateDailyTaskSchema = z.object({
   isCompleted: z.boolean(),
 });
 
+function paramString(value: string | string[] | undefined): string | null {
+  if (typeof value === 'string' && value) return value;
+  if (Array.isArray(value) && value[0]) return value[0];
+  return null;
+}
+
 // Get all daily tasks for an employee on a specific date
 export const handleGetEmployeeDailyTasks: RequestHandler = async (req, res) => {
   try {
@@ -91,7 +97,12 @@ export const handleUpdateDailyTask: RequestHandler = async (req, res) => {
       return;
     }
 
-    const { taskId } = req.params;
+    const taskId = paramString(req.params.taskId);
+    if (!taskId) {
+      res.status(400).json({ error: 'Invalid task ID' });
+      return;
+    }
+
     const body = UpdateDailyTaskSchema.parse(req.body);
 
     const task = await prisma.dailyTask.findUnique({
@@ -128,11 +139,13 @@ export const handleUpdateDailyTask: RequestHandler = async (req, res) => {
     // Emit socket.io event to notify managers
     const app = (global as any).app;
     if (app?.io) {
+      const taskTemplate = (updatedTask as { taskTemplate?: { title: string } }).taskTemplate;
+      const taskTitle = taskTemplate?.title ?? 'Task';
       app.io.emit('task:updated', {
         taskId: updatedTask.id,
         employeeId: updatedTask.employeeId,
         isCompleted: updatedTask.isCompleted,
-        taskTitle: updatedTask.taskTemplate.title,
+        taskTitle,
       });
     }
 
