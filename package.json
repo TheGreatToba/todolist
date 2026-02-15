@@ -12,7 +12,6 @@
   },
   "scripts": {
     "postinstall": "prisma generate",
-    "predev": "prisma generate",
     "dev": "vite",
     "prebuild": "prisma generate",
     "build": "npm run build:client && npm run build:server",
@@ -24,7 +23,7 @@
     "test": "vitest --run",
     "format.fix": "prettier --write .",
     "typecheck": "tsc",
-    "seed": "pnpm exec tsx prisma/seed.ts"
+    "seed": "npx tsx prisma/seed.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

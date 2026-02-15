@@ -6,6 +6,15 @@ const prisma = new PrismaClient();
 async function main() {
   console.log('🌱 Starting seed...');
 
+  // Reset demo data (allows re-running seed)
+  await prisma.dailyTask.deleteMany();
+  await prisma.taskTemplate.deleteMany();
+  await prisma.employeeWorkstation.deleteMany();
+  await prisma.team.deleteMany();
+  await prisma.user.deleteMany();
+  await prisma.workstation.deleteMany();
+  console.log('🧹 Cleared existing data');
+
   // Create workstations
   const checkoutWorkstation = await prisma.workstation.create({
     data: { name: 'Checkout' },
