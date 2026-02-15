@@ -5,7 +5,7 @@ SaaS de gestion de tâches quotidiennes par poste de travail. Les employés suiv
 ## Prérequis
 
 - Node.js 18+
-- pnpm (recommandé) ou npm
+- **pnpm** (recommandé) — le projet utilise `pnpm-lock.yaml` ; `package-lock.json` est ignoré pour éviter le drift.
 
 ## Installation
 
@@ -94,6 +94,7 @@ Le serveur écoute sur le port 3000 (ou `PORT` si défini).
 | JWT_SECRET    | Clé secrète pour les tokens JWT       | (à changer en production)      |
 | CRON_SECRET   | Secret pour l'endpoint cron (optionnel) | -                            |
 | NODE_ENV      | Environnement (development/production)| development                    |
+| TRUST_PROXY   | `true` si derrière reverse proxy (nginx, load balancer) — requis pour un rate-limit IP correct | - |
 
 ## Assignation quotidienne des tâches
 

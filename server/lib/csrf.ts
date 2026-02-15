@@ -6,9 +6,18 @@ export const CSRF_COOKIE_NAME = 'csrf-token';
 const CSRF_HEADER = 'x-csrf-token';
 const CSRF_COOKIE_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24h
 
-/** Skip CSRF validation in test env */
+/** Skip CSRF validation in test env only. DISABLE_CSRF is forbidden in production. */
 function isCsrfDisabled(): boolean {
-  return process.env.NODE_ENV === 'test' || process.env.DISABLE_CSRF === 'true';
+  if (process.env.NODE_ENV === 'test') return true;
+  if (process.env.DISABLE_CSRF === 'true' && process.env.NODE_ENV === 'production') {
+    throw new Error('DISABLE_CSRF=true is not allowed in production. Remove it.');
+  }
+  return process.env.DISABLE_CSRF === 'true';
+}
+
+/** Call at startup to fail fast if DISABLE_CSRF is misconfigured in production. */
+export function ensureCsrfConfig(): void {
+  isCsrfDisabled();
 }
 
 export function generateCsrfToken(): string {

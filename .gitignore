@@ -33,3 +33,6 @@ prisma/*.db-journal
 .env
 .env.local
 .env.*.local
+
+# Lockfile policy: this project uses pnpm (see packageManager in package.json)
+package-lock.json

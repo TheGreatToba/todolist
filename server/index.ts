@@ -5,9 +5,10 @@ import rateLimit from "express-rate-limit";
 import cookieParser from "cookie-parser";
 import { ensureAuthConfig, verifyToken, extractToken, AUTH_COOKIE_NAME } from "./lib/auth";
 import { parse as parseCookie } from "cookie";
-import { setCsrfCookieIfMissing, validateCsrf } from "./lib/csrf";
+import { setCsrfCookieIfMissing, validateCsrf, ensureCsrfConfig } from "./lib/csrf";
 
 ensureAuthConfig();
+ensureCsrfConfig();
 import cors from "cors";
 import { getCorsOptions, getSocketCorsOrigin } from "./lib/cors";
 import { createServer as createHttpServer, Server as HttpServer } from "http";
@@ -34,6 +35,11 @@ import {
 
 export function createApp(): Express {
   const app = express();
+
+  // Trust proxy for correct client IP behind reverse proxy (rate limit, etc.)
+  if (process.env.TRUST_PROXY === "true") {
+    app.set("trust proxy", 1);
+  }
 
   // Security headers (helmet) - X-Content-Type-Options, X-Frame-Options, etc.
   // TODO: Replace style-src 'unsafe-inline' with nonce/hash when build setup allows (Tailwind)

@@ -3,6 +3,7 @@
  */
 import { describe, it, expect, afterEach } from "vitest";
 import { getAuthCookieOptions, getAuthCookieClearOptions } from "./auth";
+import { ensureCsrfConfig } from "./csrf";
 import { getSetPasswordTokenExpiryHours } from "./set-password-expiry";
 import request from "supertest";
 import { createApp } from "../index";
@@ -58,6 +59,21 @@ describe("getSetPasswordTokenExpiryHours", () => {
     expect(getSetPasswordTokenExpiryHours()).toBe(12);
     process.env.SET_PASSWORD_TOKEN_EXPIRY_HOURS = "48";
     expect(getSetPasswordTokenExpiryHours()).toBe(48);
+  });
+});
+
+describe("ensureCsrfConfig", () => {
+  const envBackup = { nodeEnv: process.env.NODE_ENV, disableCsrf: process.env.DISABLE_CSRF };
+
+  afterEach(() => {
+    process.env.NODE_ENV = envBackup.nodeEnv;
+    process.env.DISABLE_CSRF = envBackup.disableCsrf;
+  });
+
+  it("throws when DISABLE_CSRF=true in production", () => {
+    process.env.NODE_ENV = "production";
+    process.env.DISABLE_CSRF = "true";
+    expect(() => ensureCsrfConfig()).toThrow("DISABLE_CSRF=true is not allowed in production");
   });
 });
 
