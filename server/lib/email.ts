@@ -50,7 +50,8 @@ export async function sendSetPasswordEmail(
   employeeEmail: string,
   employeeName: string,
   setPasswordLink: string,
-  workstationNames: string[]
+  workstationNames: string[],
+  expiryHours: number = 24
 ) {
   try {
     const transporter = await getTransporter();
@@ -81,7 +82,7 @@ export async function sendSetPasswordEmail(
             </ul>
 
             <div style="background-color: #e8f5e9; border: 1px solid #4caf50; padding: 12px; border-radius: 4px; margin: 16px 0; font-size: 13px;">
-              <strong>Security:</strong> This link expires in 48 hours and can only be used once. Do not share it with anyone.
+              <strong>Security:</strong> This link expires in ${expiryHours} hour${expiryHours === 1 ? '' : 's'} and can only be used once. Do not share it with anyone.
             </div>
 
             <p style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 12px; color: #666;">

@@ -1,9 +1,16 @@
 import { RequestHandler } from 'express';
 import { z } from 'zod';
 import prisma from '../lib/db';
-import { hashPassword, verifyPassword, generateToken, verifyToken, extractToken, AUTH_COOKIE_NAME } from '../lib/auth';
-
-const COOKIE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+import {
+  hashPassword,
+  verifyPassword,
+  generateToken,
+  verifyToken,
+  extractToken,
+  AUTH_COOKIE_NAME,
+  getAuthCookieOptions,
+  getAuthCookieClearOptions,
+} from '../lib/auth';
 
 const SetPasswordSchema = z.object({
   token: z.string().min(1),
@@ -78,14 +85,9 @@ export const handleSignup: RequestHandler = async (req, res) => {
       role: user.role,
     });
 
-    res.cookie(AUTH_COOKIE_NAME, token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: COOKIE_MAX_AGE_MS,
-    });
+    res.cookie(AUTH_COOKIE_NAME, token, getAuthCookieOptions());
 
-    res.status(201).json({ user, token });
+    res.status(201).json({ user });
   } catch (error) {
     if (error instanceof z.ZodError) {
       res.status(400).json({ error: 'Invalid input', details: error.errors });
@@ -122,15 +124,9 @@ export const handleLogin: RequestHandler = async (req, res) => {
       role: user.role,
     });
 
-    res.cookie(AUTH_COOKIE_NAME, token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: COOKIE_MAX_AGE_MS,
-    });
+    res.cookie(AUTH_COOKIE_NAME, token, getAuthCookieOptions());
 
     res.json({
-      token,
       user: {
         id: user.id,
         name: user.name,
@@ -188,7 +184,7 @@ export const handleProfile: RequestHandler = async (req, res) => {
 };
 
 export const handleLogout: RequestHandler = (_req, res) => {
-  res.clearCookie(AUTH_COOKIE_NAME);
+  res.clearCookie(AUTH_COOKIE_NAME, getAuthCookieClearOptions());
   res.json({ success: true });
 };
 
@@ -228,12 +224,7 @@ export const handleSetPassword: RequestHandler = async (req, res) => {
       role: record.user.role,
     });
 
-    res.cookie(AUTH_COOKIE_NAME, token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: COOKIE_MAX_AGE_MS,
-    });
+    res.cookie(AUTH_COOKIE_NAME, token, getAuthCookieOptions());
 
     res.json({
       success: true,

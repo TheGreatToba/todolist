@@ -1,5 +1,6 @@
 import "dotenv/config";
 import express, { Express } from "express";
+import helmet from "helmet";
 import cookieParser from "cookie-parser";
 import { ensureAuthConfig, verifyToken, extractToken, AUTH_COOKIE_NAME } from "./lib/auth";
 import { parse as parseCookie } from "cookie";
@@ -31,6 +32,22 @@ import {
 
 export function createApp(): Express {
   const app = express();
+
+  // Security headers (helmet) - X-Content-Type-Options, X-Frame-Options, etc.
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          scriptSrc: ["'self'"],
+          styleSrc: ["'self'", "'unsafe-inline'"],
+          imgSrc: ["'self'", "data:", "blob:"],
+          connectSrc: ["'self'"],
+          frameAncestors: ["'self'"],
+        },
+      },
+    })
+  );
 
   // Middleware - CORS hardened per env (see server/lib/cors.ts)
   app.use(cors(getCorsOptions()));

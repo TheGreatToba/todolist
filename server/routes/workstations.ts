@@ -5,7 +5,11 @@ import prisma from '../lib/db';
 import { verifyToken, extractToken, hashPassword } from '../lib/auth';
 import { sendSetPasswordEmail } from '../lib/email';
 
-const SET_PASSWORD_TOKEN_EXPIRY_HOURS = 48;
+// Configurable via env; 24h default for production (12h recommended for high-sensitivity)
+const SET_PASSWORD_TOKEN_EXPIRY_HOURS = parseInt(
+  process.env.SET_PASSWORD_TOKEN_EXPIRY_HOURS || '24',
+  10
+);
 
 function generateSecureToken(): string {
   return crypto.randomBytes(32).toString('hex');
@@ -267,7 +271,8 @@ export const handleCreateEmployee: RequestHandler = async (req, res) => {
       body.email,
       body.name,
       setPasswordLink,
-      workstationNames
+      workstationNames,
+      SET_PASSWORD_TOKEN_EXPIRY_HOURS
     );
 
     if (!emailResult.success) {

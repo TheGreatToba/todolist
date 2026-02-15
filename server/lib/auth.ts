@@ -52,6 +52,36 @@ export function verifyToken(token: string): JwtPayload | null {
 
 export const AUTH_COOKIE_NAME = 'token';
 
+const COOKIE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+/** Cookie options for set and clear - must match for clearCookie to work across browsers/proxies */
+export function getAuthCookieOptions(): {
+  httpOnly: boolean;
+  secure: boolean;
+  sameSite: 'lax';
+  maxAge: number;
+  path: string;
+} {
+  return {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: COOKIE_MAX_AGE_MS,
+    path: '/',
+  };
+}
+
+/** Options for clearCookie - must mirror getAuthCookieOptions (excluding maxAge) */
+export function getAuthCookieClearOptions(): { httpOnly: boolean; secure: boolean; sameSite: 'lax'; path: string } {
+  const opts = getAuthCookieOptions();
+  return {
+    httpOnly: opts.httpOnly,
+    secure: opts.secure,
+    sameSite: opts.sameSite,
+    path: opts.path,
+  };
+}
+
 export function extractTokenFromHeader(authHeader?: string): string | null {
   if (!authHeader) return null;
   const parts = authHeader.split(' ');
