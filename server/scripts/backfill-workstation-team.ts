@@ -2,10 +2,10 @@
  * One-off backfill (best-effort): set teamId on workstations that have none (legacy).
  * Run once after adding Workstation.teamId. Ambiguous cases use "first employee" or "first team".
  *
- * Logic:
- * - With employees: teamId = first employee's teamId.
- * - Without employees: teamId = first team in DB (so they appear in a list).
- * - Not assignable: no employees and no team in DB → left teamId=null.
+ * Logic (deterministic order: workstations by name/id, employees by employeeId, first team by id):
+ * - With employees: teamId = first employee (in order) that has teamId; if none, left teamId=null.
+ * - Without employees: teamId = first team in DB, or null if no team.
+ * - Categories: withEmployees, employeesButNoTeam, withoutEmployees, notAssignable.
  *
  * Usage:
  *   pnpm backfill:workstation-team           # apply updates
@@ -23,8 +23,10 @@ async function main() {
 
   const legacy = await prisma.workstation.findMany({
     where: { teamId: null },
+    orderBy: [{ name: 'asc' }, { id: 'asc' }],
     include: {
       employees: {
+        orderBy: { employeeId: 'asc' },
         include: {
           employee: { select: { teamId: true } },
         },
@@ -37,27 +39,34 @@ async function main() {
     return;
   }
 
-  const firstTeam = await prisma.team.findFirst({ select: { id: true } });
+  const firstTeam = await prisma.team.findFirst({
+    orderBy: { id: 'asc' },
+    select: { id: true },
+  });
   if (!firstTeam) {
     console.warn('No team in DB; cannot assign workstations with no employees.');
   }
 
   const idsByCategory = {
     withEmployees: [] as string[],
+    employeesButNoTeam: [] as string[],
     withoutEmployees: [] as string[],
     notAssignable: [] as string[],
   };
   let updated = 0;
 
   for (const ws of legacy) {
-    const teamId =
-      ws.employees.length > 0
-        ? ws.employees[0].employee.teamId
-        : firstTeam?.id ?? null;
-
-    if (ws.employees.length > 0) idsByCategory.withEmployees.push(ws.id);
-    else if (firstTeam) idsByCategory.withoutEmployees.push(ws.id);
-    else idsByCategory.notAssignable.push(ws.id);
+    let teamId: string | null;
+    if (ws.employees.length > 0) {
+      const firstWithTeam = ws.employees.find((ew) => ew.employee.teamId != null);
+      teamId = firstWithTeam?.employee.teamId ?? null;
+      if (teamId) idsByCategory.withEmployees.push(ws.id);
+      else idsByCategory.employeesButNoTeam.push(ws.id);
+    } else {
+      teamId = firstTeam?.id ?? null;
+      if (firstTeam) idsByCategory.withoutEmployees.push(ws.id);
+      else idsByCategory.notAssignable.push(ws.id);
+    }
 
     if (teamId) {
       if (!dryRun) {
@@ -73,9 +82,11 @@ async function main() {
           : `Workstation "${ws.name}" (${ws.id}) -> teamId=${teamId}`
       );
     } else {
-      console.log(
-        `Workstation "${ws.name}" (${ws.id}) has no employees and no team; left teamId=null.`
-      );
+      const reason =
+        ws.employees.length > 0
+          ? 'employees have no team; left teamId=null'
+          : 'no employees and no team; left teamId=null';
+      console.log(`Workstation "${ws.name}" (${ws.id}) ${reason}.`);
     }
   }
 
@@ -85,8 +96,9 @@ async function main() {
   console.log('Summary (legacy workstations):');
   const fmt = (ids: string[]) => `${ids.length} — ids: ${ids.join(', ')}`;
   console.log(`  - With employees (assigned from first employee’s team): ${fmt(idsByCategory.withEmployees)}`);
+  console.log(`  - With employees but no employee has team (left teamId=null): ${fmt(idsByCategory.employeesButNoTeam)}`);
   console.log(`  - Without employees (assigned to first team): ${fmt(idsByCategory.withoutEmployees)}`);
-  console.log(`  - Not assignable (left teamId=null): ${fmt(idsByCategory.notAssignable)}`);
+  console.log(`  - Not assignable (no employees, no team): ${fmt(idsByCategory.notAssignable)}`);
   if (dryRun && updated > 0) {
     console.log('\nRun without --dry-run to apply changes.');
   }

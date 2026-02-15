@@ -1,6 +1,7 @@
 import { RequestHandler } from 'express';
 import { z } from 'zod';
 import prisma from '../lib/db';
+import { Request } from 'express';
 import {
   hashPassword,
   verifyPassword,
@@ -9,10 +10,41 @@ import {
   AUTH_COOKIE_NAME,
   getAuthCookieOptions,
   getAuthCookieClearOptions,
-  type Role,
 } from '../lib/auth';
 import { sendErrorResponse } from '../lib/errors';
 import { getAuthOrThrow } from '../middleware/requireAuth';
+
+/** Structured log when role from DB is invalid (do not emit JWT). */
+function logInvalidRole(
+  user: { id: string; email: string; role: unknown },
+  req: Request
+): void {
+  console.warn(
+    JSON.stringify({
+      event: 'invalid_role_rejected',
+      userId: user.id,
+      email: user.email,
+      role: user.role,
+      endpoint: req.path,
+      method: req.method,
+      requestId: req.requestId,
+    })
+  );
+}
+
+/** Returns JWT payload for cookie, or null after logging and sending 500. */
+function createTokenOrFail(
+  req: Request,
+  res: { status: (n: number) => { json: (o: object) => void } },
+  user: { id: string; email: string; role: unknown }
+): string | null {
+  if (!isRole(user.role)) {
+    logInvalidRole(user, req);
+    res.status(500).json({ error: 'Invalid user role' });
+    return null;
+  }
+  return generateToken({ userId: user.id, email: user.email, role: user.role });
+}
 
 const SetPasswordSchema = z.object({
   token: z.string().min(1),
@@ -81,18 +113,9 @@ export const handleSignup: RequestHandler = async (req, res) => {
       });
     }
 
-    if (!isRole(user.role)) {
-      res.status(500).json({ error: 'Invalid user role' });
-      return;
-    }
-    const token = generateToken({
-      userId: user.id,
-      email: user.email,
-      role: user.role,
-    });
-
+    const token = createTokenOrFail(req, res, user);
+    if (!token) return;
     res.cookie(AUTH_COOKIE_NAME, token, getAuthCookieOptions());
-
     res.status(201).json({ user });
   } catch (error) {
     sendErrorResponse(res, error);
@@ -119,18 +142,9 @@ export const handleLogin: RequestHandler = async (req, res) => {
       return;
     }
 
-    if (!isRole(user.role)) {
-      res.status(500).json({ error: 'Invalid user role' });
-      return;
-    }
-    const token = generateToken({
-      userId: user.id,
-      email: user.email,
-      role: user.role,
-    });
-
+    const token = createTokenOrFail(req, res, user);
+    if (!token) return;
     res.cookie(AUTH_COOKIE_NAME, token, getAuthCookieOptions());
-
     res.json({
       user: {
         id: user.id,
@@ -207,16 +221,8 @@ export const handleSetPassword: RequestHandler = async (req, res) => {
       prisma.setPasswordToken.delete({ where: { id: record.id } }),
     ]);
 
-    if (!isRole(record.user.role)) {
-      res.status(500).json({ error: 'Invalid user role' });
-      return;
-    }
-    const token = generateToken({
-      userId: record.user.id,
-      email: record.user.email,
-      role: record.user.role,
-    });
-
+    const token = createTokenOrFail(req, res, record.user);
+    if (!token) return;
     res.cookie(AUTH_COOKIE_NAME, token, getAuthCookieOptions());
 
     res.json({

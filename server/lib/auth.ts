@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken';
 import bcryptjs from 'bcryptjs';
+import { z } from 'zod';
 import { parse as parseCookie } from 'cookie';
 
 let _jwtSecret: string | null = null;
@@ -50,9 +51,17 @@ export function generateToken(payload: JwtPayload): string {
   return jwt.sign(payload, getJwtSecret(), { expiresIn: JWT_EXPIRY });
 }
 
+const JwtPayloadSchema = z.object({
+  userId: z.string(),
+  email: z.string().email(),
+  role: z.enum(['MANAGER', 'EMPLOYEE']),
+});
+
 export function verifyToken(token: string): JwtPayload | null {
   try {
-    return jwt.verify(token, getJwtSecret()) as JwtPayload;
+    const decoded = jwt.verify(token, getJwtSecret());
+    const parsed = JwtPayloadSchema.safeParse(decoded);
+    return parsed.success ? (parsed.data as JwtPayload) : null;
   } catch {
     return null;
   }
