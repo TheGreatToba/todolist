@@ -129,7 +129,7 @@ Si des requêtes légitimes sont bloquées (429) :
 ### Observabilité : Request ID
 
 Un middleware injecte un ID de corrélation sur chaque requête :
-- Priorité : `X-Request-ID` > `X-Correlation-ID` > `X-Amzn-Trace-Id` > UUID généré
+- Priorité : `X-Request-ID` > `X-Correlation-ID` > `X-Amzn-Trace-ID` > UUID généré
 - Disponible sur `req.requestId` dans tout le pipeline
 - Retourné dans la réponse via le header `X-Request-ID` pour corréler client/serveur et APM
 
@@ -141,7 +141,7 @@ En cas de rejet CSRF, un log structuré est émis :
 ```json
 {"event":"csrf_rejected","requestId":"abc-123","method":"POST","path":"/api/auth/login","reason":"missing_header"}
 ```
-- **requestId** : ID de corrélation. Priorité des headers : `X-Request-ID` > `X-Correlation-ID` > `X-Amzn-Trace-Id` > UUID généré. Le même ID est renvoyé dans le header de réponse `X-Request-ID` pour le tracing cross-services.
+- **requestId** : ID de corrélation. Priorité des headers : `X-Request-ID` > `X-Correlation-ID` > `X-Amzn-Trace-ID` > UUID généré. Le même ID est renvoyé dans le header de réponse `X-Request-ID` pour le tracing cross-services.
 - **path** : chemin Express (`req.path`). Si des routers sont montés (ex. `app.use('/api', router)`), le path est relatif au montage (ex. `/auth/login` et non `/api/auth/login`).
 - **reason** : `missing_cookie`, `missing_header` ou `mismatch`. Aucun secret n’est loggé.
 
