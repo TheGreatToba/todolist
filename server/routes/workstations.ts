@@ -2,7 +2,8 @@ import crypto from 'crypto';
 import { RequestHandler } from 'express';
 import { z } from 'zod';
 import prisma from '../lib/db';
-import { verifyToken, extractToken, hashPassword } from '../lib/auth';
+import { hashPassword } from '../lib/auth';
+import { sendErrorResponse } from '../lib/errors';
 import { sendSetPasswordEmail } from '../lib/email';
 import { getSetPasswordTokenExpiryHours } from '../lib/set-password-expiry';
 
@@ -33,19 +34,7 @@ function paramString(value: string | string[] | undefined): string | null {
 // Get all workstations used by the manager's team (filtered by team scope)
 export const handleGetWorkstations: RequestHandler = async (req, res) => {
   try {
-    const token = extractToken(req);
-
-    if (!token) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
-    }
-
-    const payload = verifyToken(token);
-    if (!payload || payload.role !== 'MANAGER') {
-      res.status(403).json({ error: 'Only managers can access this' });
-      return;
-    }
-
+    const payload = req.auth!;
     const team = await prisma.team.findFirst({
       where: { managerId: payload.userId },
     });
@@ -55,14 +44,9 @@ export const handleGetWorkstations: RequestHandler = async (req, res) => {
       return;
     }
 
-    // Return workstations: used by the manager's team OR unassigned (for assignment when creating employees)
+    // Return workstations belonging to this team (name is unique per team)
     const workstations = await prisma.workstation.findMany({
-      where: {
-        OR: [
-          { employees: { some: { employee: { teamId: team.id } } } },
-          { employees: { none: {} } },
-        ],
-      },
+      where: { teamId: team.id },
       include: {
         employees: {
           where: { employee: { teamId: team.id } },
@@ -82,70 +66,47 @@ export const handleGetWorkstations: RequestHandler = async (req, res) => {
 
     res.json(workstations);
   } catch (error) {
-    console.error('Get workstations error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    sendErrorResponse(res, error);
   }
 };
 
-// Create a new workstation
+// Create a new workstation (scoped to manager's team; name unique per team)
 export const handleCreateWorkstation: RequestHandler = async (req, res) => {
   try {
-    const token = extractToken(req);
-
-    if (!token) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
-    }
-
-    const payload = verifyToken(token);
-    if (!payload || payload.role !== 'MANAGER') {
-      res.status(403).json({ error: 'Only managers can create workstations' });
-      return;
-    }
-
+    const payload = req.auth!;
     const body = CreateWorkstationSchema.parse(req.body);
 
-    // Check if workstation already exists
-    const existing = await prisma.workstation.findUnique({
-      where: { name: body.name },
+    const team = await prisma.team.findFirst({
+      where: { managerId: payload.userId },
     });
+    if (!team) {
+      res.status(404).json({ error: 'Team not found' });
+      return;
+    }
 
+    // Name unique per team: two managers can have a workstation with the same name
+    const existing = await prisma.workstation.findFirst({
+      where: { teamId: team.id, name: body.name },
+    });
     if (existing) {
-      res.status(400).json({ error: 'Workstation already exists' });
+      res.status(400).json({ error: 'A workstation with this name already exists in your team' });
       return;
     }
 
     const workstation = await prisma.workstation.create({
-      data: { name: body.name },
+      data: { name: body.name, teamId: team.id },
     });
 
     res.status(201).json(workstation);
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      res.status(400).json({ error: 'Invalid input', details: error.errors });
-      return;
-    }
-    console.error('Create workstation error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    sendErrorResponse(res, error);
   }
 };
 
 // Create a new employee (manager only)
 export const handleCreateEmployee: RequestHandler = async (req, res) => {
   try {
-    const token = extractToken(req);
-
-    if (!token) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
-    }
-
-    const payload = verifyToken(token);
-    if (!payload || payload.role !== 'MANAGER') {
-      res.status(403).json({ error: 'Only managers can create employees' });
-      return;
-    }
-
+    const payload = req.auth!;
     const body = CreateEmployeeSchema.parse(req.body);
 
     // Check if user already exists
@@ -168,14 +129,9 @@ export const handleCreateEmployee: RequestHandler = async (req, res) => {
       return;
     }
 
-    // Verify that all workstations exist and are in the manager's scope:
-    // - Used by at least one employee of the manager's team, OR
-    // - Unassigned (no employees) - allows bootstrap when creating first team member
+    // Verify that all workstations exist and belong to the manager's team (or legacy null)
     const requestedWorkstations = await prisma.workstation.findMany({
       where: { id: { in: body.workstationIds } },
-      include: {
-        employees: { include: { employee: { select: { teamId: true } } } },
-      },
     });
 
     if (requestedWorkstations.length !== body.workstationIds.length) {
@@ -183,15 +139,12 @@ export const handleCreateEmployee: RequestHandler = async (req, res) => {
       return;
     }
 
-    const allowed = requestedWorkstations.every((ws) => {
-      if (ws.employees.length === 0) return true; // Unassigned - ok for bootstrap
-      return ws.employees.some((e) => e.employee.teamId === team.id);
-    });
-
+    const allowed = requestedWorkstations.every(
+      (ws) => ws.teamId === team.id || ws.teamId === null
+    );
     if (!allowed) {
       res.status(403).json({
-        error:
-          'One or more workstations are exclusively used by other teams. You can only assign workstations used by your team or unassigned workstations.',
+        error: 'One or more workstations do not belong to your team.',
       });
       return;
     }
@@ -287,42 +240,39 @@ export const handleCreateEmployee: RequestHandler = async (req, res) => {
       emailSent: emailResult.success,
     });
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      res.status(400).json({ error: 'Invalid input', details: error.errors });
-      return;
-    }
-    console.error('Create employee error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    sendErrorResponse(res, error);
   }
 };
 
 // Delete a workstation
 export const handleDeleteWorkstation: RequestHandler = async (req, res) => {
   try {
-    const token = extractToken(req);
-
-    if (!token) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
-    }
-
-    const payload = verifyToken(token);
-    if (!payload || payload.role !== 'MANAGER') {
-      res.status(403).json({ error: 'Only managers can delete workstations' });
-      return;
-    }
-
+    const payload = req.auth!;
     const workstationId = paramString(req.params.workstationId);
     if (!workstationId) {
       res.status(400).json({ error: 'Invalid workstation ID' });
       return;
     }
 
-    // Check if workstation has employees
+    const team = await prisma.team.findFirst({
+      where: { managerId: payload.userId },
+    });
+    if (!team) {
+      res.status(404).json({ error: 'Team not found' });
+      return;
+    }
+
+    const workstation = await prisma.workstation.findUnique({
+      where: { id: workstationId },
+    });
+    if (!workstation || workstation.teamId !== team.id) {
+      res.status(404).json({ error: 'Workstation not found' });
+      return;
+    }
+
     const employeeCount = await prisma.employeeWorkstation.count({
       where: { workstationId },
     });
-
     if (employeeCount > 0) {
       res.status(400).json({ error: 'Cannot delete workstation with employees' });
       return;
@@ -334,27 +284,14 @@ export const handleDeleteWorkstation: RequestHandler = async (req, res) => {
 
     res.json({ success: true });
   } catch (error) {
-    console.error('Delete workstation error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    sendErrorResponse(res, error);
   }
 };
 
 // Get team members with their workstations
 export const handleGetTeamMembers: RequestHandler = async (req, res) => {
   try {
-    const token = extractToken(req);
-
-    if (!token) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
-    }
-
-    const payload = verifyToken(token);
-    if (!payload || payload.role !== 'MANAGER') {
-      res.status(403).json({ error: 'Only managers can access this' });
-      return;
-    }
-
+    const payload = req.auth!;
     const team = await prisma.team.findFirst({
       where: { managerId: payload.userId },
       include: {
@@ -394,27 +331,14 @@ export const handleGetTeamMembers: RequestHandler = async (req, res) => {
 
     res.json(members);
   } catch (error) {
-    console.error('Get team members error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    sendErrorResponse(res, error);
   }
 };
 
 // Update employee workstation assignments
 export const handleUpdateEmployeeWorkstations: RequestHandler = async (req, res) => {
   try {
-    const token = extractToken(req);
-
-    if (!token) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
-    }
-
-    const payload = verifyToken(token);
-    if (!payload || payload.role !== 'MANAGER') {
-      res.status(403).json({ error: 'Only managers can update employee assignments' });
-      return;
-    }
-
+    const payload = req.auth!;
     const employeeId = paramString(req.params.employeeId);
     if (!employeeId) {
       res.status(400).json({ error: 'Invalid employee ID' });
@@ -444,12 +368,9 @@ export const handleUpdateEmployeeWorkstations: RequestHandler = async (req, res)
       return;
     }
 
-    // Verify all workstations exist and are in manager's scope (team-used or unassigned)
+    // Verify all workstations exist and belong to the manager's team (or legacy null)
     const requestedWorkstations = await prisma.workstation.findMany({
       where: { id: { in: body.workstationIds } },
-      include: {
-        employees: { include: { employee: { select: { teamId: true } } } },
-      },
     });
 
     if (requestedWorkstations.length !== body.workstationIds.length) {
@@ -457,15 +378,12 @@ export const handleUpdateEmployeeWorkstations: RequestHandler = async (req, res)
       return;
     }
 
-    const allowed = requestedWorkstations.every((ws) => {
-      if (ws.employees.length === 0) return true;
-      return ws.employees.some((e) => e.employee.teamId === managerTeam.id);
-    });
-
+    const allowed = requestedWorkstations.every(
+      (ws) => ws.teamId === managerTeam.id || ws.teamId === null
+    );
     if (!allowed) {
       res.status(403).json({
-        error:
-          'One or more workstations are exclusively used by other teams. You can only assign workstations used by your team or unassigned workstations.',
+        error: 'One or more workstations do not belong to your team.',
       });
       return;
     }
@@ -517,11 +435,6 @@ export const handleUpdateEmployeeWorkstations: RequestHandler = async (req, res)
       workstations,
     });
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      res.status(400).json({ error: 'Invalid input', details: error.errors });
-      return;
-    }
-    console.error('Update employee workstations error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    sendErrorResponse(res, error);
   }
 };

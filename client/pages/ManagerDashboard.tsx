@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { fetchWithCsrf } from '@/lib/api';
@@ -52,7 +52,7 @@ export default function ManagerDashboard() {
   const [operationError, setOperationError] = useState<string | null>(null);
   const [operationSuccess, setOperationSuccess] = useState<string | null>(null);
 
-  const fetchDashboard = async () => {
+  const fetchDashboard = useCallback(async () => {
     try {
       setIsLoading(true);
       const params = new URLSearchParams();
@@ -73,7 +73,7 @@ export default function ManagerDashboard() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [selectedDate, selectedEmployee, selectedWorkstation]);
 
   useEffect(() => {
     fetchWorkstations();
@@ -82,7 +82,7 @@ export default function ManagerDashboard() {
 
   useEffect(() => {
     fetchDashboard();
-  }, [selectedDate, selectedEmployee, selectedWorkstation]);
+  }, [fetchDashboard]);
 
   useEffect(() => {
     const unsubscribeUpdate = on('task:updated', () => {
@@ -98,7 +98,7 @@ export default function ManagerDashboard() {
       unsubscribeUpdate();
       unsubscribeAssigned();
     };
-  }, [on, selectedDate, selectedEmployee]);
+  }, [on, fetchDashboard]);
 
   const fetchWorkstations = async () => {
     try {

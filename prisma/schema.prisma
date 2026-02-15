@@ -11,12 +11,13 @@ datasource db {
 }
 
 model Team {
-  id        String   @id @default(cuid())
-  name      String
-  managerId String
-  manager   User     @relation("ManagerOfTeam", fields: [managerId], references: [id], onDelete: Cascade)
-  members   User[]   @relation("TeamMembers")
-  
+  id          String        @id @default(cuid())
+  name        String
+  managerId   String
+  manager     User          @relation("ManagerOfTeam", fields: [managerId], references: [id], onDelete: Cascade)
+  members     User[]        @relation("TeamMembers")
+  workstations Workstation[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -25,13 +26,18 @@ model Team {
 
 model Workstation {
   id        String   @id @default(cuid())
-  name      String   @unique
+  name      String
+  teamId    String?
+  team      Team?    @relation(fields: [teamId], references: [id], onDelete: Cascade)
 
   employees      EmployeeWorkstation[]
   taskTemplates  TaskTemplate[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@unique([teamId, name])
+  @@index([teamId])
 }
 
 model EmployeeWorkstation {

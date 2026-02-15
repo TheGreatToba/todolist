@@ -3,7 +3,8 @@ import express, { Express } from "express";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import cookieParser from "cookie-parser";
-import { ensureAuthConfig, verifyToken, extractToken, AUTH_COOKIE_NAME } from "./lib/auth";
+import { ensureAuthConfig, verifyToken, AUTH_COOKIE_NAME } from "./lib/auth";
+import { requireAuth, requireRole } from "./middleware/requireAuth";
 import { parse as parseCookie } from "cookie";
 import { setCsrfCookieIfMissing, validateCsrf, ensureCsrfConfig } from "./lib/csrf";
 import { requestIdMiddleware } from "./lib/observability";
@@ -101,26 +102,26 @@ export function createApp(): Express {
   // Auth routes (rate-limited)
   app.post("/api/auth/signup", authLimiter, handleSignup);
   app.post("/api/auth/login", authLimiter, handleLogin);
-  app.get("/api/auth/profile", handleProfile);
+  app.get("/api/auth/profile", requireAuth, handleProfile);
   app.post("/api/auth/logout", handleLogout);
   app.post("/api/auth/set-password", setPasswordLimiter, handleSetPassword);
 
   // Task routes
-  app.get("/api/tasks/daily", handleGetEmployeeDailyTasks);
-  app.patch("/api/tasks/daily/:taskId", handleUpdateDailyTask);
-  app.post("/api/tasks/templates", handleCreateTaskTemplate);
-  app.get("/api/manager/dashboard", handleGetManagerDashboard);
+  app.get("/api/tasks/daily", requireAuth, handleGetEmployeeDailyTasks);
+  app.patch("/api/tasks/daily/:taskId", requireAuth, handleUpdateDailyTask);
+  app.post("/api/tasks/templates", requireAuth, requireRole("MANAGER"), handleCreateTaskTemplate);
+  app.get("/api/manager/dashboard", requireAuth, requireRole("MANAGER"), handleGetManagerDashboard);
   app.post("/api/cron/daily-tasks", handleDailyTaskAssignment);
 
   // Workstation routes
-  app.get("/api/workstations", handleGetWorkstations);
-  app.post("/api/workstations", handleCreateWorkstation);
-  app.delete("/api/workstations/:workstationId", handleDeleteWorkstation);
+  app.get("/api/workstations", requireAuth, requireRole("MANAGER"), handleGetWorkstations);
+  app.post("/api/workstations", requireAuth, requireRole("MANAGER"), handleCreateWorkstation);
+  app.delete("/api/workstations/:workstationId", requireAuth, requireRole("MANAGER"), handleDeleteWorkstation);
 
   // Employee management routes (rate-limited)
-  app.post("/api/employees", createEmployeeLimiter, handleCreateEmployee);
-  app.get("/api/team/members", handleGetTeamMembers);
-  app.patch("/api/employees/:employeeId/workstations", handleUpdateEmployeeWorkstations);
+  app.post("/api/employees", createEmployeeLimiter, requireAuth, requireRole("MANAGER"), handleCreateEmployee);
+  app.get("/api/team/members", requireAuth, requireRole("MANAGER"), handleGetTeamMembers);
+  app.patch("/api/employees/:employeeId/workstations", requireAuth, requireRole("MANAGER"), handleUpdateEmployeeWorkstations);
 
   return app;
 }

@@ -38,14 +38,17 @@ export function useSocket() {
   }, [token]);
 
   const on = useCallback((event: string, callback: (...args: any[]) => void) => {
-    if (socketRef.current) {
-      socketRef.current.on(event, callback);
-    }
+    const socket = socketRef.current;
+    if (!socket) return () => {};
+
+    const wrapped: (...args: any[]) => void = (...args) => {
+      if (!socketRef.current || socketRef.current !== socket || !socket.connected) return;
+      callback(...args);
+    };
+    socket.on(event, wrapped);
 
     return () => {
-      if (socketRef.current) {
-        socketRef.current.off(event, callback);
-      }
+      socket.off(event, wrapped);
     };
   }, []);
 

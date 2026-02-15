@@ -5,12 +5,11 @@ import {
   hashPassword,
   verifyPassword,
   generateToken,
-  verifyToken,
-  extractToken,
   AUTH_COOKIE_NAME,
   getAuthCookieOptions,
   getAuthCookieClearOptions,
 } from '../lib/auth';
+import { sendErrorResponse } from '../lib/errors';
 
 const SetPasswordSchema = z.object({
   token: z.string().min(1),
@@ -89,12 +88,7 @@ export const handleSignup: RequestHandler = async (req, res) => {
 
     res.status(201).json({ user });
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      res.status(400).json({ error: 'Invalid input', details: error.errors });
-      return;
-    }
-    console.error('Signup error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    sendErrorResponse(res, error);
   }
 };
 
@@ -136,27 +130,15 @@ export const handleLogin: RequestHandler = async (req, res) => {
       },
     });
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      res.status(400).json({ error: 'Invalid input', details: error.errors });
-      return;
-    }
-    console.error('Login error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    sendErrorResponse(res, error);
   }
 };
 
 export const handleProfile: RequestHandler = async (req, res) => {
   try {
-    const token = extractToken(req);
-
-    if (!token) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
-    }
-
-    const payload = verifyToken(token);
+    const payload = req.auth;
     if (!payload) {
-      res.status(401).json({ error: 'Invalid token' });
+      res.status(401).json({ error: 'Unauthorized' });
       return;
     }
 
@@ -178,8 +160,7 @@ export const handleProfile: RequestHandler = async (req, res) => {
 
     res.json(user);
   } catch (error) {
-    console.error('Profile error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    sendErrorResponse(res, error);
   }
 };
 
@@ -237,11 +218,6 @@ export const handleSetPassword: RequestHandler = async (req, res) => {
       },
     });
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      res.status(400).json({ error: 'Invalid input', details: error.errors });
-      return;
-    }
-    console.error('Set password error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    sendErrorResponse(res, error);
   }
 };

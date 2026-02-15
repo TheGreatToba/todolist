@@ -1,8 +1,8 @@
 import { RequestHandler } from 'express';
 import { z } from 'zod';
 import prisma from '../lib/db';
-import { verifyToken, extractToken } from '../lib/auth';
 import { getIO } from '../lib/socket';
+import { sendErrorResponse } from '../lib/errors';
 import { assignDailyTasksForDate } from '../jobs/daily-task-assignment';
 
 const CreateTaskTemplateSchema = z.object({
@@ -30,19 +30,7 @@ function paramString(value: string | string[] | undefined): string | null {
 // Get all daily tasks for an employee on a specific date
 export const handleGetEmployeeDailyTasks: RequestHandler = async (req, res) => {
   try {
-    const token = extractToken(req);
-
-    if (!token) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
-    }
-
-    const payload = verifyToken(token);
-    if (!payload) {
-      res.status(401).json({ error: 'Invalid token' });
-      return;
-    }
-
+    const payload = req.auth!;
     const { date } = req.query;
     const taskDate = date ? new Date(date as string) : new Date();
     taskDate.setHours(0, 0, 0, 0);
@@ -75,27 +63,14 @@ export const handleGetEmployeeDailyTasks: RequestHandler = async (req, res) => {
 
     res.json(tasks);
   } catch (error) {
-    console.error('Get daily tasks error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    sendErrorResponse(res, error);
   }
 };
 
 // Update a daily task completion status
 export const handleUpdateDailyTask: RequestHandler = async (req, res) => {
   try {
-    const token = extractToken(req);
-
-    if (!token) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
-    }
-
-    const payload = verifyToken(token);
-    if (!payload) {
-      res.status(401).json({ error: 'Invalid token' });
-      return;
-    }
-
+    const payload = req.auth!;
     const taskId = paramString(req.params.taskId);
     if (!taskId) {
       res.status(400).json({ error: 'Invalid task ID' });
@@ -156,36 +131,14 @@ export const handleUpdateDailyTask: RequestHandler = async (req, res) => {
 
     res.json(updatedTask);
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      res.status(400).json({ error: 'Invalid input', details: error.errors });
-      return;
-    }
-    console.error('Update task error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    sendErrorResponse(res, error);
   }
 };
 
 // Create a task template (manager only)
 export const handleCreateTaskTemplate: RequestHandler = async (req, res) => {
   try {
-    const token = extractToken(req);
-
-    if (!token) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
-    }
-
-    const payload = verifyToken(token);
-    if (!payload) {
-      res.status(401).json({ error: 'Invalid token' });
-      return;
-    }
-
-    if (payload.role !== 'MANAGER') {
-      res.status(403).json({ error: 'Only managers can create task templates' });
-      return;
-    }
-
+    const payload = req.auth!;
     const body = CreateTaskTemplateSchema.parse(req.body);
 
     const taskTemplate = await prisma.taskTemplate.create({
@@ -287,12 +240,7 @@ export const handleCreateTaskTemplate: RequestHandler = async (req, res) => {
 
     res.status(201).json(taskTemplate);
   } catch (error) {
-    if (error instanceof z.ZodError) {
-      res.status(400).json({ error: 'Invalid input', details: error.errors });
-      return;
-    }
-    console.error('Create task template error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    sendErrorResponse(res, error);
   }
 };
 
@@ -325,32 +273,14 @@ export const handleDailyTaskAssignment: RequestHandler = async (req, res) => {
       ...result,
     });
   } catch (error) {
-    console.error('Daily task assignment error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    sendErrorResponse(res, error);
   }
 };
 
 // Get dashboard data for manager
 export const handleGetManagerDashboard: RequestHandler = async (req, res) => {
   try {
-    const token = extractToken(req);
-
-    if (!token) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
-    }
-
-    const payload = verifyToken(token);
-    if (!payload) {
-      res.status(401).json({ error: 'Invalid token' });
-      return;
-    }
-
-    if (payload.role !== 'MANAGER') {
-      res.status(403).json({ error: 'Only managers can view dashboard' });
-      return;
-    }
-
+    const payload = req.auth!;
     const { date, employeeId, workstationId } = req.query;
     const taskDate = date ? new Date(date as string) : new Date();
     taskDate.setHours(0, 0, 0, 0);
@@ -424,14 +354,9 @@ export const handleGetManagerDashboard: RequestHandler = async (req, res) => {
       orderBy: [{ employee: { name: 'asc' } }, { createdAt: 'asc' }],
     });
 
-    // Get workstations: used by the manager's team OR unassigned (filtered by team scope)
+    // Get workstations belonging to this team (name unique per team)
     const workstations = await prisma.workstation.findMany({
-      where: {
-        OR: [
-          { employees: { some: { employee: { teamId: team.id } } } },
-          { employees: { none: {} } },
-        ],
-      },
+      where: { teamId: team.id },
       select: {
         id: true,
         name: true,
@@ -445,7 +370,6 @@ export const handleGetManagerDashboard: RequestHandler = async (req, res) => {
       workstations,
     });
   } catch (error) {
-    console.error('Get manager dashboard error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    sendErrorResponse(res, error);
   }
 };
