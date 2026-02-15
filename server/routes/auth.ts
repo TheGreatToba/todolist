@@ -1,7 +1,14 @@
 import { RequestHandler } from 'express';
 import { z } from 'zod';
 import prisma from '../lib/db';
-import { hashPassword, verifyPassword, generateToken, verifyToken, extractTokenFromHeader } from '../lib/auth';
+import { hashPassword, verifyPassword, generateToken, verifyToken, extractToken, AUTH_COOKIE_NAME } from '../lib/auth';
+
+const COOKIE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+const SetPasswordSchema = z.object({
+  token: z.string().min(1),
+  password: z.string().min(6),
+});
 
 const SignupSchema = z.object({
   name: z.string().min(1),
@@ -71,10 +78,14 @@ export const handleSignup: RequestHandler = async (req, res) => {
       role: user.role,
     });
 
-    res.status(201).json({
-      token,
-      user,
+    res.cookie(AUTH_COOKIE_NAME, token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: COOKIE_MAX_AGE_MS,
     });
+
+    res.status(201).json({ user, token });
   } catch (error) {
     if (error instanceof z.ZodError) {
       res.status(400).json({ error: 'Invalid input', details: error.errors });
@@ -111,6 +122,13 @@ export const handleLogin: RequestHandler = async (req, res) => {
       role: user.role,
     });
 
+    res.cookie(AUTH_COOKIE_NAME, token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: COOKIE_MAX_AGE_MS,
+    });
+
     res.json({
       token,
       user: {
@@ -133,8 +151,7 @@ export const handleLogin: RequestHandler = async (req, res) => {
 
 export const handleProfile: RequestHandler = async (req, res) => {
   try {
-    const authHeader = req.headers.authorization;
-    const token = extractTokenFromHeader(authHeader);
+    const token = extractToken(req);
 
     if (!token) {
       res.status(401).json({ error: 'Unauthorized' });
@@ -166,6 +183,74 @@ export const handleProfile: RequestHandler = async (req, res) => {
     res.json(user);
   } catch (error) {
     console.error('Profile error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+export const handleLogout: RequestHandler = (_req, res) => {
+  res.clearCookie(AUTH_COOKIE_NAME);
+  res.json({ success: true });
+};
+
+/** Set password using token from welcome email (employee onboarding) */
+export const handleSetPassword: RequestHandler = async (req, res) => {
+  try {
+    const body = SetPasswordSchema.parse(req.body);
+
+    const record = await prisma.setPasswordToken.findUnique({
+      where: { token: body.token },
+      include: { user: true },
+    });
+
+    if (!record) {
+      res.status(400).json({ error: 'Invalid or expired link. Please ask your manager to resend the invitation.' });
+      return;
+    }
+
+    if (record.expiresAt < new Date()) {
+      await prisma.setPasswordToken.delete({ where: { id: record.id } });
+      res.status(400).json({ error: 'This link has expired. Please ask your manager to resend the invitation.' });
+      return;
+    }
+
+    const passwordHash = await hashPassword(body.password);
+    await prisma.$transaction([
+      prisma.user.update({
+        where: { id: record.userId },
+        data: { passwordHash },
+      }),
+      prisma.setPasswordToken.delete({ where: { id: record.id } }),
+    ]);
+
+    const token = generateToken({
+      userId: record.user.id,
+      email: record.user.email,
+      role: record.user.role,
+    });
+
+    res.cookie(AUTH_COOKIE_NAME, token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: COOKIE_MAX_AGE_MS,
+    });
+
+    res.json({
+      success: true,
+      user: {
+        id: record.user.id,
+        name: record.user.name,
+        email: record.user.email,
+        role: record.user.role,
+        teamId: record.user.teamId,
+      },
+    });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      res.status(400).json({ error: 'Invalid input', details: error.errors });
+      return;
+    }
+    console.error('Set password error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };

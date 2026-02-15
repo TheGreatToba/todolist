@@ -46,7 +46,6 @@ export default function ManagerDashboard() {
   const [newEmployee, setNewEmployee] = useState({
     name: '',
     email: '',
-    password: '',
     workstationIds: [] as string[],
   });
   const [operationError, setOperationError] = useState<string | null>(null);
@@ -61,9 +60,7 @@ export default function ManagerDashboard() {
       if (selectedWorkstation) params.set('workstationId', selectedWorkstation);
       const url = `/api/manager/dashboard${params.toString() ? `?${params.toString()}` : ''}`;
       const response = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
+        credentials: 'include',
       });
 
       if (response.ok) {
@@ -105,9 +102,7 @@ export default function ManagerDashboard() {
   const fetchWorkstations = async () => {
     try {
       const response = await fetch('/api/workstations', {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
+        credentials: 'include',
       });
 
       if (response.ok) {
@@ -122,9 +117,7 @@ export default function ManagerDashboard() {
   const fetchTeamMembers = async () => {
     try {
       const response = await fetch('/api/team/members', {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
+        credentials: 'include',
       });
 
       if (response.ok) {
@@ -149,10 +142,8 @@ export default function ManagerDashboard() {
     try {
       const response = await fetch('/api/workstations', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ name: newWorkstation }),
       });
 
@@ -177,9 +168,7 @@ export default function ManagerDashboard() {
     try {
       const response = await fetch(`/api/workstations/${workstationId}`, {
         method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
+        credentials: 'include',
       });
 
       if (response.ok) {
@@ -200,25 +189,23 @@ export default function ManagerDashboard() {
     setOperationError(null);
     setOperationSuccess(null);
 
-    if (!newEmployee.name || !newEmployee.email || !newEmployee.password || newEmployee.workstationIds.length === 0) {
-      setOperationError('Please fill in all fields and select at least one workstation');
+    if (!newEmployee.name || !newEmployee.email || newEmployee.workstationIds.length === 0) {
+      setOperationError('Please fill in name, email and select at least one workstation');
       return;
     }
 
     try {
       const response = await fetch('/api/employees', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify(newEmployee),
       });
 
       const data = await response.json();
 
       if (response.ok) {
-        setNewEmployee({ name: '', email: '', password: '', workstationIds: [] });
+        setNewEmployee({ name: '', email: '', workstationIds: [] });
         setOperationSuccess(`Employee created successfully!${data.emailSent ? ' Email sent.' : ' (Email delivery skipped)'}`);
         await fetchTeamMembers();
       } else {
@@ -239,10 +226,8 @@ export default function ManagerDashboard() {
     try {
       const response = await fetch(`/api/employees/${employeeId}/workstations`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ workstationIds: editingWorkstations }),
       });
 
@@ -291,10 +276,8 @@ export default function ManagerDashboard() {
 
       const response = await fetch('/api/tasks/templates', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify(payload),
       });
 
@@ -771,6 +754,9 @@ export default function ManagerDashboard() {
               )}
 
               <form onSubmit={handleCreateEmployee} className="bg-card rounded-xl border border-border p-6 shadow-sm mb-8 space-y-4">
+                <p className="text-sm text-muted-foreground -mt-2">
+                  The employee will receive an email with a secure link to set their password (no password sent by email).
+                </p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-foreground mb-2">Full Name</label>
@@ -792,18 +778,6 @@ export default function ManagerDashboard() {
                       value={newEmployee.email}
                       onChange={(e) => setNewEmployee({ ...newEmployee, email: e.target.value })}
                       placeholder="john@example.com"
-                      className="w-full px-4 py-2 rounded-lg border border-input bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-foreground mb-2">Password</label>
-                    <input
-                      type="password"
-                      required
-                      value={newEmployee.password}
-                      onChange={(e) => setNewEmployee({ ...newEmployee, password: e.target.value })}
-                      placeholder="••••••••"
                       className="w-full px-4 py-2 rounded-lg border border-input bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                     />
                   </div>

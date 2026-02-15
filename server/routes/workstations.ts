@@ -1,8 +1,15 @@
+import crypto from 'crypto';
 import { RequestHandler } from 'express';
 import { z } from 'zod';
 import prisma from '../lib/db';
-import { verifyToken, extractTokenFromHeader, hashPassword } from '../lib/auth';
-import { sendEmployeeCredentialsEmail } from '../lib/email';
+import { verifyToken, extractToken, hashPassword } from '../lib/auth';
+import { sendSetPasswordEmail } from '../lib/email';
+
+const SET_PASSWORD_TOKEN_EXPIRY_HOURS = 48;
+
+function generateSecureToken(): string {
+  return crypto.randomBytes(32).toString('hex');
+}
 
 const CreateWorkstationSchema = z.object({
   name: z.string().min(1),
@@ -11,7 +18,6 @@ const CreateWorkstationSchema = z.object({
 const CreateEmployeeSchema = z.object({
   name: z.string().min(1),
   email: z.string().email(),
-  password: z.string().min(6),
   workstationIds: z.array(z.string()).min(1),
 });
 
@@ -28,8 +34,7 @@ function paramString(value: string | string[] | undefined): string | null {
 // Get all workstations used by the manager's team (filtered by team scope)
 export const handleGetWorkstations: RequestHandler = async (req, res) => {
   try {
-    const authHeader = req.headers.authorization;
-    const token = extractTokenFromHeader(authHeader);
+    const token = extractToken(req);
 
     if (!token) {
       res.status(401).json({ error: 'Unauthorized' });
@@ -86,8 +91,7 @@ export const handleGetWorkstations: RequestHandler = async (req, res) => {
 // Create a new workstation
 export const handleCreateWorkstation: RequestHandler = async (req, res) => {
   try {
-    const authHeader = req.headers.authorization;
-    const token = extractTokenFromHeader(authHeader);
+    const token = extractToken(req);
 
     if (!token) {
       res.status(401).json({ error: 'Unauthorized' });
@@ -130,8 +134,7 @@ export const handleCreateWorkstation: RequestHandler = async (req, res) => {
 // Create a new employee (manager only)
 export const handleCreateEmployee: RequestHandler = async (req, res) => {
   try {
-    const authHeader = req.headers.authorization;
-    const token = extractTokenFromHeader(authHeader);
+    const token = extractToken(req);
 
     if (!token) {
       res.status(401).json({ error: 'Unauthorized' });
@@ -196,10 +199,15 @@ export const handleCreateEmployee: RequestHandler = async (req, res) => {
 
     const workstations = requestedWorkstations;
 
-    // Hash password
-    const passwordHash = await hashPassword(body.password);
+    // Placeholder password - user will set real password via email link
+    const placeholderPassword = crypto.randomBytes(24).toString('hex');
+    const passwordHash = await hashPassword(placeholderPassword);
 
-    // Create employee with workstations
+    const setPasswordToken = generateSecureToken();
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + SET_PASSWORD_TOKEN_EXPIRY_HOURS);
+
+    // Create employee with workstations and set-password token
     const employee = await prisma.user.create({
       data: {
         name: body.name,
@@ -211,6 +219,12 @@ export const handleCreateEmployee: RequestHandler = async (req, res) => {
           create: body.workstationIds.map((wsId) => ({
             workstationId: wsId,
           })),
+        },
+        setPasswordToken: {
+          create: {
+            token: setPasswordToken,
+            expiresAt,
+          },
         },
       },
       include: {
@@ -245,12 +259,14 @@ export const handleCreateEmployee: RequestHandler = async (req, res) => {
       }
     }
 
-    // Send email with credentials
+    // Send email with set-password link (no password in email)
+    const baseUrl = process.env.APP_URL || 'http://localhost:8080';
+    const setPasswordLink = `${baseUrl.replace(/\/$/, '')}/set-password?token=${encodeURIComponent(setPasswordToken)}`;
     const workstationNames = workstations.map((ws) => ws.name);
-    const emailResult = await sendEmployeeCredentialsEmail(
+    const emailResult = await sendSetPasswordEmail(
       body.email,
       body.name,
-      body.password,
+      setPasswordLink,
       workstationNames
     );
 
@@ -282,8 +298,7 @@ export const handleCreateEmployee: RequestHandler = async (req, res) => {
 // Delete a workstation
 export const handleDeleteWorkstation: RequestHandler = async (req, res) => {
   try {
-    const authHeader = req.headers.authorization;
-    const token = extractTokenFromHeader(authHeader);
+    const token = extractToken(req);
 
     if (!token) {
       res.status(401).json({ error: 'Unauthorized' });
@@ -326,8 +341,7 @@ export const handleDeleteWorkstation: RequestHandler = async (req, res) => {
 // Get team members with their workstations
 export const handleGetTeamMembers: RequestHandler = async (req, res) => {
   try {
-    const authHeader = req.headers.authorization;
-    const token = extractTokenFromHeader(authHeader);
+    const token = extractToken(req);
 
     if (!token) {
       res.status(401).json({ error: 'Unauthorized' });
@@ -387,8 +401,7 @@ export const handleGetTeamMembers: RequestHandler = async (req, res) => {
 // Update employee workstation assignments
 export const handleUpdateEmployeeWorkstations: RequestHandler = async (req, res) => {
   try {
-    const authHeader = req.headers.authorization;
-    const token = extractTokenFromHeader(authHeader);
+    const token = extractToken(req);
 
     if (!token) {
       res.status(401).json({ error: 'Unauthorized' });

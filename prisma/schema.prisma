@@ -62,8 +62,9 @@ model User {
   workstations    EmployeeWorkstation[] @relation("EmployeeWorkstations")
 
   managedTeams    Team[]   @relation("ManagerOfTeam")
-  dailyTasks      DailyTask[]
-  createdTasks    TaskTemplate[] @relation("TaskCreator")
+  dailyTasks        DailyTask[]
+  createdTasks      TaskTemplate[] @relation("TaskCreator")
+  setPasswordToken  SetPasswordToken?
   assignedTasks   TaskTemplate[] @relation("AssignedTasks")
 
   createdAt DateTime @default(now())
@@ -96,6 +97,17 @@ model TaskTemplate {
   @@index([workstationId])
   @@index([assignedToEmployeeId])
   @@index([createdById])
+}
+
+model SetPasswordToken {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+
+  @@index([token])
+  @@index([expiresAt])
 }
 
 model DailyTask {

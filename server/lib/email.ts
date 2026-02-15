@@ -1,5 +1,15 @@
 import nodemailer from 'nodemailer';
 
+/** Escape user-provided content to prevent XSS in HTML emails */
+function escapeHtml(unsafe: string): string {
+  return unsafe
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 // For development, we'll use Ethereal Email (fake SMTP service)
 // In production, you would use your actual email provider (Gmail, SendGrid, etc.)
 let transporter: nodemailer.Transporter | null = null;
@@ -35,10 +45,11 @@ async function getTransporter() {
   return transporter;
 }
 
-export async function sendEmployeeCredentialsEmail(
+/** Send welcome email with a link to set password (no password in email) */
+export async function sendSetPasswordEmail(
   employeeEmail: string,
   employeeName: string,
-  password: string,
+  setPasswordLink: string,
   workstationNames: string[]
 ) {
   try {
@@ -47,33 +58,31 @@ export async function sendEmployeeCredentialsEmail(
     const mailOptions = {
       from: process.env.EMAIL_FROM || 'noreply@taskflow.local',
       to: employeeEmail,
-      subject: 'Welcome to TaskFlow - Your Account Credentials',
+      subject: 'Welcome to TaskFlow - Set Your Password',
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <div style="background-color: #0066cc; color: white; padding: 20px; border-radius: 8px 8px 0 0;">
             <h1 style="margin: 0; font-size: 24px;">Welcome to TaskFlow</h1>
           </div>
           <div style="border: 1px solid #ddd; border-top: none; padding: 20px; border-radius: 0 0 8px 8px;">
-            <p>Hi ${employeeName},</p>
-            <p>Your manager has created a TaskFlow account for you. Here are your login credentials:</p>
+            <p>Hi ${escapeHtml(employeeName)},</p>
+            <p>Your manager has created a TaskFlow account for you. Click the button below to set your password and activate your account:</p>
 
-            <div style="background-color: #f5f5f5; padding: 15px; border-radius: 4px; margin: 20px 0;">
-              <p style="margin: 5px 0;"><strong>Email:</strong> ${employeeEmail}</p>
-              <p style="margin: 5px 0;"><strong>Password:</strong> ${password}</p>
+            <div style="text-align: center; margin: 24px 0;">
+              <a href="${escapeHtml(setPasswordLink)}" style="display: inline-block; padding: 12px 24px; background-color: #0066cc; color: white; text-decoration: none; border-radius: 6px; font-weight: bold;">Set my password</a>
             </div>
+
+            <p style="font-size: 13px; color: #666;">Or copy this link into your browser:</p>
+            <p style="font-size: 12px; word-break: break-all; color: #666;">${escapeHtml(setPasswordLink)}</p>
 
             <p><strong>Assigned Workstations:</strong></p>
             <ul>
-              ${workstationNames.map((ws) => `<li>${ws}</li>`).join('')}
+              ${workstationNames.map((ws) => `<li>${escapeHtml(ws)}</li>`).join('')}
             </ul>
 
-            <p>You can now log in to your account and start managing your daily tasks. Here's what you need to do:</p>
-            <ol>
-              <li>Visit the TaskFlow application</li>
-              <li>Click "Sign in"</li>
-              <li>Enter your email and password above</li>
-              <li>You'll see your assigned tasks for each workstation</li>
-            </ol>
+            <div style="background-color: #e8f5e9; border: 1px solid #4caf50; padding: 12px; border-radius: 4px; margin: 16px 0; font-size: 13px;">
+              <strong>Security:</strong> This link expires in 48 hours and can only be used once. Do not share it with anyone.
+            </div>
 
             <p style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 12px; color: #666;">
               This is an automated message. Please do not reply to this email.
@@ -84,16 +93,15 @@ export async function sendEmployeeCredentialsEmail(
     };
 
     const info = await transporter.sendMail(mailOptions);
-    console.log('Email sent:', info.messageId);
+    console.log('Set password email sent:', info.messageId);
 
-    // For test accounts, log the preview URL
     if (process.env.NODE_ENV !== 'production' && !process.env.SMTP_HOST) {
       console.log('Preview URL:', nodemailer.getTestMessageUrl(info));
     }
 
     return { success: true, messageId: info.messageId };
   } catch (error) {
-    console.error('Failed to send email:', error);
+    console.error('Failed to send set password email:', error);
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
   }
 }
@@ -117,12 +125,12 @@ export async function sendTaskAssignmentEmail(
             <h1 style="margin: 0; font-size: 24px;">New Task Assigned</h1>
           </div>
           <div style="border: 1px solid #ddd; border-top: none; padding: 20px; border-radius: 0 0 8px 8px;">
-            <p>Hi ${employeeName},</p>
+            <p>Hi ${escapeHtml(employeeName)},</p>
             <p>You have been assigned a new task:</p>
 
             <div style="background-color: #f5f5f5; padding: 15px; border-radius: 4px; margin: 20px 0;">
-              <h3 style="margin: 0 0 10px 0; color: #0066cc;">${taskTitle}</h3>
-              ${taskDescription ? `<p style="margin: 0; color: #666;">${taskDescription}</p>` : ''}
+              <h3 style="margin: 0 0 10px 0; color: #0066cc;">${escapeHtml(taskTitle)}</h3>
+              ${taskDescription ? `<p style="margin: 0; color: #666;">${escapeHtml(taskDescription)}</p>` : ''}
             </div>
 
             <p>Please log in to your TaskFlow dashboard to view and complete this task.</p>

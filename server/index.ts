@@ -1,6 +1,8 @@
 import "dotenv/config";
 import express, { Express } from "express";
-import { ensureAuthConfig, verifyToken } from "./lib/auth";
+import cookieParser from "cookie-parser";
+import { ensureAuthConfig, verifyToken, extractToken, AUTH_COOKIE_NAME } from "./lib/auth";
+import { parse as parseCookie } from "cookie";
 
 ensureAuthConfig();
 import cors from "cors";
@@ -10,7 +12,7 @@ import { Server as SocketIOServer } from "socket.io";
 import prisma from "./lib/db";
 import { setIO } from "./lib/socket";
 import { handleDemo } from "./routes/demo";
-import { handleSignup, handleLogin, handleProfile } from "./routes/auth";
+import { handleSignup, handleLogin, handleProfile, handleLogout, handleSetPassword } from "./routes/auth";
 import {
   handleGetEmployeeDailyTasks,
   handleUpdateDailyTask,
@@ -32,6 +34,7 @@ export function createApp(): Express {
 
   // Middleware - CORS hardened per env (see server/lib/cors.ts)
   app.use(cors(getCorsOptions()));
+  app.use(cookieParser());
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 
@@ -47,6 +50,8 @@ export function createApp(): Express {
   app.post("/api/auth/signup", handleSignup);
   app.post("/api/auth/login", handleLogin);
   app.get("/api/auth/profile", handleProfile);
+  app.post("/api/auth/logout", handleLogout);
+  app.post("/api/auth/set-password", handleSetPassword);
 
   // Task routes
   app.get("/api/tasks/daily", handleGetEmployeeDailyTasks);
@@ -94,9 +99,13 @@ export function attachSocketIO(httpServer: HttpServer, app: Express): SocketIOSe
     },
   });
 
-  // Auth middleware: require valid JWT token to connect
+  // Auth middleware: require valid JWT (from auth token or httpOnly cookie)
   io.use(async (socket, next) => {
-    const token = socket.handshake.auth.token as string | undefined;
+    let token = socket.handshake.auth?.token as string | undefined;
+    if (!token && socket.handshake.headers.cookie) {
+      const parsed = parseCookie(socket.handshake.headers.cookie);
+      token = parsed[AUTH_COOKIE_NAME];
+    }
     if (!token) {
       return next(new Error("Authentication required"));
     }
