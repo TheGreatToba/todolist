@@ -42,7 +42,7 @@ export function createApp(): Express {
           scriptSrc: ["'self'"],
           styleSrc: ["'self'", "'unsafe-inline'"],
           imgSrc: ["'self'", "data:", "blob:"],
-          connectSrc: ["'self'"],
+          connectSrc: ["'self'", "ws:", "wss:"],
           frameAncestors: ["'self'"],
         },
       },
