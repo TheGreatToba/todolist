@@ -1,9 +1,11 @@
 import "dotenv/config";
 import express, { Express } from "express";
 import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 import cookieParser from "cookie-parser";
 import { ensureAuthConfig, verifyToken, extractToken, AUTH_COOKIE_NAME } from "./lib/auth";
 import { parse as parseCookie } from "cookie";
+import { setCsrfCookieIfMissing, validateCsrf } from "./lib/csrf";
 
 ensureAuthConfig();
 import cors from "cors";
@@ -34,6 +36,7 @@ export function createApp(): Express {
   const app = express();
 
   // Security headers (helmet) - X-Content-Type-Options, X-Frame-Options, etc.
+  // TODO: Replace style-src 'unsafe-inline' with nonce/hash when build setup allows (Tailwind)
   app.use(
     helmet({
       contentSecurityPolicy: {
@@ -55,6 +58,28 @@ export function createApp(): Express {
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 
+  // Rate limit sensitive endpoints (generous in test)
+  const isTest = process.env.NODE_ENV === "test";
+  const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 min
+    max: isTest ? 1000 : 20,
+    message: { error: "Too many attempts, please try again later" },
+  });
+  const setPasswordLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000, // 1h
+    max: isTest ? 1000 : 10,
+    message: { error: "Too many attempts, please try again later" },
+  });
+  const createEmployeeLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: isTest ? 1000 : 30,
+    message: { error: "Too many requests, please try again later" },
+  });
+
+  // CSRF: set cookie on GET so client can read it; validate on state-changing (exempts set-password)
+  app.use(setCsrfCookieIfMissing);
+  app.use(validateCsrf);
+
   // Example API routes
   app.get("/api/ping", (_req, res) => {
     const ping = process.env.PING_MESSAGE ?? "ping";
@@ -63,12 +88,12 @@ export function createApp(): Express {
 
   app.get("/api/demo", handleDemo);
 
-  // Auth routes
-  app.post("/api/auth/signup", handleSignup);
-  app.post("/api/auth/login", handleLogin);
+  // Auth routes (rate-limited)
+  app.post("/api/auth/signup", authLimiter, handleSignup);
+  app.post("/api/auth/login", authLimiter, handleLogin);
   app.get("/api/auth/profile", handleProfile);
   app.post("/api/auth/logout", handleLogout);
-  app.post("/api/auth/set-password", handleSetPassword);
+  app.post("/api/auth/set-password", setPasswordLimiter, handleSetPassword);
 
   // Task routes
   app.get("/api/tasks/daily", handleGetEmployeeDailyTasks);
@@ -82,8 +107,8 @@ export function createApp(): Express {
   app.post("/api/workstations", handleCreateWorkstation);
   app.delete("/api/workstations/:workstationId", handleDeleteWorkstation);
 
-  // Employee management routes
-  app.post("/api/employees", handleCreateEmployee);
+  // Employee management routes (rate-limited)
+  app.post("/api/employees", createEmployeeLimiter, handleCreateEmployee);
   app.get("/api/team/members", handleGetTeamMembers);
   app.patch("/api/employees/:employeeId/workstations", handleUpdateEmployeeWorkstations);
 

@@ -2,6 +2,7 @@
  * API integration tests for auth, permissions, and daily tasks.
  * Requires seeded database: run `pnpm seed` before tests.
  * Uses mgr@test.com (MANAGER) and emp@test.com (EMPLOYEE) with password "password".
+ * Note: Auth uses httpOnly cookies; tests use supertest agent for cookie persistence.
  */
 import { describe, it, expect } from "vitest";
 import request from "supertest";
@@ -10,7 +11,7 @@ import { createApp } from "./index";
 const app = createApp();
 
 describe("Auth API", () => {
-  it("POST /api/auth/signup with MANAGER returns 201 and token", async () => {
+  it("POST /api/auth/signup with MANAGER returns 201 and user", async () => {
     const email = `mgr-${Date.now()}@test.com`;
     const res = await request(app)
       .post("/api/auth/signup")
@@ -22,7 +23,6 @@ describe("Auth API", () => {
       });
 
     expect(res.status).toBe(201);
-    expect(res.body).toHaveProperty("token");
     expect(res.body).toHaveProperty("user");
     expect(res.body.user.role).toBe("MANAGER");
     expect(res.body.user.email).toBe(email);
@@ -41,13 +41,13 @@ describe("Auth API", () => {
     expect(res.status).toBe(400);
   });
 
-  it("POST /api/auth/login with valid credentials returns 200 and token", async () => {
+  it("POST /api/auth/login with valid credentials returns 200 and user", async () => {
     const res = await request(app)
       .post("/api/auth/login")
       .send({ email: "mgr@test.com", password: "password" });
 
     expect(res.status).toBe(200);
-    expect(res.body).toHaveProperty("token");
+    expect(res.body).toHaveProperty("user");
     expect(res.body.user.email).toBe("mgr@test.com");
     expect(res.body.user.role).toBe("MANAGER");
   });
@@ -65,15 +65,11 @@ describe("Auth API", () => {
     expect(res.status).toBe(401);
   });
 
-  it("GET /api/auth/profile with valid token returns 200 and user", async () => {
-    const loginRes = await request(app)
-      .post("/api/auth/login")
-      .send({ email: "mgr@test.com", password: "password" });
-    const token = loginRes.body.token;
+  it("GET /api/auth/profile with valid cookie returns 200 and user", async () => {
+    const agent = request.agent(app);
+    await agent.post("/api/auth/login").send({ email: "mgr@test.com", password: "password" });
 
-    const res = await request(app)
-      .get("/api/auth/profile")
-      .set("Authorization", `Bearer ${token}`);
+    const res = await agent.get("/api/auth/profile");
 
     expect(res.status).toBe(200);
     expect(res.body.email).toBe("mgr@test.com");
@@ -82,41 +78,30 @@ describe("Auth API", () => {
 
 describe("Permissions - role-based access", () => {
   it("GET /api/manager/dashboard as EMPLOYEE returns 403", async () => {
-    const loginRes = await request(app)
-      .post("/api/auth/login")
-      .send({ email: "emp@test.com", password: "password" });
-    const token = loginRes.body.token;
+    const agent = request.agent(app);
+    await agent.post("/api/auth/login").send({ email: "emp@test.com", password: "password" });
 
-    const res = await request(app)
-      .get("/api/manager/dashboard")
-      .set("Authorization", `Bearer ${token}`);
+    const res = await agent.get("/api/manager/dashboard");
 
     expect(res.status).toBe(403);
   });
 
   it("GET /api/manager/dashboard as MANAGER returns 200", async () => {
-    const loginRes = await request(app)
-      .post("/api/auth/login")
-      .send({ email: "mgr@test.com", password: "password" });
-    const token = loginRes.body.token;
+    const agent = request.agent(app);
+    await agent.post("/api/auth/login").send({ email: "mgr@test.com", password: "password" });
 
-    const res = await request(app)
-      .get("/api/manager/dashboard")
-      .set("Authorization", `Bearer ${token}`);
+    const res = await agent.get("/api/manager/dashboard");
 
     expect(res.status).toBe(200);
     expect(res.body).toHaveProperty("dailyTasks");
   });
 
   it("POST /api/tasks/templates as EMPLOYEE returns 403", async () => {
-    const loginRes = await request(app)
-      .post("/api/auth/login")
-      .send({ email: "emp@test.com", password: "password" });
-    const token = loginRes.body.token;
+    const agent = request.agent(app);
+    await agent.post("/api/auth/login").send({ email: "emp@test.com", password: "password" });
 
-    const res = await request(app)
+    const res = await agent
       .post("/api/tasks/templates")
-      .set("Authorization", `Bearer ${token}`)
       .send({
         title: "Test task",
         workstationId: "some-id",
@@ -133,15 +118,11 @@ describe("Daily tasks API", () => {
     expect(res.status).toBe(401);
   });
 
-  it("GET /api/tasks/daily with valid employee token returns 200 and array", async () => {
-    const loginRes = await request(app)
-      .post("/api/auth/login")
-      .send({ email: "emp@test.com", password: "password" });
-    const token = loginRes.body.token;
+  it("GET /api/tasks/daily with valid employee cookie returns 200 and array", async () => {
+    const agent = request.agent(app);
+    await agent.post("/api/auth/login").send({ email: "emp@test.com", password: "password" });
 
-    const res = await request(app)
-      .get("/api/tasks/daily")
-      .set("Authorization", `Bearer ${token}`);
+    const res = await agent.get("/api/tasks/daily");
 
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body)).toBe(true);

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { fetchWithCsrf } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSocket } from '@/hooks/useSocket';
 import { DailyTask } from '@shared/api';
@@ -69,10 +70,9 @@ export default function EmployeeDashboard() {
   const handleToggleTask = async (taskId: string, isCompleted: boolean) => {
     try {
       setUpdatingTaskId(taskId);
-      const response = await fetch(`/api/tasks/daily/${taskId}`, {
+      const response = await fetchWithCsrf(`/api/tasks/daily/${taskId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({ isCompleted: !isCompleted }),
       });
 

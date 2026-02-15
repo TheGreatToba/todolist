@@ -4,13 +4,7 @@ import { z } from 'zod';
 import prisma from '../lib/db';
 import { verifyToken, extractToken, hashPassword } from '../lib/auth';
 import { sendSetPasswordEmail } from '../lib/email';
-
-// Configurable via env; 24h default, clamped 1–168h (1 week max)
-function getSetPasswordTokenExpiryHours(): number {
-  const raw = parseInt(process.env.SET_PASSWORD_TOKEN_EXPIRY_HOURS || '24', 10);
-  if (!Number.isFinite(raw) || raw < 1) return 24;
-  return Math.min(raw, 168);
-}
+import { getSetPasswordTokenExpiryHours } from '../lib/set-password-expiry';
 
 function generateSecureToken(): string {
   return crypto.randomBytes(32).toString('hex');

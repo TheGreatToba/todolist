@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { fetchWithCsrf } from '@/lib/api';
 import { useSocket } from '@/hooks/useSocket';
 import { ManagerDashboard as ManagerDashboardType } from '@shared/api';
 import { Loader2, LogOut, Plus, Filter, Settings, Trash2, Users, X, Edit2, Calendar, Download } from 'lucide-react';
@@ -140,10 +141,9 @@ export default function ManagerDashboard() {
     }
 
     try {
-      const response = await fetch('/api/workstations', {
+      const response = await fetchWithCsrf('/api/workstations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({ name: newWorkstation }),
       });
 
@@ -166,9 +166,8 @@ export default function ManagerDashboard() {
     if (!confirm('Are you sure you want to delete this workstation?')) return;
 
     try {
-      const response = await fetch(`/api/workstations/${workstationId}`, {
+      const response = await fetchWithCsrf(`/api/workstations/${workstationId}`, {
         method: 'DELETE',
-        credentials: 'include',
       });
 
       if (response.ok) {
@@ -195,10 +194,9 @@ export default function ManagerDashboard() {
     }
 
     try {
-      const response = await fetch('/api/employees', {
+      const response = await fetchWithCsrf('/api/employees', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify(newEmployee),
       });
 
@@ -224,10 +222,9 @@ export default function ManagerDashboard() {
     }
 
     try {
-      const response = await fetch(`/api/employees/${employeeId}/workstations`, {
+      const response = await fetchWithCsrf(`/api/employees/${employeeId}/workstations`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({ workstationIds: editingWorkstations }),
       });
 
@@ -274,10 +271,9 @@ export default function ManagerDashboard() {
         ...(newTask.assignmentType === 'employee' && { assignedToEmployeeId: newTask.assignedToEmployeeId }),
       };
 
-      const response = await fetch('/api/tasks/templates', {
+      const response = await fetchWithCsrf('/api/tasks/templates', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify(payload),
       });
 

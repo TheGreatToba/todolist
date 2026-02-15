@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User } from '@shared/api';
+import { fetchWithCsrf } from '@/lib/api';
 
 interface AuthContextType {
   user: User | null;
@@ -21,9 +22,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchProfile = async () => {
     try {
-      const response = await fetch('/api/auth/profile', {
-        credentials: 'include',
-      });
+      const response = await fetch('/api/auth/profile', { credentials: 'include' });
 
       if (response.ok) {
         const userData = await response.json();
@@ -49,10 +48,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await fetch('/api/auth/login', {
+      const response = await fetchWithCsrf('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({ email, password }),
       });
 
@@ -77,10 +75,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await fetch('/api/auth/signup', {
+      const response = await fetchWithCsrf('/api/auth/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({ name, email, password, role: 'MANAGER' }),
       });
 
@@ -105,10 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(null);
     setUser(null);
     setError(null);
-    fetch('/api/auth/logout', {
-      method: 'POST',
-      credentials: 'include',
-    }).catch(() => {});
+    fetchWithCsrf('/api/auth/logout', { method: 'POST' }).catch(() => {});
   };
 
   return (
