@@ -23,7 +23,8 @@
     "test": "vitest --run",
     "format.fix": "prettier --write .",
     "typecheck": "tsc",
-    "seed": "npx tsx prisma/seed.ts"
+    "seed": "npx tsx prisma/seed.ts",
+    "backfill:workstation-team": "tsx server/scripts/backfill-workstation-team.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

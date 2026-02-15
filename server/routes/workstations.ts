@@ -4,6 +4,7 @@ import { z } from 'zod';
 import prisma from '../lib/db';
 import { hashPassword } from '../lib/auth';
 import { sendErrorResponse } from '../lib/errors';
+import { getAuthOrThrow } from '../middleware/requireAuth';
 import { sendSetPasswordEmail } from '../lib/email';
 import { getSetPasswordTokenExpiryHours } from '../lib/set-password-expiry';
 
@@ -34,7 +35,8 @@ function paramString(value: string | string[] | undefined): string | null {
 // Get all workstations used by the manager's team (filtered by team scope)
 export const handleGetWorkstations: RequestHandler = async (req, res) => {
   try {
-    const payload = req.auth!;
+    const payload = getAuthOrThrow(req, res);
+    if (!payload) return;
     const team = await prisma.team.findFirst({
       where: { managerId: payload.userId },
     });
@@ -73,7 +75,8 @@ export const handleGetWorkstations: RequestHandler = async (req, res) => {
 // Create a new workstation (scoped to manager's team; name unique per team)
 export const handleCreateWorkstation: RequestHandler = async (req, res) => {
   try {
-    const payload = req.auth!;
+    const payload = getAuthOrThrow(req, res);
+    if (!payload) return;
     const body = CreateWorkstationSchema.parse(req.body);
 
     const team = await prisma.team.findFirst({
@@ -106,7 +109,8 @@ export const handleCreateWorkstation: RequestHandler = async (req, res) => {
 // Create a new employee (manager only)
 export const handleCreateEmployee: RequestHandler = async (req, res) => {
   try {
-    const payload = req.auth!;
+    const payload = getAuthOrThrow(req, res);
+    if (!payload) return;
     const body = CreateEmployeeSchema.parse(req.body);
 
     // Check if user already exists
@@ -129,7 +133,7 @@ export const handleCreateEmployee: RequestHandler = async (req, res) => {
       return;
     }
 
-    // Verify that all workstations exist and belong to the manager's team (or legacy null)
+    // Verify that all workstations exist and belong to the manager's team
     const requestedWorkstations = await prisma.workstation.findMany({
       where: { id: { in: body.workstationIds } },
     });
@@ -139,9 +143,7 @@ export const handleCreateEmployee: RequestHandler = async (req, res) => {
       return;
     }
 
-    const allowed = requestedWorkstations.every(
-      (ws) => ws.teamId === team.id || ws.teamId === null
-    );
+    const allowed = requestedWorkstations.every((ws) => ws.teamId === team.id);
     if (!allowed) {
       res.status(403).json({
         error: 'One or more workstations do not belong to your team.',
@@ -247,7 +249,8 @@ export const handleCreateEmployee: RequestHandler = async (req, res) => {
 // Delete a workstation
 export const handleDeleteWorkstation: RequestHandler = async (req, res) => {
   try {
-    const payload = req.auth!;
+    const payload = getAuthOrThrow(req, res);
+    if (!payload) return;
     const workstationId = paramString(req.params.workstationId);
     if (!workstationId) {
       res.status(400).json({ error: 'Invalid workstation ID' });
@@ -291,7 +294,8 @@ export const handleDeleteWorkstation: RequestHandler = async (req, res) => {
 // Get team members with their workstations
 export const handleGetTeamMembers: RequestHandler = async (req, res) => {
   try {
-    const payload = req.auth!;
+    const payload = getAuthOrThrow(req, res);
+    if (!payload) return;
     const team = await prisma.team.findFirst({
       where: { managerId: payload.userId },
       include: {
@@ -338,7 +342,8 @@ export const handleGetTeamMembers: RequestHandler = async (req, res) => {
 // Update employee workstation assignments
 export const handleUpdateEmployeeWorkstations: RequestHandler = async (req, res) => {
   try {
-    const payload = req.auth!;
+    const payload = getAuthOrThrow(req, res);
+    if (!payload) return;
     const employeeId = paramString(req.params.employeeId);
     if (!employeeId) {
       res.status(400).json({ error: 'Invalid employee ID' });
@@ -368,7 +373,7 @@ export const handleUpdateEmployeeWorkstations: RequestHandler = async (req, res)
       return;
     }
 
-    // Verify all workstations exist and belong to the manager's team (or legacy null)
+    // Verify all workstations exist and belong to the manager's team
     const requestedWorkstations = await prisma.workstation.findMany({
       where: { id: { in: body.workstationIds } },
     });
@@ -378,9 +383,7 @@ export const handleUpdateEmployeeWorkstations: RequestHandler = async (req, res)
       return;
     }
 
-    const allowed = requestedWorkstations.every(
-      (ws) => ws.teamId === managerTeam.id || ws.teamId === null
-    );
+    const allowed = requestedWorkstations.every((ws) => ws.teamId === managerTeam.id);
     if (!allowed) {
       res.status(403).json({
         error: 'One or more workstations do not belong to your team.',

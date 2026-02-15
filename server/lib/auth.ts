@@ -23,6 +23,9 @@ export function ensureAuthConfig(): void {
 
 const JWT_EXPIRY = '7d';
 
+/** Role union for type-safe checks (avoids typos in requireRole). */
+export type Role = 'MANAGER' | 'EMPLOYEE';
+
 export interface JwtPayload {
   userId: string;
   email: string;

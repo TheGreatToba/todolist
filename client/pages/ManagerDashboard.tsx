@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { fetchWithCsrf } from '@/lib/api';
@@ -75,6 +75,9 @@ export default function ManagerDashboard() {
     }
   }, [selectedDate, selectedEmployee, selectedWorkstation]);
 
+  const fetchDashboardRef = useRef(fetchDashboard);
+  fetchDashboardRef.current = fetchDashboard;
+
   useEffect(() => {
     fetchWorkstations();
     fetchTeamMembers();
@@ -86,7 +89,7 @@ export default function ManagerDashboard() {
 
   useEffect(() => {
     const unsubscribeUpdate = on('task:updated', () => {
-      fetchDashboard();
+      fetchDashboardRef.current?.();
     });
 
     const unsubscribeAssigned = on('task:assigned', (data) => {
@@ -98,7 +101,7 @@ export default function ManagerDashboard() {
       unsubscribeUpdate();
       unsubscribeAssigned();
     };
-  }, [on, fetchDashboard]);
+  }, [on]);
 
   const fetchWorkstations = async () => {
     try {

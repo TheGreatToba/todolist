@@ -10,6 +10,7 @@ import {
   getAuthCookieClearOptions,
 } from '../lib/auth';
 import { sendErrorResponse } from '../lib/errors';
+import { getAuthOrThrow } from '../middleware/requireAuth';
 
 const SetPasswordSchema = z.object({
   token: z.string().min(1),
@@ -136,11 +137,8 @@ export const handleLogin: RequestHandler = async (req, res) => {
 
 export const handleProfile: RequestHandler = async (req, res) => {
   try {
-    const payload = req.auth;
-    if (!payload) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
-    }
+    const payload = getAuthOrThrow(req, res);
+    if (!payload) return;
 
     const user = await prisma.user.findUnique({
       where: { id: payload.userId },

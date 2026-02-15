@@ -1,4 +1,5 @@
 import { Response } from 'express';
+import { ZodError } from 'zod';
 
 /** Business/validation error with a safe message to send to the client. */
 export class AppError extends Error {
@@ -20,7 +21,7 @@ export function isAppError(err: unknown): err is AppError {
 /**
  * Send error response and optionally log. Use in route catch blocks:
  * - AppError: send status + message (no stack to client)
- * - ZodError: 400 with details
+ * - ZodError: 400 with details (instanceof for robustness)
  * - Other: log with stack, send generic 500 in production
  */
 export function sendErrorResponse(res: Response, error: unknown): void {
@@ -32,9 +33,8 @@ export function sendErrorResponse(res: Response, error: unknown): void {
     return;
   }
 
-  if (error && typeof error === 'object' && 'name' in error && (error as { name: string }).name === 'ZodError') {
-    const z = error as { errors?: unknown[] };
-    res.status(400).json({ error: 'Validation error', details: z.errors ?? [] });
+  if (error instanceof ZodError) {
+    res.status(400).json({ error: 'Validation error', details: error.errors });
     return;
   }
 

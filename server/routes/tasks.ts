@@ -3,6 +3,7 @@ import { z } from 'zod';
 import prisma from '../lib/db';
 import { getIO } from '../lib/socket';
 import { sendErrorResponse } from '../lib/errors';
+import { getAuthOrThrow } from '../middleware/requireAuth';
 import { assignDailyTasksForDate } from '../jobs/daily-task-assignment';
 
 const CreateTaskTemplateSchema = z.object({
@@ -30,7 +31,8 @@ function paramString(value: string | string[] | undefined): string | null {
 // Get all daily tasks for an employee on a specific date
 export const handleGetEmployeeDailyTasks: RequestHandler = async (req, res) => {
   try {
-    const payload = req.auth!;
+    const payload = getAuthOrThrow(req, res);
+    if (!payload) return;
     const { date } = req.query;
     const taskDate = date ? new Date(date as string) : new Date();
     taskDate.setHours(0, 0, 0, 0);
@@ -70,7 +72,8 @@ export const handleGetEmployeeDailyTasks: RequestHandler = async (req, res) => {
 // Update a daily task completion status
 export const handleUpdateDailyTask: RequestHandler = async (req, res) => {
   try {
-    const payload = req.auth!;
+    const payload = getAuthOrThrow(req, res);
+    if (!payload) return;
     const taskId = paramString(req.params.taskId);
     if (!taskId) {
       res.status(400).json({ error: 'Invalid task ID' });
@@ -138,7 +141,8 @@ export const handleUpdateDailyTask: RequestHandler = async (req, res) => {
 // Create a task template (manager only)
 export const handleCreateTaskTemplate: RequestHandler = async (req, res) => {
   try {
-    const payload = req.auth!;
+    const payload = getAuthOrThrow(req, res);
+    if (!payload) return;
     const body = CreateTaskTemplateSchema.parse(req.body);
 
     const taskTemplate = await prisma.taskTemplate.create({
@@ -280,7 +284,8 @@ export const handleDailyTaskAssignment: RequestHandler = async (req, res) => {
 // Get dashboard data for manager
 export const handleGetManagerDashboard: RequestHandler = async (req, res) => {
   try {
-    const payload = req.auth!;
+    const payload = getAuthOrThrow(req, res);
+    if (!payload) return;
     const { date, employeeId, workstationId } = req.query;
     const taskDate = date ? new Date(date as string) : new Date();
     taskDate.setHours(0, 0, 0, 0);
