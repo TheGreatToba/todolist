@@ -10,7 +10,7 @@ export function useSocket() {
     if (!token) return;
 
     const socket = io(window.location.origin, {
-      auth: { token },
+      withCredentials: true,
       reconnection: true,
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,

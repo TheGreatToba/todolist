@@ -1,7 +1,7 @@
 import { RequestHandler } from 'express';
 import { z } from 'zod';
 import prisma from '../lib/db';
-import { verifyToken, extractTokenFromHeader } from '../lib/auth';
+import { verifyToken, extractToken } from '../lib/auth';
 import { getIO } from '../lib/socket';
 import { assignDailyTasksForDate } from '../jobs/daily-task-assignment';
 
@@ -30,8 +30,7 @@ function paramString(value: string | string[] | undefined): string | null {
 // Get all daily tasks for an employee on a specific date
 export const handleGetEmployeeDailyTasks: RequestHandler = async (req, res) => {
   try {
-    const authHeader = req.headers.authorization;
-    const token = extractTokenFromHeader(authHeader);
+    const token = extractToken(req);
 
     if (!token) {
       res.status(401).json({ error: 'Unauthorized' });
@@ -84,8 +83,7 @@ export const handleGetEmployeeDailyTasks: RequestHandler = async (req, res) => {
 // Update a daily task completion status
 export const handleUpdateDailyTask: RequestHandler = async (req, res) => {
   try {
-    const authHeader = req.headers.authorization;
-    const token = extractTokenFromHeader(authHeader);
+    const token = extractToken(req);
 
     if (!token) {
       res.status(401).json({ error: 'Unauthorized' });
@@ -170,8 +168,7 @@ export const handleUpdateDailyTask: RequestHandler = async (req, res) => {
 // Create a task template (manager only)
 export const handleCreateTaskTemplate: RequestHandler = async (req, res) => {
   try {
-    const authHeader = req.headers.authorization;
-    const token = extractTokenFromHeader(authHeader);
+    const token = extractToken(req);
 
     if (!token) {
       res.status(401).json({ error: 'Unauthorized' });
@@ -336,8 +333,7 @@ export const handleDailyTaskAssignment: RequestHandler = async (req, res) => {
 // Get dashboard data for manager
 export const handleGetManagerDashboard: RequestHandler = async (req, res) => {
   try {
-    const authHeader = req.headers.authorization;
-    const token = extractTokenFromHeader(authHeader);
+    const token = extractToken(req);
 
     if (!token) {
       res.status(401).json({ error: 'Unauthorized' });

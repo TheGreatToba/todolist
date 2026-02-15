@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken';
 import bcryptjs from 'bcryptjs';
+import { parse as parseCookie } from 'cookie';
 
 let _jwtSecret: string | null = null;
 
@@ -49,9 +50,28 @@ export function verifyToken(token: string): JwtPayload | null {
   }
 }
 
+export const AUTH_COOKIE_NAME = 'token';
+
 export function extractTokenFromHeader(authHeader?: string): string | null {
   if (!authHeader) return null;
   const parts = authHeader.split(' ');
   if (parts.length !== 2 || parts[0] !== 'Bearer') return null;
   return parts[1];
+}
+
+/** Extract JWT from Authorization header (Bearer) or from httpOnly cookie */
+export function extractToken(req: { headers?: { authorization?: string; cookie?: string }; cookies?: Record<string, string> }): string | null {
+  const fromHeader = extractTokenFromHeader(req.headers?.authorization);
+  if (fromHeader) return fromHeader;
+
+  if (req.cookies?.[AUTH_COOKIE_NAME]) {
+    return req.cookies[AUTH_COOKIE_NAME];
+  }
+
+  if (req.headers?.cookie) {
+    const parsed = parseCookie(req.headers.cookie);
+    return parsed[AUTH_COOKIE_NAME] ?? null;
+  }
+
+  return null;
 }

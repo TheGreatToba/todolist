@@ -52,9 +52,7 @@ export default function EmployeeDashboard() {
     try {
       setIsLoading(true);
       const response = await fetch('/api/tasks/daily', {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
+        credentials: 'include',
       });
 
       if (response.ok) {
@@ -73,10 +71,8 @@ export default function EmployeeDashboard() {
       setUpdatingTaskId(taskId);
       const response = await fetch(`/api/tasks/daily/${taskId}`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token')}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ isCompleted: !isCompleted }),
       });
 
