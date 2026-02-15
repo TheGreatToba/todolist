@@ -66,6 +66,13 @@ export function validateCsrf(req: Request, res: Response, next: NextFunction): v
   const cookieToken = getCsrfTokenFromCookie(req);
 
   if (!cookieToken || !headerToken || headerToken !== cookieToken) {
+    // Structured log for ops/monitoring (no secrets)
+    console.warn(JSON.stringify({
+      event: 'csrf_rejected',
+      method: req.method,
+      path: req.path,
+      reason: !cookieToken ? 'missing_cookie' : !headerToken ? 'missing_header' : 'mismatch',
+    }));
     res.status(403).json({ error: 'Invalid CSRF token' });
     return;
   }

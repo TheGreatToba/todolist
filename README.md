@@ -5,7 +5,7 @@ SaaS de gestion de tâches quotidiennes par poste de travail. Les employés suiv
 ## Prérequis
 
 - Node.js 18+
-- **pnpm** (recommandé) — le projet utilise `pnpm-lock.yaml` ; `package-lock.json` est ignoré pour éviter le drift.
+- **pnpm** (recommandé) — le projet utilise `pnpm-lock.yaml` ; `package-lock.json` est ignoré pour éviter le drift. Si ce fichier réapparaît (autre branche, `npm install` par erreur) : `git rm --cached package-lock.json` puis commit.
 
 ## Installation
 
@@ -95,6 +95,43 @@ Le serveur écoute sur le port 3000 (ou `PORT` si défini).
 | CRON_SECRET   | Secret pour l'endpoint cron (optionnel) | -                            |
 | NODE_ENV      | Environnement (development/production)| development                    |
 | TRUST_PROXY   | `true` si derrière reverse proxy (nginx, load balancer) — requis pour un rate-limit IP correct | - |
+
+## Runbook exploitation
+
+### TRUST_PROXY et reverse proxy
+
+Le rate-limiting (login, set-password, création employé) s’appuie sur l’IP client. Derrière un proxy, `req.ip` vaut celui du proxy sans `trust proxy`.
+
+**Quand activer** : `TRUST_PROXY=true` dès que l’app est derrière :
+- Nginx
+- Apache
+- Cloudflare
+- AWS ALB / Elastic Load Balancer
+- Autre reverse proxy / load balancer
+
+**Exemple Nginx** (envoi de `X-Forwarded-For`) :
+```nginx
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+proxy_set_header X-Forwarded-Proto $scheme;
+```
+
+**Exemple Cloudflare** : activer `TRUST_PROXY=true` ; CF envoie déjà les en-têtes de forwarding.
+
+### Rate-limit : comportement anormal
+
+Si des requêtes légitimes sont bloquées (429) :
+
+1. Vérifier `TRUST_PROXY=true` si l’app est derrière un proxy (sinon tous les utilisateurs partagent l’IP du proxy).
+2. Vérifier que le proxy transmet bien `X-Forwarded-For` (ou équivalent).
+3. En cas de NAT / IP partagée (entreprise, VPN), le rate-limit peut toucher plusieurs utilisateurs ; envisager d’ajuster les limites via les options d’express-rate-limit si besoin.
+
+### Logs CSRF (403)
+
+En cas de rejet CSRF, un log structuré est émis :
+```json
+{"event":"csrf_rejected","method":"POST","path":"/api/auth/login","reason":"missing_header"}
+```
+Raisons possibles : `missing_cookie`, `missing_header`, `mismatch`. Utile pour le debug et le monitoring (aucun secret n’est loggé).
 
 ## Assignation quotidienne des tâches
 
