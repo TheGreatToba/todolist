@@ -58,6 +58,7 @@ export default function ManagerDashboard() {
       const params = new URLSearchParams();
       if (selectedDate) params.set('date', selectedDate);
       if (selectedEmployee) params.set('employeeId', selectedEmployee);
+      if (selectedWorkstation) params.set('workstationId', selectedWorkstation);
       const url = `/api/manager/dashboard${params.toString() ? `?${params.toString()}` : ''}`;
       const response = await fetch(url, {
         headers: {
@@ -83,7 +84,7 @@ export default function ManagerDashboard() {
 
   useEffect(() => {
     fetchDashboard();
-  }, [selectedDate, selectedEmployee]);
+  }, [selectedDate, selectedEmployee, selectedWorkstation]);
 
   useEffect(() => {
     const unsubscribeUpdate = on('task:updated', () => {
@@ -337,9 +338,8 @@ export default function ManagerDashboard() {
     );
   }
 
-  const filteredTasks = selectedWorkstation
-    ? dashboard.dailyTasks.filter((t) => t.taskTemplate.workstation?.id === selectedWorkstation)
-    : dashboard.dailyTasks;
+  // Filter by workstation is done server-side via API params; client receives pre-filtered data
+  const filteredTasks = dashboard.dailyTasks;
 
   const completedCount = filteredTasks.filter((t) => t.isCompleted).length;
   const totalCount = filteredTasks.length;
@@ -554,6 +554,7 @@ export default function ManagerDashboard() {
                   className="px-4 py-2 rounded-lg border border-input bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                 >
                   <option value="">All Workstations</option>
+                  <option value="__direct__">Direct assignments</option>
                   {dashboard.workstations.map((ws) => (
                     <option key={ws.id} value={ws.id}>
                       {ws.name}

@@ -7,6 +7,7 @@ import cors from "cors";
 import { createServer as createHttpServer, Server as HttpServer } from "http";
 import { Server as SocketIOServer } from "socket.io";
 import prisma from "./lib/db";
+import { setIO } from "./lib/socket";
 import { handleDemo } from "./routes/demo";
 import { handleSignup, handleLogin, handleProfile } from "./routes/auth";
 import {
@@ -52,7 +53,6 @@ export function createApp(): Express {
   app.post("/api/tasks/templates", handleCreateTaskTemplate);
   app.get("/api/manager/dashboard", handleGetManagerDashboard);
   app.post("/api/cron/daily-tasks", handleDailyTaskAssignment);
-  app.get("/api/cron/daily-tasks", handleDailyTaskAssignment);
 
   // Workstation routes
   app.get("/api/workstations", handleGetWorkstations);
@@ -81,8 +81,8 @@ function setupSocketIO(io: SocketIOServer, app: Express): void {
     });
   });
 
-  (app as any).io = io;
-  (global as any).app = app;
+  (app as Express & { io?: SocketIOServer }).io = io;
+  setIO(io);
 }
 
 export function attachSocketIO(httpServer: HttpServer, app: Express): SocketIOServer {

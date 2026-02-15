@@ -61,11 +61,11 @@ Pour la production, utilisez PostgreSQL :
 ## Lancement en local
 
 ```bash
-# Mode développement (hot reload, temps réel actif)
+# Mode développement (hot reload + Socket.IO temps réel actif)
 pnpm dev
 ```
 
-L'application est accessible sur http://localhost:8080
+L'application est accessible sur http://localhost:8080. Le temps réel (mise à jour des tâches sans rechargement) fonctionne dès le mode développement.
 
 ### Comptes de démo (après seed)
 
@@ -103,7 +103,7 @@ Les tâches récurrentes doivent être assignées chaque jour. Un endpoint cron 
 # Appel manuel (sans CRON_SECRET configuré)
 curl -X POST http://localhost:8080/api/cron/daily-tasks
 
-# Avec authentification (recommandé en production)
+# Avec authentification (recommandé en production) - POST uniquement
 curl -X POST http://localhost:8080/api/cron/daily-tasks \
   -H "X-Cron-Secret: votre-secret"
 

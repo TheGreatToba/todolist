@@ -2,6 +2,7 @@ import { RequestHandler } from 'express';
 import { z } from 'zod';
 import prisma from '../lib/db';
 import { verifyToken, extractTokenFromHeader } from '../lib/auth';
+import { getIO } from '../lib/socket';
 import { assignDailyTasksForDate } from '../jobs/daily-task-assignment';
 
 const CreateTaskTemplateSchema = z.object({
@@ -137,8 +138,8 @@ export const handleUpdateDailyTask: RequestHandler = async (req, res) => {
     });
 
     // Emit socket.io event to notify manager (team room only)
-    const app = (global as any).app;
-    if (app?.io) {
+    const io = getIO();
+    if (io) {
       const employee = await prisma.user.findUnique({
         where: { id: updatedTask.employeeId },
         select: { teamId: true },
@@ -146,7 +147,7 @@ export const handleUpdateDailyTask: RequestHandler = async (req, res) => {
       if (employee?.teamId) {
         const taskTemplate = (updatedTask as { taskTemplate?: { title: string } }).taskTemplate;
         const taskTitle = taskTemplate?.title ?? 'Task';
-        app.io.to(`team:${employee.teamId}`).emit('task:updated', {
+        io.to(`team:${employee.teamId}`).emit('task:updated', {
           taskId: updatedTask.id,
           employeeId: updatedTask.employeeId,
           isCompleted: updatedTask.isCompleted,
@@ -259,9 +260,9 @@ export const handleCreateTaskTemplate: RequestHandler = async (req, res) => {
 
           if (employee) {
             // Emit socket event to the assigned employee only
-            const app = (global as any).app;
-            if (app?.io) {
-              app.io.to(`user:${employeeId}`).emit('task:assigned', {
+            const io = getIO();
+            if (io) {
+              io.to(`user:${employeeId}`).emit('task:assigned', {
                 taskId: taskTemplate.id,
                 employeeId,
                 employeeName: employee.name,
@@ -354,7 +355,7 @@ export const handleGetManagerDashboard: RequestHandler = async (req, res) => {
       return;
     }
 
-    const { date, employeeId } = req.query;
+    const { date, employeeId, workstationId } = req.query;
     const taskDate = date ? new Date(date as string) : new Date();
     taskDate.setHours(0, 0, 0, 0);
 
@@ -387,15 +388,22 @@ export const handleGetManagerDashboard: RequestHandler = async (req, res) => {
       }
     }
 
+    // Build task filter: date + optional workstation filter
+    const taskWhere: Record<string, unknown> = {
+      employee: employeeFilter,
+      date: {
+        gte: taskDate,
+        lt: new Date(taskDate.getTime() + 24 * 60 * 60 * 1000),
+      },
+    };
+    if (workstationId && typeof workstationId === 'string') {
+      taskWhere.taskTemplate =
+        workstationId === '__direct__' ? { workstationId: null } : { workstationId };
+    }
+
     // Get all daily tasks for the team on the date
     const dailyTasks = await prisma.dailyTask.findMany({
-      where: {
-        employee: employeeFilter,
-        date: {
-          gte: taskDate,
-          lt: new Date(taskDate.getTime() + 24 * 60 * 60 * 1000),
-        },
-      },
+      where: taskWhere,
       include: {
         employee: {
           select: {
