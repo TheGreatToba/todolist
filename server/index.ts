@@ -6,6 +6,7 @@ import cookieParser from "cookie-parser";
 import { ensureAuthConfig, verifyToken, extractToken, AUTH_COOKIE_NAME } from "./lib/auth";
 import { parse as parseCookie } from "cookie";
 import { setCsrfCookieIfMissing, validateCsrf, ensureCsrfConfig } from "./lib/csrf";
+import { requestIdMiddleware } from "./lib/observability";
 
 ensureAuthConfig();
 ensureCsrfConfig();
@@ -40,6 +41,9 @@ export function createApp(): Express {
   if (process.env.TRUST_PROXY === "true") {
     app.set("trust proxy", 1);
   }
+
+  // Observability: request ID for correlation (X-Request-ID in response)
+  app.use(requestIdMiddleware);
 
   // Security headers (helmet) - X-Content-Type-Options, X-Frame-Options, etc.
   // TODO: Replace style-src 'unsafe-inline' with nonce/hash when build setup allows (Tailwind)

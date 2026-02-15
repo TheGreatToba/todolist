@@ -125,8 +125,14 @@ describe("CSRF rejection logs", () => {
     expect(res.status).toBe(403);
     expect(warnSpy).toHaveBeenCalledTimes(1);
     const log = JSON.parse(warnSpy.mock.calls[0][0]);
-    expect(log.reason).toBe("missing_header");
-    expect(log.path).toBe("/api/auth/login");
+    expect(log).toMatchObject({
+      event: "csrf_rejected",
+      method: "POST",
+      path: "/api/auth/login",
+      reason: "missing_header",
+    });
+    expect(log.requestId).toBeDefined();
+    expect(typeof log.requestId).toBe("string");
   });
 
   it("logs mismatch when header does not match cookie", async () => {
@@ -142,7 +148,49 @@ describe("CSRF rejection logs", () => {
     expect(res.status).toBe(403);
     expect(warnSpy).toHaveBeenCalledTimes(1);
     const log = JSON.parse(warnSpy.mock.calls[0][0]);
-    expect(log.reason).toBe("mismatch");
+    expect(log).toMatchObject({
+      event: "csrf_rejected",
+      method: "POST",
+      path: "/api/auth/login",
+      reason: "mismatch",
+    });
+    expect(log.requestId).toBeDefined();
+    expect(typeof log.requestId).toBe("string");
+  });
+
+  it("reprises X-Request-ID from request into CSRF rejection log", async () => {
+    const app = createApp();
+    const customId = "my-trace-id-12345";
+
+    const res = await request(app)
+      .post("/api/auth/login")
+      .set("X-Request-ID", customId)
+      .set("X-CSRF-TOKEN", "any-token")
+      .send({ email: "mgr@test.com", password: "password" });
+
+    expect(res.status).toBe(403);
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    const log = JSON.parse(warnSpy.mock.calls[0][0]);
+    expect(log.requestId).toBe(customId);
+  });
+});
+
+describe("Request ID (observability)", () => {
+  it("adds X-Request-ID to response", async () => {
+    const app = createApp();
+    const res = await request(app).get("/api/ping");
+    expect(res.headers["x-request-id"]).toBeDefined();
+    expect(typeof res.headers["x-request-id"]).toBe("string");
+    expect(res.headers["x-request-id"]!.length).toBeGreaterThan(0);
+  });
+
+  it("reprises X-Request-ID from request into response", async () => {
+    const app = createApp();
+    const customId = "trace-abc-123";
+    const res = await request(app)
+      .get("/api/ping")
+      .set("X-Request-ID", customId);
+    expect(res.headers["x-request-id"]).toBe(customId);
   });
 });
 

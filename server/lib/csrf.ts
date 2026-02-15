@@ -2,14 +2,6 @@ import crypto from 'crypto';
 import { Request, Response, NextFunction } from 'express';
 import { parse as parseCookie } from 'cookie';
 
-/** Get correlation ID from request (proxy/APM) or generate one for log tracing */
-function getRequestId(req: Request): string {
-  const id = req.headers['x-request-id'] || req.headers['x-correlation-id'] || req.headers['x-amzn-trace-id'];
-  if (typeof id === 'string') return id;
-  if (Array.isArray(id) && id[0]) return id[0];
-  return crypto.randomUUID();
-}
-
 export const CSRF_COOKIE_NAME = 'csrf-token';
 const CSRF_HEADER = 'x-csrf-token';
 const CSRF_COOKIE_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24h
@@ -67,8 +59,10 @@ export function validateCsrf(req: Request, res: Response, next: NextFunction): v
   if (isCsrfDisabled()) return next();
   if (!STATE_CHANGING_METHODS.includes(req.method)) return next();
 
-  // set-password uses one-time token in body, not session cookie
-  if (req.path === '/api/auth/set-password') return next();
+  // set-password uses one-time token in body, not session cookie.
+  // Handle both forms: /api/auth/set-password and /auth/set-password (mounted router).
+  const path = req.path;
+  if (path === '/api/auth/set-password' || path === '/auth/set-password') return next();
 
   const headerToken = req.headers[CSRF_HEADER] as string | undefined;
   const cookieToken = getCsrfTokenFromCookie(req);
@@ -78,7 +72,7 @@ export function validateCsrf(req: Request, res: Response, next: NextFunction): v
     // Note: req.path is relative to mount; with app.use('/api', router), path may be /auth/login not /api/auth/login.
     console.warn(JSON.stringify({
       event: 'csrf_rejected',
-      requestId: getRequestId(req),
+      requestId: req.requestId ?? crypto.randomUUID(),
       method: req.method,
       path: req.path,
       reason: !cookieToken ? 'missing_cookie' : !headerToken ? 'missing_header' : 'mismatch',

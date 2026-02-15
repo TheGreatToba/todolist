@@ -126,13 +126,22 @@ Si des requêtes légitimes sont bloquées (429) :
 2. Vérifier que le proxy transmet bien `X-Forwarded-For` (ou équivalent).
 3. En cas de NAT / IP partagée (entreprise, VPN), le rate-limit peut toucher plusieurs utilisateurs ; envisager d’ajuster les limites via les options d’express-rate-limit si besoin.
 
+### Observabilité : Request ID
+
+Un middleware injecte un ID de corrélation sur chaque requête :
+- Priorité : `X-Request-ID` > `X-Correlation-ID` > `X-Amzn-Trace-Id` > UUID généré
+- Disponible sur `req.requestId` dans tout le pipeline
+- Retourné dans la réponse via le header `X-Request-ID` pour corréler client/serveur et APM
+
+Configurez le proxy pour transmettre `X-Request-ID` (ou `X-Correlation-ID`) afin d’uniformiser le tracing cross-services.
+
 ### Logs CSRF (403)
 
 En cas de rejet CSRF, un log structuré est émis :
 ```json
 {"event":"csrf_rejected","requestId":"abc-123","method":"POST","path":"/api/auth/login","reason":"missing_header"}
 ```
-- **requestId** : ID de corrélation (X-Request-ID si fourni par le proxy, sinon UUID généré) pour relier à une requête complète côté APM/reverse proxy.
+- **requestId** : ID de corrélation. Priorité des headers : `X-Request-ID` > `X-Correlation-ID` > `X-Amzn-Trace-Id` > UUID généré. Le même ID est renvoyé dans le header de réponse `X-Request-ID` pour le tracing cross-services.
 - **path** : chemin Express (`req.path`). Si des routers sont montés (ex. `app.use('/api', router)`), le path est relatif au montage (ex. `/auth/login` et non `/api/auth/login`).
 - **reason** : `missing_cookie`, `missing_header` ou `mismatch`. Aucun secret n’est loggé.
 
