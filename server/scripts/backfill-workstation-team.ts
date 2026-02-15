@@ -42,7 +42,11 @@ async function main() {
     console.warn('No team in DB; cannot assign workstations with no employees.');
   }
 
-  const byCategory = { withEmployees: 0, withoutEmployees: 0, notAssignable: 0 };
+  const idsByCategory = {
+    withEmployees: [] as string[],
+    withoutEmployees: [] as string[],
+    notAssignable: [] as string[],
+  };
   let updated = 0;
 
   for (const ws of legacy) {
@@ -51,9 +55,9 @@ async function main() {
         ? ws.employees[0].employee.teamId
         : firstTeam?.id ?? null;
 
-    if (ws.employees.length > 0) byCategory.withEmployees++;
-    else if (firstTeam) byCategory.withoutEmployees++;
-    else byCategory.notAssignable++;
+    if (ws.employees.length > 0) idsByCategory.withEmployees.push(ws.id);
+    else if (firstTeam) idsByCategory.withoutEmployees.push(ws.id);
+    else idsByCategory.notAssignable.push(ws.id);
 
     if (teamId) {
       if (!dryRun) {
@@ -79,9 +83,10 @@ async function main() {
     `\nBackfill ${dryRun ? '(dry-run) ' : ''}done: ${updated}/${legacy.length} workstations ${dryRun ? 'would be updated' : 'updated'}.`
   );
   console.log('Summary (legacy workstations):');
-  console.log(`  - With employees (assigned from first employee’s team): ${byCategory.withEmployees}`);
-  console.log(`  - Without employees (assigned to first team): ${byCategory.withoutEmployees}`);
-  console.log(`  - Not assignable (left teamId=null): ${byCategory.notAssignable}`);
+  const fmt = (ids: string[]) => `${ids.length} — ids: ${ids.join(', ')}`;
+  console.log(`  - With employees (assigned from first employee’s team): ${fmt(idsByCategory.withEmployees)}`);
+  console.log(`  - Without employees (assigned to first team): ${fmt(idsByCategory.withoutEmployees)}`);
+  console.log(`  - Not assignable (left teamId=null): ${fmt(idsByCategory.notAssignable)}`);
   if (dryRun && updated > 0) {
     console.log('\nRun without --dry-run to apply changes.');
   }

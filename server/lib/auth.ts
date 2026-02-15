@@ -26,6 +26,11 @@ const JWT_EXPIRY = '7d';
 /** Role union for type-safe checks (avoids typos in requireRole). */
 export type Role = 'MANAGER' | 'EMPLOYEE';
 
+/** Runtime guard: ensures DB string is a valid role before emitting a JWT. */
+export function isRole(value: unknown): value is Role {
+  return value === 'MANAGER' || value === 'EMPLOYEE';
+}
+
 export interface JwtPayload {
   userId: string;
   email: string;

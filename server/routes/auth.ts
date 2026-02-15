@@ -5,6 +5,7 @@ import {
   hashPassword,
   verifyPassword,
   generateToken,
+  isRole,
   AUTH_COOKIE_NAME,
   getAuthCookieOptions,
   getAuthCookieClearOptions,
@@ -80,10 +81,14 @@ export const handleSignup: RequestHandler = async (req, res) => {
       });
     }
 
+    if (!isRole(user.role)) {
+      res.status(500).json({ error: 'Invalid user role' });
+      return;
+    }
     const token = generateToken({
       userId: user.id,
       email: user.email,
-      role: user.role as Role,
+      role: user.role,
     });
 
     res.cookie(AUTH_COOKIE_NAME, token, getAuthCookieOptions());
@@ -114,10 +119,14 @@ export const handleLogin: RequestHandler = async (req, res) => {
       return;
     }
 
+    if (!isRole(user.role)) {
+      res.status(500).json({ error: 'Invalid user role' });
+      return;
+    }
     const token = generateToken({
       userId: user.id,
       email: user.email,
-      role: user.role as Role,
+      role: user.role,
     });
 
     res.cookie(AUTH_COOKIE_NAME, token, getAuthCookieOptions());
@@ -198,10 +207,14 @@ export const handleSetPassword: RequestHandler = async (req, res) => {
       prisma.setPasswordToken.delete({ where: { id: record.id } }),
     ]);
 
+    if (!isRole(record.user.role)) {
+      res.status(500).json({ error: 'Invalid user role' });
+      return;
+    }
     const token = generateToken({
       userId: record.user.id,
       email: record.user.email,
-      role: record.user.role as Role,
+      role: record.user.role,
     });
 
     res.cookie(AUTH_COOKIE_NAME, token, getAuthCookieOptions());

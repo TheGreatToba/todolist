@@ -60,7 +60,7 @@ model User {
   name            String
   email           String   @unique
   passwordHash    String
-  role            String   @default("EMPLOYEE") // Application uses 'MANAGER' | 'EMPLOYEE'; with PostgreSQL you can use enum Role for full type safety
+  role            String   @default("EMPLOYEE") // App: 'MANAGER'|'EMPLOYEE' + isRole() at token gen. Optional (SQLite): CHECK(role IN ('MANAGER','EMPLOYEE')) via raw migration.
 
   teamId          String?
   team            Team?    @relation("TeamMembers", fields: [teamId], references: [id], onDelete: SetNull)
