@@ -95,6 +95,7 @@ Le serveur écoute sur le port 3000 (ou `PORT` si défini).
 | CRON_SECRET   | Secret pour l'endpoint cron (optionnel) | -                            |
 | NODE_ENV      | Environnement (development/production)| development                    |
 | TRUST_PROXY   | `true` si derrière reverse proxy (nginx, load balancer) — requis pour un rate-limit IP correct | - |
+| DISABLE_CSRF  | `true` pour désactiver la validation CSRF (dev/staging uniquement — **interdit en production**) | - |
 
 ## Runbook exploitation
 
@@ -129,9 +130,11 @@ Si des requêtes légitimes sont bloquées (429) :
 
 En cas de rejet CSRF, un log structuré est émis :
 ```json
-{"event":"csrf_rejected","method":"POST","path":"/api/auth/login","reason":"missing_header"}
+{"event":"csrf_rejected","requestId":"abc-123","method":"POST","path":"/api/auth/login","reason":"missing_header"}
 ```
-Raisons possibles : `missing_cookie`, `missing_header`, `mismatch`. Utile pour le debug et le monitoring (aucun secret n’est loggé).
+- **requestId** : ID de corrélation (X-Request-ID si fourni par le proxy, sinon UUID généré) pour relier à une requête complète côté APM/reverse proxy.
+- **path** : chemin Express (`req.path`). Si des routers sont montés (ex. `app.use('/api', router)`), le path est relatif au montage (ex. `/auth/login` et non `/api/auth/login`).
+- **reason** : `missing_cookie`, `missing_header` ou `mismatch`. Aucun secret n’est loggé.
 
 ## Assignation quotidienne des tâches
 

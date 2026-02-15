@@ -1,7 +1,7 @@
 /**
- * Security regression tests: clearCookie options, SET_PASSWORD_TOKEN_EXPIRY_HOURS, CSP.
+ * Security regression tests: clearCookie options, SET_PASSWORD_TOKEN_EXPIRY_HOURS, CSP, CSRF logs.
  */
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { getAuthCookieOptions, getAuthCookieClearOptions } from "./auth";
 import { ensureCsrfConfig } from "./csrf";
 import { getSetPasswordTokenExpiryHours } from "./set-password-expiry";
@@ -74,6 +74,75 @@ describe("ensureCsrfConfig", () => {
     process.env.NODE_ENV = "production";
     process.env.DISABLE_CSRF = "true";
     expect(() => ensureCsrfConfig()).toThrow("DISABLE_CSRF=true is not allowed in production");
+  });
+});
+
+describe("CSRF rejection logs", () => {
+  const envBackup = { nodeEnv: process.env.NODE_ENV, disableCsrf: process.env.DISABLE_CSRF };
+  let warnSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    process.env.NODE_ENV = "development";
+    delete process.env.DISABLE_CSRF;
+    warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    process.env.NODE_ENV = envBackup.nodeEnv;
+    process.env.DISABLE_CSRF = envBackup.disableCsrf;
+    warnSpy.mockRestore();
+  });
+
+  it("logs missing_cookie when csrf-token cookie is absent", async () => {
+    const app = createApp();
+    const res = await request(app)
+      .post("/api/auth/login")
+      .set("X-CSRF-TOKEN", "some-token")
+      .send({ email: "mgr@test.com", password: "password" });
+
+    expect(res.status).toBe(403);
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    const log = JSON.parse(warnSpy.mock.calls[0][0]);
+    expect(log).toMatchObject({
+      event: "csrf_rejected",
+      method: "POST",
+      path: "/api/auth/login",
+      reason: "missing_cookie",
+    });
+    expect(log.requestId).toBeDefined();
+    expect(typeof log.requestId).toBe("string");
+  });
+
+  it("logs missing_header when X-CSRF-TOKEN header is absent", async () => {
+    const app = createApp();
+    const agent = request.agent(app);
+    await agent.get("/api/ping"); // receive csrf-token cookie
+
+    const res = await agent
+      .post("/api/auth/login")
+      .send({ email: "mgr@test.com", password: "password" });
+
+    expect(res.status).toBe(403);
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    const log = JSON.parse(warnSpy.mock.calls[0][0]);
+    expect(log.reason).toBe("missing_header");
+    expect(log.path).toBe("/api/auth/login");
+  });
+
+  it("logs mismatch when header does not match cookie", async () => {
+    const app = createApp();
+    const agent = request.agent(app);
+    await agent.get("/api/ping"); // receive csrf-token cookie
+
+    const res = await agent
+      .post("/api/auth/login")
+      .set("X-CSRF-TOKEN", "wrong-token")
+      .send({ email: "mgr@test.com", password: "password" });
+
+    expect(res.status).toBe(403);
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    const log = JSON.parse(warnSpy.mock.calls[0][0]);
+    expect(log.reason).toBe("mismatch");
   });
 });
 

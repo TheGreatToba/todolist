@@ -2,6 +2,14 @@ import crypto from 'crypto';
 import { Request, Response, NextFunction } from 'express';
 import { parse as parseCookie } from 'cookie';
 
+/** Get correlation ID from request (proxy/APM) or generate one for log tracing */
+function getRequestId(req: Request): string {
+  const id = req.headers['x-request-id'] || req.headers['x-correlation-id'] || req.headers['x-amzn-trace-id'];
+  if (typeof id === 'string') return id;
+  if (Array.isArray(id) && id[0]) return id[0];
+  return crypto.randomUUID();
+}
+
 export const CSRF_COOKIE_NAME = 'csrf-token';
 const CSRF_HEADER = 'x-csrf-token';
 const CSRF_COOKIE_MAX_AGE_MS = 24 * 60 * 60 * 1000; // 24h
@@ -66,9 +74,11 @@ export function validateCsrf(req: Request, res: Response, next: NextFunction): v
   const cookieToken = getCsrfTokenFromCookie(req);
 
   if (!cookieToken || !headerToken || headerToken !== cookieToken) {
-    // Structured log for ops/monitoring (no secrets)
+    // Structured log for ops/monitoring (no secrets). requestId correlates with proxy/APM.
+    // Note: req.path is relative to mount; with app.use('/api', router), path may be /auth/login not /api/auth/login.
     console.warn(JSON.stringify({
       event: 'csrf_rejected',
+      requestId: getRequestId(req),
       method: req.method,
       path: req.path,
       reason: !cookieToken ? 'missing_cookie' : !headerToken ? 'missing_header' : 'mismatch',
