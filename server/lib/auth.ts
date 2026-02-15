@@ -29,7 +29,7 @@ export type Role = 'MANAGER' | 'EMPLOYEE';
 export interface JwtPayload {
   userId: string;
   email: string;
-  role: string;
+  role: Role;
 }
 
 export async function hashPassword(password: string): Promise<string> {

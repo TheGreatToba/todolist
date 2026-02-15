@@ -8,6 +8,7 @@ import {
   AUTH_COOKIE_NAME,
   getAuthCookieOptions,
   getAuthCookieClearOptions,
+  type Role,
 } from '../lib/auth';
 import { sendErrorResponse } from '../lib/errors';
 import { getAuthOrThrow } from '../middleware/requireAuth';
@@ -82,7 +83,7 @@ export const handleSignup: RequestHandler = async (req, res) => {
     const token = generateToken({
       userId: user.id,
       email: user.email,
-      role: user.role,
+      role: user.role as Role,
     });
 
     res.cookie(AUTH_COOKIE_NAME, token, getAuthCookieOptions());
@@ -116,7 +117,7 @@ export const handleLogin: RequestHandler = async (req, res) => {
     const token = generateToken({
       userId: user.id,
       email: user.email,
-      role: user.role,
+      role: user.role as Role,
     });
 
     res.cookie(AUTH_COOKIE_NAME, token, getAuthCookieOptions());
@@ -200,7 +201,7 @@ export const handleSetPassword: RequestHandler = async (req, res) => {
     const token = generateToken({
       userId: record.user.id,
       email: record.user.email,
-      role: record.user.role,
+      role: record.user.role as Role,
     });
 
     res.cookie(AUTH_COOKIE_NAME, token, getAuthCookieOptions());

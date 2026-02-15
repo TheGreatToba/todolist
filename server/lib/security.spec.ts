@@ -102,7 +102,9 @@ describe("CSRF rejection logs", () => {
 
     expect(res.status).toBe(403);
     expect(warnSpy).toHaveBeenCalledTimes(1);
-    const log = JSON.parse(warnSpy.mock.calls[0][0]);
+    const raw = warnSpy.mock.calls[0][0];
+    expect(typeof raw).toBe("string");
+    const log = JSON.parse(raw as string);
     expect(log).toMatchObject({
       event: "csrf_rejected",
       method: "POST",
@@ -124,7 +126,9 @@ describe("CSRF rejection logs", () => {
 
     expect(res.status).toBe(403);
     expect(warnSpy).toHaveBeenCalledTimes(1);
-    const log = JSON.parse(warnSpy.mock.calls[0][0]);
+    const raw = warnSpy.mock.calls[0][0];
+    expect(typeof raw).toBe("string");
+    const log = JSON.parse(raw as string);
     expect(log).toMatchObject({
       event: "csrf_rejected",
       method: "POST",
@@ -147,7 +151,9 @@ describe("CSRF rejection logs", () => {
 
     expect(res.status).toBe(403);
     expect(warnSpy).toHaveBeenCalledTimes(1);
-    const log = JSON.parse(warnSpy.mock.calls[0][0]);
+    const raw = warnSpy.mock.calls[0][0];
+    expect(typeof raw).toBe("string");
+    const log = JSON.parse(raw as string);
     expect(log).toMatchObject({
       event: "csrf_rejected",
       method: "POST",
@@ -170,7 +176,9 @@ describe("CSRF rejection logs", () => {
 
     expect(res.status).toBe(403);
     expect(warnSpy).toHaveBeenCalledTimes(1);
-    const log = JSON.parse(warnSpy.mock.calls[0][0]);
+    const raw = warnSpy.mock.calls[0][0];
+    expect(typeof raw).toBe("string");
+    const log = JSON.parse(raw as string);
     expect(log.requestId).toBe(customId);
   });
 });

@@ -32,7 +32,7 @@ export function requireRole(...roles: Role[]): RequestHandler {
       res.status(401).json({ error: 'Unauthorized' });
       return;
     }
-    if (!set.has(payload.role as Role)) {
+    if (!set.has(payload.role)) {
       res.status(403).json({ error: 'Forbidden' });
       return;
     }

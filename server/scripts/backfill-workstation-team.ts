@@ -1,12 +1,13 @@
 /**
- * One-off backfill: set teamId on workstations that have none (legacy).
- * Run once after adding Workstation.teamId, then remove fallback teamId === null in routes.
+ * One-off backfill (best-effort): set teamId on workstations that have none (legacy).
+ * Run once after adding Workstation.teamId. Ambiguous cases use "first employee" or "first team".
  *
  * Logic:
- * - Workstations with employees: set teamId to the first employee's teamId.
- * - Workstations with no employees: set teamId to the first team in the DB (so they appear in a list).
+ * - With employees: teamId = first employee's teamId.
+ * - Without employees: teamId = first team in DB (so they appear in a list).
+ * - Not assignable: no employees and no team in DB → left teamId=null.
  *
- * Usage: pnpm exec tsx server/scripts/backfill-workstation-team.ts
+ * Usage: pnpm backfill:workstation-team
  */
 import 'dotenv/config';
 import prisma from '../lib/db';
@@ -33,12 +34,18 @@ async function main() {
     console.warn('No team in DB; cannot assign workstations with no employees.');
   }
 
+  const byCategory = { withEmployees: 0, withoutEmployees: 0, notAssignable: 0 };
   let updated = 0;
+
   for (const ws of legacy) {
     const teamId =
       ws.employees.length > 0
         ? ws.employees[0].employee.teamId
         : firstTeam?.id ?? null;
+
+    if (ws.employees.length > 0) byCategory.withEmployees++;
+    else if (firstTeam) byCategory.withoutEmployees++;
+    else byCategory.notAssignable++;
 
     if (teamId) {
       await prisma.workstation.update({
@@ -48,11 +55,17 @@ async function main() {
       updated++;
       console.log(`Workstation "${ws.name}" (${ws.id}) -> teamId=${teamId}`);
     } else {
-      console.log(`Workstation "${ws.name}" (${ws.id}) has no employees and no team; left teamId=null.`);
+      console.log(
+        `Workstation "${ws.name}" (${ws.id}) has no employees and no team; left teamId=null.`
+      );
     }
   }
 
-  console.log(`Backfill done: ${updated}/${legacy.length} workstations updated.`);
+  console.log(`\nBackfill done: ${updated}/${legacy.length} workstations updated.`);
+  console.log('Summary (legacy workstations):');
+  console.log(`  - With employees (assigned from first employee’s team): ${byCategory.withEmployees}`);
+  console.log(`  - Without employees (assigned to first team): ${byCategory.withoutEmployees}`);
+  console.log(`  - Not assignable (left teamId=null): ${byCategory.notAssignable}`);
 }
 
 main()
