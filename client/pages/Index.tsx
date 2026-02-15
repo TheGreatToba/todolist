@@ -1,5 +1,5 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { CheckCircle2, Users, Zap, BarChart3, Clock, Shield } from 'lucide-react';
 
@@ -8,13 +8,12 @@ export default function Home() {
   const { user } = useAuth();
 
   if (user) {
-    // Redirect to appropriate dashboard based on role
-    if (user.role === 'MANAGER') {
-      navigate('/manager', { replace: true });
-    } else {
-      navigate('/employee', { replace: true });
-    }
-    return null;
+    return (
+      <Navigate
+        to={user.role === 'MANAGER' ? '/manager' : '/employee'}
+        replace
+      />
+    );
   }
 
   return (

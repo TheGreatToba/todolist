@@ -4,6 +4,7 @@ import { ensureAuthConfig, verifyToken } from "./lib/auth";
 
 ensureAuthConfig();
 import cors from "cors";
+import { getCorsOptions, getSocketCorsOrigin } from "./lib/cors";
 import { createServer as createHttpServer, Server as HttpServer } from "http";
 import { Server as SocketIOServer } from "socket.io";
 import prisma from "./lib/db";
@@ -29,8 +30,8 @@ import {
 export function createApp(): Express {
   const app = express();
 
-  // Middleware
-  app.use(cors());
+  // Middleware - CORS hardened per env (see server/lib/cors.ts)
+  app.use(cors(getCorsOptions()));
   app.use(express.json());
   app.use(express.urlencoded({ extended: true }));
 
@@ -88,7 +89,7 @@ function setupSocketIO(io: SocketIOServer, app: Express): void {
 export function attachSocketIO(httpServer: HttpServer, app: Express): SocketIOServer {
   const io = new SocketIOServer(httpServer, {
     cors: {
-      origin: "*",
+      origin: getSocketCorsOrigin(),
       methods: ["GET", "POST"],
     },
   });

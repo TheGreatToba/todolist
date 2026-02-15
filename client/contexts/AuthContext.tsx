@@ -5,7 +5,7 @@ interface AuthContextType {
   user: User | null;
   token: string | null;
   login: (email: string, password: string) => Promise<void>;
-  signup: (name: string, email: string, password: string, role: 'EMPLOYEE' | 'MANAGER', workstationId?: string, teamId?: string) => Promise<void>;
+  signup: (name: string, email: string, password: string, role?: 'MANAGER', workstationId?: string, teamId?: string) => Promise<void>;
   logout: () => void;
   isLoading: boolean;
   error: string | null;
@@ -89,7 +89,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     name: string,
     email: string,
     password: string,
-    role: 'EMPLOYEE' | 'MANAGER',
+    role: 'MANAGER' = 'MANAGER',
     workstationId?: string,
     teamId?: string
   ) => {
@@ -99,7 +99,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const response = await fetch('/api/auth/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password, role, workstationId, teamId }),
+        body: JSON.stringify({ name, email, password, role: 'MANAGER', workstationId, teamId }),
       });
 
       if (!response.ok) {

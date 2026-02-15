@@ -30,11 +30,12 @@ export interface LoginRequest {
   password: string;
 }
 
+/** Signup is only available for MANAGER. Employees are created by managers from the dashboard. */
 export interface SignupRequest {
   name: string;
   email: string;
   password: string;
-  role: 'EMPLOYEE' | 'MANAGER';
+  role: 'MANAGER';
 }
 
 // Task types

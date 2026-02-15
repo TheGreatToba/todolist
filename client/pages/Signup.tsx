@@ -50,7 +50,7 @@ export default function Signup() {
     }
 
     try {
-      await signup(formData.name, formData.email, formData.password, 'MANAGER');
+      await signup(formData.name, formData.email, formData.password);
     } catch (err) {
       setLocalError(err instanceof Error ? err.message : 'Signup failed');
     }
