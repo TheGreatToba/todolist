@@ -38,7 +38,8 @@ pnpm seed
 Après la migration `add_workstation_team_scope`, si des postes n’ont pas de `teamId`, exécuter une fois le backfill pour les rattacher à une équipe (sinon ils n’apparaîtront plus dans les listes manager) :
 
 ```bash
-pnpm backfill:workstation-team
+pnpm backfill:workstation-team           # applique les mises à jour
+pnpm backfill:workstation-team --dry-run # simule et affiche ce qui serait fait (aucune écriture)
 ```
 
 ### Production (PostgreSQL)

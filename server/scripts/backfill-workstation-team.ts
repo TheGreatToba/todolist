@@ -7,12 +7,20 @@
  * - Without employees: teamId = first team in DB (so they appear in a list).
  * - Not assignable: no employees and no team in DB → left teamId=null.
  *
- * Usage: pnpm backfill:workstation-team
+ * Usage:
+ *   pnpm backfill:workstation-team           # apply updates
+ *   pnpm backfill:workstation-team --dry-run # log what would be done, no writes
  */
 import 'dotenv/config';
 import prisma from '../lib/db';
 
+const dryRun = process.argv.includes('--dry-run');
+
 async function main() {
+  if (dryRun) {
+    console.log(' dry-run: no changes will be written.\n');
+  }
+
   const legacy = await prisma.workstation.findMany({
     where: { teamId: null },
     include: {
@@ -48,12 +56,18 @@ async function main() {
     else byCategory.notAssignable++;
 
     if (teamId) {
-      await prisma.workstation.update({
-        where: { id: ws.id },
-        data: { teamId },
-      });
+      if (!dryRun) {
+        await prisma.workstation.update({
+          where: { id: ws.id },
+          data: { teamId },
+        });
+      }
       updated++;
-      console.log(`Workstation "${ws.name}" (${ws.id}) -> teamId=${teamId}`);
+      console.log(
+        dryRun
+          ? `[dry-run] Would set Workstation "${ws.name}" (${ws.id}) -> teamId=${teamId}`
+          : `Workstation "${ws.name}" (${ws.id}) -> teamId=${teamId}`
+      );
     } else {
       console.log(
         `Workstation "${ws.name}" (${ws.id}) has no employees and no team; left teamId=null.`
@@ -61,11 +75,16 @@ async function main() {
     }
   }
 
-  console.log(`\nBackfill done: ${updated}/${legacy.length} workstations updated.`);
+  console.log(
+    `\nBackfill ${dryRun ? '(dry-run) ' : ''}done: ${updated}/${legacy.length} workstations ${dryRun ? 'would be updated' : 'updated'}.`
+  );
   console.log('Summary (legacy workstations):');
   console.log(`  - With employees (assigned from first employee’s team): ${byCategory.withEmployees}`);
   console.log(`  - Without employees (assigned to first team): ${byCategory.withoutEmployees}`);
   console.log(`  - Not assignable (left teamId=null): ${byCategory.notAssignable}`);
+  if (dryRun && updated > 0) {
+    console.log('\nRun without --dry-run to apply changes.');
+  }
 }
 
 main()
