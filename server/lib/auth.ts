@@ -42,7 +42,7 @@ const JwtPayloadSchema = z
   })
   .strict();
 
-/** Public JWT payload; shape aligned with JwtPayloadSchema (userId, email, role only). */
+/** Public JWT payload; shape aligned with JwtPayloadSchema (userId, email, role only). If it drifts, consider deriving from a dedicated "public claims" schema. */
 export interface JwtPayload {
   userId: string;
   email: string;

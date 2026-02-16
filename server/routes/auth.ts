@@ -16,7 +16,8 @@ import { getAuthOrThrow } from '../middleware/requireAuth';
 
 /**
  * Structured log when role from DB is invalid (do not emit JWT).
- * For production, consider a centralized logger (pino/winston) for correlation and filtering.
+ * For production: use a centralized logger (pino/winston); consider redacting or hashing
+ * email (PII); ensure requestId is always set (middleware + fallback) for correlation.
  */
 function logInvalidRole(
   user: { id: string; email: string; role: unknown },
@@ -30,7 +31,7 @@ function logInvalidRole(
       role: user.role,
       endpoint: req.path,
       method: req.method,
-      requestId: req.requestId,
+      requestId: req.requestId ?? undefined,
     })
   );
 }

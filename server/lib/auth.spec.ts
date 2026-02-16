@@ -1,6 +1,7 @@
 /**
  * Auth unit tests: verifyToken (JWT payload validation with Zod strict),
- * isRole guard. Requires JWT_SECRET in env (see README Test prerequisites).
+ * isRole guard. Locks regression on valid token, expired, invalid role, extra claims,
+ * invalid email, malformed/wrong secret. Requires JWT_SECRET in env (see README).
  */
 import "dotenv/config";
 import { describe, it, expect } from "vitest";
@@ -47,6 +48,16 @@ describe("verifyToken", () => {
       { userId: "u", email: "not-an-email", role: "MANAGER" },
       secret,
       { expiresIn: "1h" }
+    );
+    expect(verifyToken(token)).toBeNull();
+  });
+
+  it("returns null for expired token", () => {
+    const secret = process.env.JWT_SECRET || "test-secret";
+    const token = jwt.sign(
+      { userId: "u", email: "a@b.com", role: "MANAGER" },
+      secret,
+      { expiresIn: "-1h" }
     );
     expect(verifyToken(token)).toBeNull();
   });
