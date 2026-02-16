@@ -13,6 +13,7 @@ import {
 } from '../lib/auth';
 import { sendErrorResponse } from '../lib/errors';
 import { getAuthOrThrow } from '../middleware/requireAuth';
+import { logger } from '../lib/logger';
 
 /**
  * Structured log when role from DB is invalid (do not emit JWT).
@@ -26,7 +27,7 @@ function logInvalidRole(
   user: { id: string; email: string; role: unknown },
   req: Request
 ): void {
-  console.warn(
+  logger.warn(
     JSON.stringify({
       event: 'invalid_role_rejected',
       userId: user.id,

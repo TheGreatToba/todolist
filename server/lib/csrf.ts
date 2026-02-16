@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { Request, Response, NextFunction } from 'express';
 import { parse as parseCookie } from 'cookie';
+import { logger } from './logger';
 
 export const CSRF_COOKIE_NAME = 'csrf-token';
 const CSRF_HEADER = 'x-csrf-token';
@@ -70,7 +71,7 @@ export function validateCsrf(req: Request, res: Response, next: NextFunction): v
   if (!cookieToken || !headerToken || headerToken !== cookieToken) {
     // Structured log for ops/monitoring (no secrets). requestId correlates with proxy/APM.
     // Note: req.path is relative to mount; with app.use('/api', router), path may be /auth/login not /api/auth/login.
-    console.warn(JSON.stringify({
+    logger.warn(JSON.stringify({
       event: 'csrf_rejected',
       requestId: req.requestId ?? crypto.randomUUID(),
       method: req.method,

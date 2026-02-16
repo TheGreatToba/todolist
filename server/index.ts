@@ -8,6 +8,7 @@ import { requireAuth, requireRole } from "./middleware/requireAuth";
 import { parse as parseCookie } from "cookie";
 import { setCsrfCookieIfMissing, validateCsrf, ensureCsrfConfig } from "./lib/csrf";
 import { requestIdMiddleware } from "./lib/observability";
+import { logger } from "./lib/logger";
 
 ensureAuthConfig();
 ensureCsrfConfig();
@@ -133,14 +134,10 @@ function setupSocketIO(io: SocketIOServer, app: Express): void {
     for (const teamId of teamIds) {
       socket.join(`team:${teamId}`);
     }
-    if (process.env.NODE_ENV !== "production") {
-      console.log("Client connected:", socket.id, "user:", userId);
-    }
+    logger.debug("Client connected:", socket.id, "user:", userId);
 
     socket.on("disconnect", () => {
-      if (process.env.NODE_ENV !== "production") {
-        console.log("Client disconnected:", socket.id);
-      }
+      logger.debug("Client disconnected:", socket.id);
     });
   });
 

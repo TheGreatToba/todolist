@@ -4,6 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useSocket } from '@/hooks/useSocket';
 import { DailyTask } from '@shared/api';
 import { Check, Loader2, LogOut, X, AlertCircle } from 'lucide-react';
+import { logger } from '@/lib/logger';
 
 export default function EmployeeDashboard() {
   const { user, logout } = useAuth();
@@ -21,17 +22,13 @@ export default function EmployeeDashboard() {
 
     // Listen for real-time task updates
     const unsubscribeUpdate = on('task:updated', (data) => {
-      if (import.meta.env.DEV) {
-        console.log('Task updated:', data);
-      }
+      logger.debug('Task updated:', data);
     });
 
     // Listen for new task assignments
     const unsubscribeAssigned = on('task:assigned', (data) => {
       if (data.employeeId === user?.id) {
-        if (import.meta.env.DEV) {
-          console.log('New task assigned:', data);
-        }
+        logger.debug('New task assigned:', data);
         setNotification({
           title: data.taskTitle,
           description: data.taskDescription,

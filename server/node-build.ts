@@ -1,6 +1,7 @@
 import path from "path";
 import { createServer } from "./index";
 import express from "express";
+import { logger } from "./lib/logger";
 
 const httpServer = createServer();
 const port = process.env.PORT || 3000;
@@ -26,19 +27,19 @@ app.get("*", (req: any, res: any) => {
 });
 
 httpServer.listen(port, () => {
-  console.log(`🚀 Fusion Starter server running on port ${port}`);
-  console.log(`📱 Frontend: http://localhost:${port}`);
-  console.log(`🔧 API: http://localhost:${port}/api`);
-  console.log(`⚡ WebSocket: ws://localhost:${port}`);
+  logger.info(`🚀 Fusion Starter server running on port ${port}`);
+  logger.info(`📱 Frontend: http://localhost:${port}`);
+  logger.info(`🔧 API: http://localhost:${port}/api`);
+  logger.info(`⚡ WebSocket: ws://localhost:${port}`);
 });
 
 // Graceful shutdown
 process.on("SIGTERM", () => {
-  console.log("🛑 Received SIGTERM, shutting down gracefully");
+  logger.info("🛑 Received SIGTERM, shutting down gracefully");
   process.exit(0);
 });
 
 process.on("SIGINT", () => {
-  console.log("🛑 Received SIGINT, shutting down gracefully");
+  logger.info("🛑 Received SIGINT, shutting down gracefully");
   process.exit(0);
 });

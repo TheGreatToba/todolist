@@ -5,6 +5,7 @@ import { getIO } from '../lib/socket';
 import { sendErrorResponse } from '../lib/errors';
 import { getAuthOrThrow } from '../middleware/requireAuth';
 import { assignDailyTasksForDate } from '../jobs/daily-task-assignment';
+import { logger } from '../lib/logger';
 
 const CreateTaskTemplateSchema = z.object({
   title: z.string().min(1),
@@ -235,7 +236,7 @@ export const handleCreateTaskTemplate: RequestHandler = async (req, res) => {
                 body.description
               );
             } catch (emailError) {
-              console.log('Email notification skipped (email service not available)');
+              logger.info('Email notification skipped (email service not available)');
             }
           }
         }

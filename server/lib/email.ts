@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import { logger } from './logger';
 
 /** Escape user-provided content to prevent XSS in HTML emails */
 function escapeHtml(unsafe: string): string {
@@ -94,15 +95,15 @@ export async function sendSetPasswordEmail(
     };
 
     const info = await transporter.sendMail(mailOptions);
-    console.log('Set password email sent:', info.messageId);
+    logger.info('Set password email sent:', info.messageId);
 
     if (process.env.NODE_ENV !== 'production' && !process.env.SMTP_HOST) {
-      console.log('Preview URL:', nodemailer.getTestMessageUrl(info));
+      logger.debug('Preview URL:', nodemailer.getTestMessageUrl(info));
     }
 
     return { success: true, messageId: info.messageId };
   } catch (error) {
-    console.error('Failed to send set password email:', error);
+    logger.error('Failed to send set password email:', error);
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
   }
 }
@@ -145,16 +146,16 @@ export async function sendTaskAssignmentEmail(
     };
 
     const info = await transporter.sendMail(mailOptions);
-    console.log('Task assignment email sent:', info.messageId);
+    logger.info('Task assignment email sent:', info.messageId);
 
     // For test accounts, log the preview URL
     if (process.env.NODE_ENV !== 'production' && !process.env.SMTP_HOST) {
-      console.log('Preview URL:', nodemailer.getTestMessageUrl(info));
+      logger.debug('Preview URL:', nodemailer.getTestMessageUrl(info));
     }
 
     return { success: true, messageId: info.messageId };
   } catch (error) {
-    console.error('Failed to send task assignment email:', error);
+    logger.error('Failed to send task assignment email:', error);
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
   }
 }
@@ -173,15 +174,15 @@ export default async function sendEmail(
       text,
     });
 
-    console.log('Email sent:', info.messageId);
+    logger.info('Email sent:', info.messageId);
 
     if (process.env.NODE_ENV !== 'production' && !process.env.SMTP_HOST) {
-      console.log('Preview URL:', nodemailer.getTestMessageUrl(info));
+      logger.debug('Preview URL:', nodemailer.getTestMessageUrl(info));
     }
 
     return { success: true, messageId: info.messageId };
   } catch (error) {
-    console.error('Failed to send email:', error);
+    logger.error('Failed to send email:', error);
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
   }
 }

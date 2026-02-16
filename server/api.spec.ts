@@ -5,10 +5,12 @@
  * Note: Auth uses httpOnly cookies; tests use supertest agent for cookie persistence.
  */
 import "dotenv/config";
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import { createApp } from "./index";
 import prisma from "./lib/db";
+import { validateCsrf } from "./lib/csrf";
+import type { Request, Response, NextFunction } from "express";
 
 const app = createApp();
 
@@ -165,6 +167,98 @@ describe("Daily tasks API", () => {
 
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body)).toBe(true);
+  });
+});
+
+describe("Security middlewares", () => {
+  describe("CSRF validation", () => {
+    const originalNodeEnv = process.env.NODE_ENV;
+    const originalDisableCsrf = process.env.DISABLE_CSRF;
+
+    beforeAll(() => {
+      process.env.NODE_ENV = "development";
+      process.env.DISABLE_CSRF = "false";
+    });
+
+    afterAll(() => {
+      process.env.NODE_ENV = originalNodeEnv;
+      if (originalDisableCsrf === undefined) {
+        delete process.env.DISABLE_CSRF;
+      } else {
+        process.env.DISABLE_CSRF = originalDisableCsrf;
+      }
+    });
+
+    it("rejects requests with missing or invalid CSRF token", () => {
+      const req = {
+        method: "POST",
+        path: "/api/auth/login",
+        headers: { "x-csrf-token": "header-token" },
+        cookies: { "csrf-token": "cookie-token" },
+      } as unknown as Request;
+
+      const res = {
+        status: vi.fn().mockReturnThis(),
+        json: vi.fn(),
+      } as unknown as Response;
+      const next = vi.fn<Parameters<NextFunction>, void>();
+
+      validateCsrf(req, res, next);
+
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(res.json).toHaveBeenCalledWith({ error: "Invalid CSRF token" });
+      expect(next).not.toHaveBeenCalled();
+    });
+
+    it("allows requests with matching CSRF header and cookie", () => {
+      const req = {
+        method: "POST",
+        path: "/api/auth/login",
+        headers: { "x-csrf-token": "same-token" },
+        cookies: { "csrf-token": "same-token" },
+      } as unknown as Request;
+
+      const res = {
+        status: vi.fn().mockReturnThis(),
+        json: vi.fn(),
+      } as unknown as Response;
+      const next = vi.fn<Parameters<NextFunction>, void>();
+
+      validateCsrf(req, res, next);
+
+      expect(res.status).not.toHaveBeenCalled();
+      expect(res.json).not.toHaveBeenCalled();
+      expect(next).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("Rate limiting", () => {
+    it("limits repeated login attempts after a threshold", async () => {
+      const originalNodeEnv = process.env.NODE_ENV;
+      const originalDisableCsrf = process.env.DISABLE_CSRF;
+
+      process.env.NODE_ENV = "development";
+      process.env.DISABLE_CSRF = "true";
+      const limitedApp = createApp();
+      process.env.NODE_ENV = originalNodeEnv;
+      if (originalDisableCsrf === undefined) {
+        delete process.env.DISABLE_CSRF;
+      } else {
+        process.env.DISABLE_CSRF = originalDisableCsrf;
+      }
+
+      const agent = request(limitedApp);
+
+      // Exceed the non-test authLimiter max (20) with invalid credentials
+      for (let i = 0; i < 21; i++) {
+        await agent.post("/api/auth/login").send({ email: "mgr@test.com", password: "wrongpassword" });
+      }
+
+      const res = await agent.post("/api/auth/login").send({ email: "mgr@test.com", password: "wrongpassword" });
+
+      expect(res.status).toBe(429);
+      expect(res.body).toMatchObject({ error: "Too many attempts, please try again later" });
+    });
   });
 });
 
