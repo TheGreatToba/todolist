@@ -21,13 +21,17 @@ export default function EmployeeDashboard() {
 
     // Listen for real-time task updates
     const unsubscribeUpdate = on('task:updated', (data) => {
-      console.log('Task updated:', data);
+      if (import.meta.env.DEV) {
+        console.log('Task updated:', data);
+      }
     });
 
     // Listen for new task assignments
     const unsubscribeAssigned = on('task:assigned', (data) => {
       if (data.employeeId === user?.id) {
-        console.log('New task assigned:', data);
+        if (import.meta.env.DEV) {
+          console.log('New task assigned:', data);
+        }
         setNotification({
           title: data.taskTitle,
           description: data.taskDescription,

@@ -133,10 +133,14 @@ function setupSocketIO(io: SocketIOServer, app: Express): void {
     for (const teamId of teamIds) {
       socket.join(`team:${teamId}`);
     }
-    console.log("Client connected:", socket.id, "user:", userId);
+    if (process.env.NODE_ENV !== "production") {
+      console.log("Client connected:", socket.id, "user:", userId);
+    }
 
     socket.on("disconnect", () => {
-      console.log("Client disconnected:", socket.id);
+      if (process.env.NODE_ENV !== "production") {
+        console.log("Client disconnected:", socket.id);
+      }
     });
   });
 

@@ -167,3 +167,75 @@ describe("Daily tasks API", () => {
     expect(Array.isArray(res.body)).toBe(true);
   });
 });
+
+describe("Workstations and employees API", () => {
+  it("GET /api/workstations without auth returns 401", async () => {
+    const res = await request(app).get("/api/workstations");
+    expect(res.status).toBe(401);
+  });
+
+  it("GET /api/workstations as EMPLOYEE returns 403", async () => {
+    const agent = request.agent(app);
+    await agent.post("/api/auth/login").send({ email: "emp@test.com", password: "password" });
+
+    const res = await agent.get("/api/workstations");
+
+    expect(res.status).toBe(403);
+  });
+
+  it("GET /api/workstations as MANAGER returns 200 and array", async () => {
+    const agent = request.agent(app);
+    await agent.post("/api/auth/login").send({ email: "mgr@test.com", password: "password" });
+
+    const res = await agent.get("/api/workstations");
+
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+  });
+
+  it("POST /api/workstations as MANAGER creates a workstation", async () => {
+    const agent = request.agent(app);
+    await agent.post("/api/auth/login").send({ email: "mgr@test.com", password: "password" });
+
+    const name = `Test WS ${Date.now()}`;
+    const res = await agent.post("/api/workstations").send({ name });
+
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ name });
+  });
+
+  it("POST /api/employees as MANAGER creates employee with workstation assignment", async () => {
+    const agent = request.agent(app);
+    await agent.post("/api/auth/login").send({ email: "mgr@test.com", password: "password" });
+
+    const manager = await prisma.user.findUnique({
+      where: { email: "mgr@test.com" },
+      select: { teamId: true },
+    });
+
+    expect(manager?.teamId).toBeTruthy();
+
+    const workstation = await prisma.workstation.findFirst({
+      where: { teamId: manager!.teamId! },
+      select: { id: true, name: true },
+    });
+
+    expect(workstation).not.toBeNull();
+
+    const email = `new-emp-${Date.now()}@test.com`;
+    const res = await agent.post("/api/employees").send({
+      name: "New Employee",
+      email,
+      workstationIds: [workstation!.id],
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({
+      name: "New Employee",
+      email,
+      role: "EMPLOYEE",
+    });
+    expect(Array.isArray(res.body.workstations)).toBe(true);
+    expect(res.body.workstations.length).toBeGreaterThan(0);
+  });
+});

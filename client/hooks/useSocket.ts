@@ -18,15 +18,21 @@ export function useSocket() {
     });
 
     socket.on('connect', () => {
-      console.log('Socket connected:', socket.id);
+      if (import.meta.env.DEV) {
+        console.log('Socket connected:', socket.id);
+      }
     });
 
     socket.on('disconnect', (reason) => {
-      console.log('Socket disconnected:', reason);
+      if (import.meta.env.DEV) {
+        console.log('Socket disconnected:', reason);
+      }
     });
 
     socket.on('connect_error', (err) => {
-      console.warn('Socket connect error:', err.message);
+      if (import.meta.env.DEV) {
+        console.warn('Socket connect error:', err.message);
+      }
     });
 
     socketRef.current = socket;

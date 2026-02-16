@@ -13,6 +13,36 @@ interface TeamMember {
   workstations: Array<{ id: string; name: string }>;
 }
 
+interface WorkstationEmployeeSummary {
+  employee: {
+    id: string;
+    name: string;
+    email: string;
+  };
+}
+
+interface WorkstationWithEmployees {
+  id: string;
+  name: string;
+  employees?: WorkstationEmployeeSummary[];
+}
+
+type DashboardTask = ManagerDashboardType['dailyTasks'][number];
+
+interface TasksByEmployeeGroup {
+  employee: DashboardTask['employee'];
+  tasks: DashboardTask[];
+}
+
+type TasksByWorkstationMap = Record<
+  string,
+  {
+    id: string;
+    name: string;
+    tasksByEmployee: Record<string, TasksByEmployeeGroup>;
+  }
+>;
+
 export default function ManagerDashboard() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
@@ -30,7 +60,7 @@ export default function ManagerDashboard() {
   const [showNewTaskModal, setShowNewTaskModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [activeTab, setActiveTab] = useState<'tasks' | 'workstations' | 'employees'>('tasks');
-  const [workstations, setWorkstations] = useState<any[]>([]);
+  const [workstations, setWorkstations] = useState<WorkstationWithEmployees[]>([]);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [editingEmployee, setEditingEmployee] = useState<string | null>(null);
   const [editingWorkstations, setEditingWorkstations] = useState<string[]>([]);
@@ -110,7 +140,7 @@ export default function ManagerDashboard() {
       });
 
       if (response.ok) {
-        const data = await response.json();
+        const data: WorkstationWithEmployees[] = await response.json();
         setWorkstations(data);
       }
     } catch (error) {
@@ -329,7 +359,7 @@ export default function ManagerDashboard() {
 
   // Group tasks by workstation (or "Direct assignments" for tasks without workstation), then by employee
   const DIRECT_ASSIGNMENTS_ID = '__direct__';
-  const tasksByWorkstation = filteredTasks.reduce(
+  const tasksByWorkstation: TasksByWorkstationMap = filteredTasks.reduce<TasksByWorkstationMap>(
     (acc, task) => {
       const wsId = task.taskTemplate.workstation?.id ?? DIRECT_ASSIGNMENTS_ID;
       const wsName = task.taskTemplate.workstation?.name ?? 'Direct assignments';
@@ -352,7 +382,7 @@ export default function ManagerDashboard() {
       acc[wsId].tasksByEmployee[empId].tasks.push(task);
       return acc;
     },
-    {} as Record<string, { id: string; name: string; tasksByEmployee: Record<string, any> }>
+    {} as TasksByWorkstationMap
   );
 
   return (
@@ -716,11 +746,11 @@ export default function ManagerDashboard() {
                   <p className="text-sm text-muted-foreground">
                     {ws.employees?.length || 0} employee{ws.employees?.length !== 1 ? 's' : ''}
                   </p>
-                  {ws.employees && ws.employees.length > 0 && (
+                      {ws.employees && ws.employees.length > 0 && (
                     <div className="mt-3 pt-3 border-t border-border">
                       <p className="text-xs text-muted-foreground mb-2">Assigned to:</p>
                       <div className="space-y-1">
-                        {ws.employees.map((ew: any) => (
+                        {ws.employees.map((ew) => (
                           <p key={ew.employee.id} className="text-sm text-foreground">
                             • {ew.employee.name}
                           </p>
