@@ -1,12 +1,14 @@
 /**
  * API integration tests for auth, permissions, and daily tasks.
- * Requires seeded database: run `pnpm seed` before tests.
+ * Prerequisites: JWT_SECRET and DATABASE_URL in env (e.g. .env or CI). Run `pnpm seed` before tests.
  * Uses mgr@test.com (MANAGER) and emp@test.com (EMPLOYEE) with password "password".
  * Note: Auth uses httpOnly cookies; tests use supertest agent for cookie persistence.
  */
-import { describe, it, expect } from "vitest";
+import "dotenv/config";
+import { describe, it, expect, vi } from "vitest";
 import request from "supertest";
 import { createApp } from "./index";
+import prisma from "./lib/db";
 
 const app = createApp();
 
@@ -73,6 +75,43 @@ describe("Auth API", () => {
 
     expect(res.status).toBe(200);
     expect(res.body.email).toBe("mgr@test.com");
+  });
+
+  it("POST /api/auth/login with invalid role in DB returns 500 and logs structured event (no JWT)", async () => {
+    const email = `invalid-role-${Date.now()}@test.com`;
+    const signupRes = await request(app).post("/api/auth/signup").send({
+      name: "Invalid Role User",
+      email,
+      password: "password123",
+      role: "MANAGER",
+    });
+    expect(signupRes.status).toBe(201);
+    const userId = signupRes.body.user.id as string;
+
+    await prisma.$executeRawUnsafe("UPDATE User SET role = ? WHERE id = ?", "INVALID", userId);
+
+    const warnCalls: unknown[] = [];
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation((arg: unknown) => {
+      warnCalls.push(arg);
+    });
+    const loginRes = await request(app).post("/api/auth/login").send({ email, password: "password123" });
+    warnSpy.mockRestore();
+
+    expect(loginRes.status).toBe(500);
+    expect(loginRes.body).toMatchObject({ error: "Invalid user role" });
+    const invalidRoleLog = warnCalls.find((arg) => {
+      if (typeof arg !== "string") return false;
+      try {
+        const log = JSON.parse(arg);
+        return log.event === "invalid_role_rejected";
+      } catch {
+        return false;
+      }
+    });
+    expect(invalidRoleLog).toBeDefined();
+    const log = JSON.parse(invalidRoleLog as string);
+    expect(log).toMatchObject({ event: "invalid_role_rejected", userId, email, role: "INVALID" });
+    expect(log.endpoint).toBe("/api/auth/login");
   });
 });
 

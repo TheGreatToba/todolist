@@ -172,6 +172,14 @@ curl -X POST "http://localhost:8080/api/cron/daily-tasks?date=2025-02-15" \
 
 Configurez un cron (cron-job.org, GitHub Actions, ou crontab) pour appeler cet endpoint chaque matin (ex. 6h00).
 
+## Tests
+
+**Prérequis (éviter faux négatifs en CI / en local)** :
+- **JWT_SECRET** : requis au chargement du serveur (auth). À définir dans `.env` ou dans l’environnement CI.
+- **DATABASE_URL** : requis pour Prisma (génération client + migrations + tests d’intégration). Idem `.env` ou CI.
+
+Sans ces variables, `createApp()` et les specs qui utilisent la base peuvent échouer. En local, un `cp .env.example .env` suffit. Pour les tests d’API (auth, permissions, tâches), exécuter une fois `pnpm seed` pour disposer des comptes de démo (mgr@test.com, emp@test.com).
+
 ## Commandes utiles
 
 | Commande        | Description                    |
@@ -181,7 +189,7 @@ Configurez un cron (cron-job.org, GitHub Actions, ou crontab) pour appeler cet e
 | `pnpm start`    | Lance le serveur production    |
 | `pnpm seed`     | Remplit la base avec des données de démo |
 | `pnpm typecheck`| Vérification TypeScript        |
-| `pnpm test`     | Exécute les tests              |
+| `pnpm test`     | Exécute les tests (Vitest)     |
 
 ## Architecture
 

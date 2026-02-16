@@ -14,13 +14,18 @@
 import 'dotenv/config';
 import prisma from '../lib/db';
 
-const dryRun = process.argv.includes('--dry-run');
+export interface BackfillResult {
+  idsByCategory: {
+    withEmployees: string[];
+    employeesButNoTeam: string[];
+    withoutEmployees: string[];
+    notAssignable: string[];
+  };
+  updated: number;
+  legacyCount: number;
+}
 
-async function main() {
-  if (dryRun) {
-    console.log(' dry-run: no changes will be written.\n');
-  }
-
+export async function runBackfill(dryRun: boolean): Promise<BackfillResult | null> {
   const legacy = await prisma.workstation.findMany({
     where: { teamId: null },
     orderBy: [{ name: 'asc' }, { id: 'asc' }],
@@ -35,8 +40,7 @@ async function main() {
   });
 
   if (legacy.length === 0) {
-    console.log('No workstations with teamId=null. Nothing to do.');
-    return;
+    return null;
   }
 
   const firstTeam = await prisma.team.findFirst({
@@ -102,11 +106,24 @@ async function main() {
   if (dryRun && updated > 0) {
     console.log('\nRun without --dry-run to apply changes.');
   }
+
+  return { idsByCategory, updated, legacyCount: legacy.length };
 }
 
-main()
-  .catch((e) => {
-    console.error(e);
-    process.exit(1);
-  })
-  .finally(() => prisma.$disconnect());
+const dryRun = process.argv.includes('--dry-run');
+
+async function main() {
+  if (dryRun) {
+    console.log(' dry-run: no changes will be written.\n');
+  }
+  const result = await runBackfill(dryRun);
+  if (result === null) {
+    console.log('No workstations with teamId=null. Nothing to do.');
+  }
+  await prisma.$disconnect();
+}
+
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

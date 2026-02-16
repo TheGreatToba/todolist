@@ -1,7 +1,7 @@
 import { RequestHandler } from 'express';
 import { z } from 'zod';
 import prisma from '../lib/db';
-import { Request } from 'express';
+import { Request, Response } from 'express';
 import {
   hashPassword,
   verifyPassword,
@@ -35,7 +35,7 @@ function logInvalidRole(
 /** Returns JWT payload for cookie, or null after logging and sending 500. */
 function createTokenOrFail(
   req: Request,
-  res: { status: (n: number) => { json: (o: object) => void } },
+  res: Response,
   user: { id: string; email: string; role: unknown }
 ): string | null {
   if (!isRole(user.role)) {

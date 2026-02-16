@@ -51,11 +51,15 @@ export function generateToken(payload: JwtPayload): string {
   return jwt.sign(payload, getJwtSecret(), { expiresIn: JWT_EXPIRY });
 }
 
-const JwtPayloadSchema = z.object({
-  userId: z.string(),
-  email: z.string().email(),
-  role: z.enum(['MANAGER', 'EMPLOYEE']),
-});
+const JwtPayloadSchema = z
+  .object({
+    userId: z.string(),
+    email: z.string().email(),
+    role: z.enum(['MANAGER', 'EMPLOYEE']),
+    iat: z.number().optional(),
+    exp: z.number().optional(),
+  })
+  .strict();
 
 export function verifyToken(token: string): JwtPayload | null {
   try {
