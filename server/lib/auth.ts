@@ -32,6 +32,17 @@ export function isRole(value: unknown): value is Role {
   return value === 'MANAGER' || value === 'EMPLOYEE';
 }
 
+const JwtPayloadSchema = z
+  .object({
+    userId: z.string(),
+    email: z.string().email(),
+    role: z.enum(['MANAGER', 'EMPLOYEE']),
+    iat: z.number().optional(),
+    exp: z.number().optional(),
+  })
+  .strict();
+
+/** Public JWT payload; shape aligned with JwtPayloadSchema (userId, email, role only). */
 export interface JwtPayload {
   userId: string;
   email: string;
@@ -51,21 +62,13 @@ export function generateToken(payload: JwtPayload): string {
   return jwt.sign(payload, getJwtSecret(), { expiresIn: JWT_EXPIRY });
 }
 
-const JwtPayloadSchema = z
-  .object({
-    userId: z.string(),
-    email: z.string().email(),
-    role: z.enum(['MANAGER', 'EMPLOYEE']),
-    iat: z.number().optional(),
-    exp: z.number().optional(),
-  })
-  .strict();
-
 export function verifyToken(token: string): JwtPayload | null {
   try {
     const decoded = jwt.verify(token, getJwtSecret());
     const parsed = JwtPayloadSchema.safeParse(decoded);
-    return parsed.success ? (parsed.data as JwtPayload) : null;
+    if (!parsed.success) return null;
+    const { userId, email, role } = parsed.data;
+    return { userId, email, role };
   } catch {
     return null;
   }

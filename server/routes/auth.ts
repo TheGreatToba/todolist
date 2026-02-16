@@ -14,7 +14,10 @@ import {
 import { sendErrorResponse } from '../lib/errors';
 import { getAuthOrThrow } from '../middleware/requireAuth';
 
-/** Structured log when role from DB is invalid (do not emit JWT). */
+/**
+ * Structured log when role from DB is invalid (do not emit JWT).
+ * For production, consider a centralized logger (pino/winston) for correlation and filtering.
+ */
 function logInvalidRole(
   user: { id: string; email: string; role: unknown },
   req: Request
