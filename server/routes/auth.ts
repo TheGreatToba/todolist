@@ -18,6 +18,9 @@ import { getAuthOrThrow } from '../middleware/requireAuth';
  * Structured log when role from DB is invalid (do not emit JWT).
  * For production: use a centralized logger (pino/winston); consider redacting or hashing
  * email (PII); ensure requestId is always set (middleware + fallback) for correlation.
+ *
+ * NOTE: Currently logs the raw email for simplicity. To enforce PII policy, replace
+"email" with a redacted / hashed version when NODE_ENV === 'production'.
  */
 function logInvalidRole(
   user: { id: string; email: string; role: unknown },
