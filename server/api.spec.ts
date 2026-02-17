@@ -10,6 +10,7 @@ import request from "supertest";
 import { createApp } from "./index";
 import prisma from "./lib/db";
 import { validateCsrf } from "./lib/csrf";
+import { redactEmailForLog, emailHashForLog } from "./routes/auth";
 import type { Request, Response, NextFunction } from "express";
 
 const app = createApp();
@@ -114,6 +115,22 @@ describe("Auth API", () => {
     const log = JSON.parse(invalidRoleLog as string);
     expect(log).toMatchObject({ event: "invalid_role_rejected", userId, email, role: "INVALID" });
     expect(log.endpoint).toBe("/api/auth/login");
+  });
+
+  it("production redacts email to ***@domain and adds stable emailHash", () => {
+    const originalNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+    try {
+      expect(redactEmailForLog("user@test.com")).toBe("***@test.com");
+      expect(redactEmailForLog("a@example.org")).toBe("***@example.org");
+      expect(redactEmailForLog("no-at")).toBe("***");
+
+      const hash = emailHashForLog("user@test.com");
+      expect(hash).toMatch(/^[a-f0-9]{16}$/);
+      expect(emailHashForLog("user@test.com")).toBe(hash);
+    } finally {
+      process.env.NODE_ENV = originalNodeEnv;
+    }
   });
 });
 

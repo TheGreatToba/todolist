@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { RequestHandler } from 'express';
 import { z } from 'zod';
 import prisma from '../lib/db';
@@ -15,22 +16,30 @@ import { sendErrorResponse } from '../lib/errors';
 import { getAuthOrThrow } from '../middleware/requireAuth';
 import { logger } from '../lib/logger';
 
-/** Redact email for production logs (GDPR/SIEM): keep domain only, mask local part. */
-function redactEmailForLog(email: string): string {
+/** Redact email for production logs (GDPR/SIEM): keep domain only, mask local part. Exported for tests. */
+export function redactEmailForLog(email: string): string {
   if (process.env.NODE_ENV !== 'production') return email;
   const at = email.indexOf('@');
   return at >= 0 ? `***@${email.slice(at + 1)}` : '***';
 }
 
+/** Stable hash of email for correlation in prod (no PII). Uses JWT_SECRET so same email => same hash. Exported for tests. */
+export function emailHashForLog(email: string): string | undefined {
+  if (process.env.NODE_ENV !== 'production') return undefined;
+  const secret = process.env.JWT_SECRET;
+  if (!secret) return undefined;
+  return crypto.createHmac('sha256', secret).update(email).digest('hex').slice(0, 16);
+}
+
 /**
  * Structured log when role from DB is invalid (do not emit JWT).
- * In production, email is redacted (domain only) for GDPR/SIEM.
+ * In production, email is redacted (domain only) and emailHash allows correlation without PII.
  */
 function logInvalidRole(
   user: { id: string; email: string; role: unknown },
   req: Request
 ): void {
-  logger.structured('warn', {
+  const payload: Record<string, unknown> = {
     event: 'invalid_role_rejected',
     userId: user.id,
     email: redactEmailForLog(user.email),
@@ -38,7 +47,10 @@ function logInvalidRole(
     endpoint: req.path,
     method: req.method,
     requestId: req.requestId ?? undefined,
-  });
+  };
+  const hash = emailHashForLog(user.email);
+  if (hash) payload.emailHash = hash;
+  logger.structured('warn', payload);
 }
 
 /** Returns JWT payload for cookie, or null after logging and sending 500. */
