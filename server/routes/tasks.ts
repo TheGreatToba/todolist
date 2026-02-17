@@ -394,6 +394,7 @@ export const handleGetManagerDashboard: RequestHandler = async (req, res) => {
           select: {
             id: true,
             name: true,
+            email: true,
           },
         },
         taskTemplate: {

@@ -10,9 +10,27 @@ const DATE_QUERY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
  *
  * Used by GET /api/tasks/daily, GET /api/manager/dashboard, and POST /api/cron/daily-tasks.
  */
-export function parseDateQuery(value: string | string[] | undefined): Date | null {
-  const raw = typeof value === 'string' ? value : Array.isArray(value) ? value[0] : undefined;
-  if (!raw || typeof raw !== 'string') {
+export function parseDateQuery(value: unknown): Date | null {
+  // No value at all → default to today
+  if (value === undefined) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return today;
+  }
+  let raw: string | undefined;
+
+  if (typeof value === 'string') {
+    raw = value;
+  } else if (Array.isArray(value)) {
+    const first = value[0];
+    raw = typeof first === 'string' ? first : undefined;
+  } else {
+    // Present but not a string / string[] → treat as invalid
+    return null;
+  }
+
+  // Present but empty string (or [""]) → follow "no date = today" convention
+  if (!raw) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     return today;

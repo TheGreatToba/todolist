@@ -776,6 +776,45 @@ describe("Permissions - role-based access", () => {
       })
     ).rejects.toThrow(TASK_TEMPLATE_BULK_UPDATE_FORBIDDEN_MESSAGE);
   });
+
+  it("TaskTemplate invariant: invalid linkage payload set value surfaces explicit 400 error", async () => {
+    const manager = await prisma.user.findUnique({
+      where: { email: "mgr@test.com" },
+      select: { id: true },
+    });
+    expect(manager).not.toBeNull();
+    const team = await prisma.team.findFirst({
+      where: { managerId: manager!.id },
+      select: { id: true },
+    });
+    expect(team).not.toBeNull();
+    const workstation = await prisma.workstation.findFirst({
+      where: { teamId: team!.id },
+      select: { id: true },
+    });
+    expect(workstation).not.toBeNull();
+
+    const template = await prisma.taskTemplate.create({
+      data: {
+        title: "Invalid linkage payload test",
+        createdById: manager!.id,
+        workstationId: workstation!.id,
+        isRecurring: false,
+      },
+    });
+
+    try {
+      await expect(
+        prisma.taskTemplate.update({
+          where: { id: template.id },
+          // @ts-expect-error – intentional invalid payload for invariant middleware
+          data: { assignedToEmployeeId: { set: 123 } },
+        })
+      ).rejects.toThrow("Invalid TaskTemplate linkage payload");
+    } finally {
+      await prisma.taskTemplate.delete({ where: { id: template.id } }).catch(() => {});
+    }
+  });
 });
 
 describe("Daily tasks API", () => {
@@ -819,6 +858,17 @@ describe("Daily tasks API", () => {
     await agent.post("/api/auth/login").send({ email: "emp@test.com", password: "password" });
 
     const res = await agent.get("/api/tasks/daily?date=2025-02-31");
+
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ error: expect.stringContaining("YYYY-MM-DD") });
+  });
+
+  it("GET /api/tasks/daily with non-string date query returns 400 (invalid type)", async () => {
+    const agent = request.agent(app);
+    await agent.post("/api/auth/login").send({ email: "emp@test.com", password: "password" });
+
+    // Express will parse this into req.query.date as an object, not a string
+    const res = await agent.get("/api/tasks/daily").query({ date: { foo: "bar" } });
 
     expect(res.status).toBe(400);
     expect(res.body).toMatchObject({ error: expect.stringContaining("YYYY-MM-DD") });
@@ -969,9 +1019,9 @@ describe("Security middlewares", () => {
         status: vi.fn().mockReturnThis(),
         json: vi.fn(),
       } as unknown as Response;
-      const next = vi.fn<Parameters<NextFunction>, void>();
+      const next = vi.fn<NextFunction>();
 
-      validateCsrf(req, res, next);
+      validateCsrf(req, res, next as unknown as NextFunction);
 
       expect(res.status).toHaveBeenCalledWith(403);
       expect(res.json).toHaveBeenCalledWith({ error: "Invalid CSRF token" });
@@ -990,9 +1040,9 @@ describe("Security middlewares", () => {
         status: vi.fn().mockReturnThis(),
         json: vi.fn(),
       } as unknown as Response;
-      const next = vi.fn<Parameters<NextFunction>, void>();
+      const next = vi.fn<NextFunction>();
 
-      validateCsrf(req, res, next);
+      validateCsrf(req, res, next as unknown as NextFunction);
 
       expect(res.status).not.toHaveBeenCalled();
       expect(res.json).not.toHaveBeenCalled();

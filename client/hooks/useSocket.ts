@@ -61,15 +61,16 @@ export function useSocket() {
       const socket = socketRef.current;
       if (!socket) return () => {};
 
-      const wrapped = (payload: SocketEventMap[E]) => {
+      const wrapped = (...args: any[]) => {
         if (!socketRef.current || socketRef.current !== socket || !socket.connected) return;
+        const [payload] = args as [SocketEventMap[E]];
         callback(payload);
       };
 
-      socket.on(event, wrapped as (payload: unknown) => void);
+      (socket as any).on(event, wrapped);
 
       return () => {
-        socket.off(event, wrapped as (payload: unknown) => void);
+        (socket as any).off(event, wrapped);
       };
     },
     []

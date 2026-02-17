@@ -96,6 +96,7 @@ export interface ManagerDashboard {
     employee: {
       id: string;
       name: string;
+      email: string;
     };
   }>;
   workstations: Array<{
