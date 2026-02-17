@@ -22,11 +22,11 @@ type SocketEventMap = {
 type SocketEvent = keyof SocketEventMap;
 
 export function useSocket() {
-  const { token } = useAuth();
+  const { isAuthenticated } = useAuth();
   const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
-    if (!token) return;
+    if (!isAuthenticated) return;
 
     const socket = io(window.location.origin, {
       withCredentials: true,
@@ -54,7 +54,7 @@ export function useSocket() {
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [token]);
+  }, [isAuthenticated]);
 
   const on = useCallback(
     <E extends SocketEvent>(event: E, callback: (payload: SocketEventMap[E]) => void) => {

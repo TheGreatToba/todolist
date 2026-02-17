@@ -36,7 +36,7 @@ export interface SignupResponse {
 }
 
 /** Response payload for GET /api/auth/profile */
-export type ProfileResponse = User;
+export type ProfileResponse = AuthResponse;
 
 /** Response payload for POST /api/auth/set-password */
 export interface SetPasswordResponse {

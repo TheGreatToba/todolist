@@ -11,7 +11,7 @@ import {
   getAuthCookieOptions,
   getAuthCookieClearOptions,
 } from '../lib/auth';
-import { sendErrorResponse, AppError } from '../lib/errors';
+import { sendErrorResponse } from '../lib/errors';
 import { redactEmailForLog, emailHashForLog } from '../lib/log-pii';
 import { getAuthOrThrow } from '../middleware/requireAuth';
 import { logger } from '../lib/logger';
@@ -74,16 +74,6 @@ export const handleSignup: RequestHandler = async (req, res) => {
     const body = SignupSchema.parse(req.body);
 
     const user = await prisma.$transaction(async (tx) => {
-      // Check if user already exists
-      const existingUser = await tx.user.findUnique({
-        where: { email: body.email },
-      });
-
-      if (existingUser) {
-        // short-circuit by throwing; sendErrorResponse will map this
-        throw new AppError(400, 'Email already registered');
-      }
-
       // Hash password
       const passwordHash = await hashPassword(body.password);
 
@@ -130,6 +120,12 @@ export const handleSignup: RequestHandler = async (req, res) => {
     res.cookie(AUTH_COOKIE_NAME, token, getAuthCookieOptions());
     res.status(201).json({ user });
   } catch (error) {
+    // Let the DB unique constraint handle email races; present a domain-specific message.
+    const prismaError = error as { code?: string };
+    if (prismaError && prismaError.code === 'P2002') {
+      res.status(409).json({ error: 'Email already registered', code: 'CONFLICT' });
+      return;
+    }
     sendErrorResponse(res, error, req);
   }
 };
@@ -192,7 +188,7 @@ export const handleProfile: RequestHandler = async (req, res) => {
       return;
     }
 
-    res.json(user);
+    res.json({ user });
   } catch (error) {
     sendErrorResponse(res, error, req);
   }

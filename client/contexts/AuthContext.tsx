@@ -4,7 +4,7 @@ import { fetchWithCsrf } from '@/lib/api';
 
 interface AuthContextType {
   user: User | null;
-  token: string | null;
+  isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
   signup: (name: string, email: string, password: string) => Promise<void>;
   logout: () => void;
@@ -16,7 +16,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -25,16 +25,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const response = await fetch('/api/auth/profile', { credentials: 'include' });
 
       if (response.ok) {
-        const userData: ProfileResponse = await response.json();
+        const { user: userData }: ProfileResponse = await response.json();
         setUser(userData);
-        setToken('cookie');
+        setIsAuthenticated(true);
       } else {
-        setToken(null);
         setUser(null);
+        setIsAuthenticated(false);
       }
     } catch {
-      setToken(null);
       setUser(null);
+      setIsAuthenticated(false);
     } finally {
       setIsLoading(false);
     }
@@ -60,7 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       const { user: userData }: LoginResponse = await response.json();
-      setToken('cookie');
+      setIsAuthenticated(true);
       setUser(userData);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'An error occurred';
@@ -87,7 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       const { user: userData }: SignupResponse = await response.json();
-      setToken('cookie');
+      setIsAuthenticated(true);
       setUser(userData);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'An error occurred';
@@ -99,14 +99,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = () => {
-    setToken(null);
+    setIsAuthenticated(false);
     setUser(null);
     setError(null);
     fetchWithCsrf('/api/auth/logout', { method: 'POST' }).catch(() => {});
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, login, signup, logout, isLoading, error }}>
+    <AuthContext.Provider value={{ user, isAuthenticated, login, signup, logout, isLoading, error }}>
       {children}
     </AuthContext.Provider>
   );

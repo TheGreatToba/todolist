@@ -3,6 +3,22 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Loader2, Lock } from 'lucide-react';
 import { SetPasswordResponse } from '@shared/api';
+import { z } from 'zod';
+
+const SetPasswordResponseSchema = z.object({
+  success: z.boolean(),
+  user: z.object({
+    id: z.string(),
+    name: z.string(),
+    email: z.string().email(),
+    role: z.enum(['EMPLOYEE', 'MANAGER']),
+    teamId: z.string().nullable().optional(),
+  }),
+});
+
+const ErrorResponseSchema = z.object({
+  error: z.string().optional(),
+});
 
 export default function SetPassword() {
   const navigate = useNavigate();
@@ -53,7 +69,7 @@ export default function SetPassword() {
       const raw = await response.json();
 
       if (response.ok) {
-        const data = raw as SetPasswordResponse;
+        const data: SetPasswordResponse = SetPasswordResponseSchema.parse(raw);
         setSuccess(true);
         // AuthContext will get user from /api/auth/profile on next request,
         // but we need to trigger a refresh. The cookie is set, so we can
@@ -66,8 +82,8 @@ export default function SetPassword() {
         // profile fetch. Option 2 is simpler for now.
         window.location.href = data.user.role === 'MANAGER' ? '/manager' : '/employee';
       } else {
-        const data = raw as { error?: string };
-        setError(data.error || 'Failed to set password');
+        const data = ErrorResponseSchema.parse(raw);
+        setError(data.error ?? 'Failed to set password');
       }
     } catch {
       setError('An error occurred. Please try again.');
