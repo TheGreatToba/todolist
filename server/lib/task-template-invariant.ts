@@ -1,44 +1,80 @@
 import type { Prisma } from '@prisma/client';
 import type { PrismaClient } from '@prisma/client';
+import { AppError } from './errors';
 
-const TASK_TEMPLATE_SAME_TEAM_ERROR =
+export const TASK_TEMPLATE_SAME_TEAM_MESSAGE =
   'Workstation and employee must belong to the same team';
+
+type DataShape = { workstationId?: string | null; assignedToEmployeeId?: string | null };
+
+function resolveWorkstationAndEmployeeIds(
+  prisma: PrismaClient,
+  action: string,
+  args: Record<string, unknown>
+): Promise<{ workstationId: string | null; assignedToEmployeeId: string | null }> {
+  if (action === 'create') {
+    const data = args.data as DataShape;
+    return Promise.resolve({
+      workstationId: data.workstationId ?? null,
+      assignedToEmployeeId: data.assignedToEmployeeId ?? null,
+    });
+  }
+  if (action === 'updateMany') {
+    const data = args.data as DataShape;
+    return Promise.resolve({
+      workstationId: data.workstationId ?? null,
+      assignedToEmployeeId: data.assignedToEmployeeId ?? null,
+    });
+  }
+  if (action === 'update') {
+    const data = args.data as DataShape;
+    const where = args.where as Prisma.TaskTemplateWhereUniqueInput;
+    return prisma.taskTemplate.findFirst({ where, select: { workstationId: true, assignedToEmployeeId: true } }).then((existing) => {
+      if (!existing) return { workstationId: null, assignedToEmployeeId: null };
+      return {
+        workstationId: data.workstationId !== undefined ? data.workstationId : existing.workstationId,
+        assignedToEmployeeId: data.assignedToEmployeeId !== undefined ? data.assignedToEmployeeId : existing.assignedToEmployeeId,
+      };
+    });
+  }
+  // upsert: where + create + update
+  const create = args.create as DataShape;
+  const update = args.update as DataShape;
+  const where = args.where as Prisma.TaskTemplateWhereUniqueInput;
+  return prisma.taskTemplate.findFirst({ where, select: { workstationId: true, assignedToEmployeeId: true } }).then((existing) => {
+    if (existing) {
+      return {
+        workstationId: update.workstationId !== undefined ? update.workstationId : existing.workstationId,
+        assignedToEmployeeId: update.assignedToEmployeeId !== undefined ? update.assignedToEmployeeId : existing.assignedToEmployeeId,
+      };
+    }
+    return {
+      workstationId: create.workstationId ?? null,
+      assignedToEmployeeId: create.assignedToEmployeeId ?? null,
+    };
+  });
+}
 
 /**
  * Enforces the business invariant: when a TaskTemplate has both workstationId
  * and assignedToEmployeeId, they must belong to the same team. Prisma/SQLite
- * do not enforce this; this middleware ensures no other code path can create
- * or update a template with a cross-team assignment.
+ * do not enforce this; this middleware ensures no other code path can create,
+ * update, upsert or updateMany a template with a cross-team assignment.
+ * Throws AppError(400) so handlers return a proper 400 instead of 500.
  */
 export function applyTaskTemplateInvariantMiddleware(
   prisma: PrismaClient
 ): void {
   prisma.$use(async (params, next) => {
     if (params.model !== 'TaskTemplate') return next(params);
-    if (params.action !== 'create' && params.action !== 'update') return next(params);
+    const supported = ['create', 'update', 'upsert', 'updateMany'];
+    if (!supported.includes(params.action)) return next(params);
 
-    type Data = { workstationId?: string | null; assignedToEmployeeId?: string | null };
-    let workstationId: string | null = null;
-    let assignedToEmployeeId: string | null = null;
-
-    if (params.action === 'create') {
-      const data = params.args.data as Data;
-      workstationId = data.workstationId ?? null;
-      assignedToEmployeeId = data.assignedToEmployeeId ?? null;
-    } else {
-      const data = params.args.data as Data;
-      const existing = await prisma.taskTemplate.findUnique({
-        where: params.args.where as { id: string },
-        select: { workstationId: true, assignedToEmployeeId: true },
-      });
-      if (!existing) return next(params);
-      workstationId =
-        data.workstationId !== undefined ? data.workstationId : existing.workstationId;
-      assignedToEmployeeId =
-        data.assignedToEmployeeId !== undefined
-          ? data.assignedToEmployeeId
-          : existing.assignedToEmployeeId;
-    }
+    const { workstationId, assignedToEmployeeId } = await resolveWorkstationAndEmployeeIds(
+      prisma,
+      params.action,
+      params.args as Record<string, unknown>
+    );
 
     if (!workstationId || !assignedToEmployeeId) return next(params);
 
@@ -53,7 +89,7 @@ export function applyTaskTemplateInvariantMiddleware(
       }),
     ]);
     if (!workstation?.teamId || !user?.teamId || workstation.teamId !== user.teamId) {
-      throw new Error(TASK_TEMPLATE_SAME_TEAM_ERROR);
+      throw new AppError(400, TASK_TEMPLATE_SAME_TEAM_MESSAGE);
     }
     return next(params);
   });
