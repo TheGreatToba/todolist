@@ -130,6 +130,7 @@ describe("Auth API", () => {
       const hash = emailHashForLog("user@test.com");
       expect(hash).toBeDefined();
       expect(hash).toMatch(EMAIL_HASH_FORMAT_REGEX);
+      expect(hash).toMatch(/^v1_[a-f0-9]{24}$/); // external contract: format stable for log consumers / SIEM
       expect(emailHashForLog("user@test.com")).toBe(hash);
       expect(emailHashForLog("  User@Test.com  ")).toBe(hash);
     } finally {
@@ -160,6 +161,37 @@ describe("Auth API", () => {
     process.env.LOG_HASH_SECRET = "";
     try {
       expect(emailHashForLog("user@test.com")).toBeUndefined();
+    } finally {
+      process.env.NODE_ENV = originalNodeEnv;
+      if (originalLogHashSecret === undefined) delete process.env.LOG_HASH_SECRET;
+      else process.env.LOG_HASH_SECRET = originalLogHashSecret;
+    }
+  });
+
+  it("emailHashForLog returns undefined when LOG_HASH_SECRET is only whitespace (production)", () => {
+    const originalNodeEnv = process.env.NODE_ENV;
+    const originalLogHashSecret = process.env.LOG_HASH_SECRET;
+    process.env.NODE_ENV = "production";
+    process.env.LOG_HASH_SECRET = "   ";
+    try {
+      expect(emailHashForLog("user@test.com")).toBeUndefined();
+    } finally {
+      process.env.NODE_ENV = originalNodeEnv;
+      if (originalLogHashSecret === undefined) delete process.env.LOG_HASH_SECRET;
+      else process.env.LOG_HASH_SECRET = originalLogHashSecret;
+    }
+  });
+
+  it("emailHashForLog normalizes LOG_HASH_SECRET (trim): same hash with or without surrounding spaces", () => {
+    const originalNodeEnv = process.env.NODE_ENV;
+    const originalLogHashSecret = process.env.LOG_HASH_SECRET;
+    process.env.NODE_ENV = "production";
+    try {
+      process.env.LOG_HASH_SECRET = "secret";
+      const hashNoSpaces = emailHashForLog("u@x.com");
+      process.env.LOG_HASH_SECRET = "  secret  ";
+      const hashWithSpaces = emailHashForLog("u@x.com");
+      expect(hashNoSpaces).toBe(hashWithSpaces);
     } finally {
       process.env.NODE_ENV = originalNodeEnv;
       if (originalLogHashSecret === undefined) delete process.env.LOG_HASH_SECRET;
