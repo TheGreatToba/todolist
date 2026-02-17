@@ -1,4 +1,3 @@
-import crypto from 'crypto';
 import { RequestHandler } from 'express';
 import { z } from 'zod';
 import prisma from '../lib/db';
@@ -13,23 +12,9 @@ import {
   getAuthCookieClearOptions,
 } from '../lib/auth';
 import { sendErrorResponse } from '../lib/errors';
+import { redactEmailForLog, emailHashForLog } from '../lib/log-pii';
 import { getAuthOrThrow } from '../middleware/requireAuth';
 import { logger } from '../lib/logger';
-
-/** Redact email for production logs (GDPR/SIEM): keep domain only, mask local part. Exported for tests. */
-export function redactEmailForLog(email: string): string {
-  if (process.env.NODE_ENV !== 'production') return email;
-  const at = email.indexOf('@');
-  return at >= 0 ? `***@${email.slice(at + 1)}` : '***';
-}
-
-/** Stable hash of email for correlation in prod (no PII). Uses JWT_SECRET so same email => same hash. Exported for tests. */
-export function emailHashForLog(email: string): string | undefined {
-  if (process.env.NODE_ENV !== 'production') return undefined;
-  const secret = process.env.JWT_SECRET;
-  if (!secret) return undefined;
-  return crypto.createHmac('sha256', secret).update(email).digest('hex').slice(0, 16);
-}
 
 /**
  * Structured log when role from DB is invalid (do not emit JWT).
