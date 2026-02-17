@@ -562,6 +562,218 @@ describe("Permissions - role-based access", () => {
       await prisma.team.delete({ where: { id: secondTeam.id } });
     }
   });
+
+  it("TaskTemplate invariant: direct Prisma update with cross-team workstation/employee throws", async () => {
+    const manager = await prisma.user.findUnique({
+      where: { email: "mgr@test.com" },
+      select: { id: true },
+    });
+    expect(manager).not.toBeNull();
+    const team1 = await prisma.team.findFirst({
+      where: { managerId: manager!.id },
+      select: { id: true },
+    });
+    expect(team1).not.toBeNull();
+    const wsTeam1 = await prisma.workstation.findFirst({
+      where: { teamId: team1!.id },
+      select: { id: true },
+    });
+    const empTeam1 = await prisma.user.findFirst({
+      where: { teamId: team1!.id, role: "EMPLOYEE" },
+      select: { id: true },
+    });
+    expect(wsTeam1).not.toBeNull();
+    expect(empTeam1).not.toBeNull();
+
+    const bcryptjs = (await import("bcryptjs")).default;
+    const secondTeam = await prisma.team.create({
+      data: { name: "Second Team Update Inv", managerId: manager!.id },
+    });
+    const empTeam2 = await prisma.user.create({
+      data: {
+        name: "Emp Team 2 Update Inv",
+        email: `emp-inv-upd-${Date.now()}@test.com`,
+        passwordHash: await bcryptjs.hash("password", 10),
+        role: "EMPLOYEE",
+        teamId: secondTeam.id,
+      },
+    });
+
+    const template = await prisma.taskTemplate.create({
+      data: {
+        title: "Same-team template",
+        createdById: manager!.id,
+        workstationId: wsTeam1!.id,
+        assignedToEmployeeId: empTeam1!.id,
+        isRecurring: false,
+      },
+    });
+
+    try {
+      await expect(
+        prisma.taskTemplate.update({
+          where: { id: template.id },
+          data: {
+            assignedToEmployeeId: empTeam2.id,
+          },
+        })
+      ).rejects.toThrow("Workstation and employee must belong to the same team");
+    } finally {
+      await prisma.taskTemplate.delete({ where: { id: template.id } }).catch(() => {});
+      await prisma.user.delete({ where: { id: empTeam2.id } });
+      await prisma.team.delete({ where: { id: secondTeam.id } });
+    }
+  });
+
+  it("TaskTemplate invariant: direct Prisma upsert (update path) with cross-team workstation/employee throws", async () => {
+    const manager = await prisma.user.findUnique({
+      where: { email: "mgr@test.com" },
+      select: { id: true },
+    });
+    expect(manager).not.toBeNull();
+    const team1 = await prisma.team.findFirst({
+      where: { managerId: manager!.id },
+      select: { id: true },
+    });
+    expect(team1).not.toBeNull();
+    const wsTeam1 = await prisma.workstation.findFirst({
+      where: { teamId: team1!.id },
+      select: { id: true },
+    });
+    const empTeam1 = await prisma.user.findFirst({
+      where: { teamId: team1!.id, role: "EMPLOYEE" },
+      select: { id: true },
+    });
+    expect(wsTeam1).not.toBeNull();
+    expect(empTeam1).not.toBeNull();
+
+    const bcryptjs = (await import("bcryptjs")).default;
+    const secondTeam = await prisma.team.create({
+      data: { name: "Second Team Upsert Inv", managerId: manager!.id },
+    });
+    const empTeam2 = await prisma.user.create({
+      data: {
+        name: "Emp Team 2 Upsert Inv",
+        email: `emp-inv-upsert-${Date.now()}@test.com`,
+        passwordHash: await bcryptjs.hash("password", 10),
+        role: "EMPLOYEE",
+        teamId: secondTeam.id,
+      },
+    });
+
+    const template = await prisma.taskTemplate.create({
+      data: {
+        title: "Same-team template upsert",
+        createdById: manager!.id,
+        workstationId: wsTeam1!.id,
+        assignedToEmployeeId: empTeam1!.id,
+        isRecurring: false,
+      },
+    });
+
+    try {
+      await expect(
+        prisma.taskTemplate.upsert({
+          where: { id: template.id },
+          create: {
+            title: "Should not be used",
+            createdById: manager!.id,
+            workstationId: wsTeam1!.id,
+            assignedToEmployeeId: empTeam2.id,
+            isRecurring: false,
+          },
+          update: {
+            assignedToEmployeeId: empTeam2.id,
+          },
+        })
+      ).rejects.toThrow("Workstation and employee must belong to the same team");
+    } finally {
+      await prisma.taskTemplate.delete({ where: { id: template.id } }).catch(() => {});
+      await prisma.user.delete({ where: { id: empTeam2.id } });
+      await prisma.team.delete({ where: { id: secondTeam.id } });
+    }
+  });
+
+  it("TaskTemplate invariant: direct Prisma upsert (create path) with cross-team workstation/employee throws", async () => {
+    const manager = await prisma.user.findUnique({
+      where: { email: "mgr@test.com" },
+      select: { id: true },
+    });
+    expect(manager).not.toBeNull();
+    const team1 = await prisma.team.findFirst({
+      where: { managerId: manager!.id },
+      select: { id: true },
+    });
+    expect(team1).not.toBeNull();
+    const wsTeam1 = await prisma.workstation.findFirst({
+      where: { teamId: team1!.id },
+      select: { id: true },
+    });
+    expect(wsTeam1).not.toBeNull();
+
+    const bcryptjs = (await import("bcryptjs")).default;
+    const secondTeam = await prisma.team.create({
+      data: { name: "Second Team Upsert Create Inv", managerId: manager!.id },
+    });
+    const empTeam2 = await prisma.user.create({
+      data: {
+        name: "Emp Team 2 Upsert Create Inv",
+        email: `emp-inv-upsert-create-${Date.now()}@test.com`,
+        passwordHash: await bcryptjs.hash("password", 10),
+        role: "EMPLOYEE",
+        teamId: secondTeam.id,
+      },
+    });
+
+    const nonExistingId = "tasktpl_" + Date.now().toString();
+
+    try {
+      await expect(
+        prisma.taskTemplate.upsert({
+          where: { id: nonExistingId },
+          create: {
+            id: nonExistingId,
+            title: "Cross-team upsert create",
+            createdById: manager!.id,
+            workstationId: wsTeam1!.id,
+            assignedToEmployeeId: empTeam2.id,
+            isRecurring: false,
+          },
+          update: {},
+        })
+      ).rejects.toThrow("Workstation and employee must belong to the same team");
+    } finally {
+      await prisma.user.delete({ where: { id: empTeam2.id } });
+      await prisma.team.delete({ where: { id: secondTeam.id } });
+    }
+  });
+
+  it("TaskTemplate invariant: updateMany that touches workstation/employee IDs is forbidden", async () => {
+    const manager = await prisma.user.findUnique({
+      where: { email: "mgr@test.com" },
+      select: { id: true },
+    });
+    expect(manager).not.toBeNull();
+    const team1 = await prisma.team.findFirst({
+      where: { managerId: manager!.id },
+      select: { id: true },
+    });
+    expect(team1).not.toBeNull();
+    const wsTeam1 = await prisma.workstation.findFirst({
+      where: { teamId: team1!.id },
+      select: { id: true },
+    });
+    expect(wsTeam1).not.toBeNull();
+
+    await expect(
+      prisma.taskTemplate.updateMany({
+        where: { workstationId: wsTeam1!.id },
+        data: { assignedToEmployeeId: null },
+      })
+    ).rejects.toThrow(
+      "Bulk updates to workstationId/assignedToEmployeeId are not allowed; update templates individually"
+    );
+  });
 });
 
 describe("Daily tasks API", () => {

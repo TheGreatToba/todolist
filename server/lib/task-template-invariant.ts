@@ -5,7 +5,20 @@ import { AppError } from './errors';
 export const TASK_TEMPLATE_SAME_TEAM_MESSAGE =
   'Workstation and employee must belong to the same team';
 
-type DataShape = { workstationId?: string | null; assignedToEmployeeId?: string | null };
+export const TASK_TEMPLATE_BULK_UPDATE_FORBIDDEN_MESSAGE =
+  'Bulk updates to workstationId/assignedToEmployeeId are not allowed; update templates individually';
+
+type FieldInput = string | null | { set: string | null } | undefined;
+
+function extractScalar(value: FieldInput): string | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null || typeof value === 'string') return value;
+  if (typeof value === 'object' && 'set' in value) {
+    const setVal = (value as { set: string | null }).set;
+    return setVal ?? null;
+  }
+  return undefined;
+}
 
 function resolveWorkstationAndEmployeeIds(
   prisma: PrismaClient,
@@ -13,46 +26,65 @@ function resolveWorkstationAndEmployeeIds(
   args: Record<string, unknown>
 ): Promise<{ workstationId: string | null; assignedToEmployeeId: string | null }> {
   if (action === 'create') {
-    const data = args.data as DataShape;
+    const data = args.data as Record<string, unknown>;
+    const ws = extractScalar((data as any).workstationId as FieldInput);
+    const emp = extractScalar((data as any).assignedToEmployeeId as FieldInput);
     return Promise.resolve({
-      workstationId: data.workstationId ?? null,
-      assignedToEmployeeId: data.assignedToEmployeeId ?? null,
+      workstationId: ws ?? null,
+      assignedToEmployeeId: emp ?? null,
     });
   }
-  if (action === 'updateMany') {
-    const data = args.data as DataShape;
-    return Promise.resolve({
-      workstationId: data.workstationId ?? null,
-      assignedToEmployeeId: data.assignedToEmployeeId ?? null,
-    });
-  }
+
   if (action === 'update') {
-    const data = args.data as DataShape;
+    const data = args.data as Record<string, unknown>;
     const where = args.where as Prisma.TaskTemplateWhereUniqueInput;
-    return prisma.taskTemplate.findFirst({ where, select: { workstationId: true, assignedToEmployeeId: true } }).then((existing) => {
-      if (!existing) return { workstationId: null, assignedToEmployeeId: null };
+    return prisma.taskTemplate
+      .findFirst({
+        where,
+        select: { workstationId: true, assignedToEmployeeId: true },
+      })
+      .then((existing) => {
+        if (!existing) return { workstationId: null, assignedToEmployeeId: null };
+        const wsUpdate = extractScalar((data as any).workstationId as FieldInput);
+        const empUpdate = extractScalar((data as any).assignedToEmployeeId as FieldInput);
+        return {
+          workstationId: wsUpdate !== undefined ? wsUpdate : existing.workstationId,
+          assignedToEmployeeId:
+            empUpdate !== undefined ? empUpdate : existing.assignedToEmployeeId,
+        };
+      });
+  }
+
+  // upsert: where + create + update
+  const create = args.create as Record<string, unknown>;
+  const update = args.update as Record<string, unknown>;
+  const where = args.where as Prisma.TaskTemplateWhereUniqueInput;
+  return prisma.taskTemplate
+    .findFirst({
+      where,
+      select: { workstationId: true, assignedToEmployeeId: true },
+    })
+    .then((existing) => {
+      if (existing) {
+        const wsUpdate = extractScalar((update as any).workstationId as FieldInput);
+        const empUpdate = extractScalar(
+          (update as any).assignedToEmployeeId as FieldInput
+        );
+        return {
+          workstationId: wsUpdate !== undefined ? wsUpdate : existing.workstationId,
+          assignedToEmployeeId:
+            empUpdate !== undefined ? empUpdate : existing.assignedToEmployeeId,
+        };
+      }
+      const wsCreate = extractScalar((create as any).workstationId as FieldInput);
+      const empCreate = extractScalar(
+        (create as any).assignedToEmployeeId as FieldInput
+      );
       return {
-        workstationId: data.workstationId !== undefined ? data.workstationId : existing.workstationId,
-        assignedToEmployeeId: data.assignedToEmployeeId !== undefined ? data.assignedToEmployeeId : existing.assignedToEmployeeId,
+        workstationId: wsCreate ?? null,
+        assignedToEmployeeId: empCreate ?? null,
       };
     });
-  }
-  // upsert: where + create + update
-  const create = args.create as DataShape;
-  const update = args.update as DataShape;
-  const where = args.where as Prisma.TaskTemplateWhereUniqueInput;
-  return prisma.taskTemplate.findFirst({ where, select: { workstationId: true, assignedToEmployeeId: true } }).then((existing) => {
-    if (existing) {
-      return {
-        workstationId: update.workstationId !== undefined ? update.workstationId : existing.workstationId,
-        assignedToEmployeeId: update.assignedToEmployeeId !== undefined ? update.assignedToEmployeeId : existing.assignedToEmployeeId,
-      };
-    }
-    return {
-      workstationId: create.workstationId ?? null,
-      assignedToEmployeeId: create.assignedToEmployeeId ?? null,
-    };
-  });
 }
 
 /**
@@ -67,14 +99,30 @@ export function applyTaskTemplateInvariantMiddleware(
 ): void {
   prisma.$use(async (params, next) => {
     if (params.model !== 'TaskTemplate') return next(params);
-    const supported = ['create', 'update', 'upsert', 'updateMany'];
+
+    // Disallow bulk updates that touch these linkage fields, to avoid
+    // silently breaking the invariant on many rows at once.
+    if (params.action === 'updateMany') {
+      const data = (params.args as any).data as Record<string, unknown> | undefined;
+      if (data) {
+        const ws = extractScalar((data as any).workstationId as FieldInput);
+        const emp = extractScalar((data as any).assignedToEmployeeId as FieldInput);
+        if (ws !== undefined || emp !== undefined) {
+          throw new AppError(400, TASK_TEMPLATE_BULK_UPDATE_FORBIDDEN_MESSAGE);
+        }
+      }
+      return next(params);
+    }
+
+    const supported = ['create', 'update', 'upsert'];
     if (!supported.includes(params.action)) return next(params);
 
-    const { workstationId, assignedToEmployeeId } = await resolveWorkstationAndEmployeeIds(
-      prisma,
-      params.action,
-      params.args as Record<string, unknown>
-    );
+    const { workstationId, assignedToEmployeeId } =
+      await resolveWorkstationAndEmployeeIds(
+        prisma,
+        params.action,
+        params.args as Record<string, unknown>
+      );
 
     if (!workstationId || !assignedToEmployeeId) return next(params);
 
