@@ -129,9 +129,23 @@ describe("Auth API", () => {
 
       const hash = emailHashForLog("user@test.com");
       expect(hash).toBeDefined();
-      expect(hash).toMatch(/^[a-f0-9]{16}$/);
+      expect(hash).toMatch(/^v1_[a-f0-9]{24}$/);
       expect(emailHashForLog("user@test.com")).toBe(hash);
       expect(emailHashForLog("  User@Test.com  ")).toBe(hash);
+    } finally {
+      process.env.NODE_ENV = originalNodeEnv;
+      if (originalLogHashSecret === undefined) delete process.env.LOG_HASH_SECRET;
+      else process.env.LOG_HASH_SECRET = originalLogHashSecret;
+    }
+  });
+
+  it("emailHashForLog returns undefined when LOG_HASH_SECRET is not set (production)", () => {
+    const originalNodeEnv = process.env.NODE_ENV;
+    const originalLogHashSecret = process.env.LOG_HASH_SECRET;
+    process.env.NODE_ENV = "production";
+    delete process.env.LOG_HASH_SECRET;
+    try {
+      expect(emailHashForLog("user@test.com")).toBeUndefined();
     } finally {
       process.env.NODE_ENV = originalNodeEnv;
       if (originalLogHashSecret === undefined) delete process.env.LOG_HASH_SECRET;
