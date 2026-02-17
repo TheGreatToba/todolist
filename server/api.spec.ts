@@ -395,8 +395,8 @@ describe("Cron API", () => {
 
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ success: true, date: "2025-02-15" });
-    expect(typeof res.body.created).toBe("number");
-    expect(typeof res.body.skipped).toBe("number");
+    expect(Number.isInteger(res.body.created)).toBe(true);
+    expect(Number.isInteger(res.body.skipped)).toBe(true);
     expect(res.body.created).toBeGreaterThanOrEqual(0);
     expect(res.body.skipped).toBeGreaterThanOrEqual(0);
   });
