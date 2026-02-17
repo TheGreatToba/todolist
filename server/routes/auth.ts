@@ -11,7 +11,7 @@ import {
   getAuthCookieOptions,
   getAuthCookieClearOptions,
 } from '../lib/auth';
-import { sendErrorResponse } from '../lib/errors';
+import { sendErrorResponse, AppError } from '../lib/errors';
 import { redactEmailForLog, emailHashForLog } from '../lib/log-pii';
 import { getAuthOrThrow } from '../middleware/requireAuth';
 import { logger } from '../lib/logger';
