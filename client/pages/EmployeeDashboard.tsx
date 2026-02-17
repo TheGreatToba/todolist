@@ -6,12 +6,17 @@ import { DailyTask } from '@shared/api';
 import { Check, Loader2, LogOut, X, AlertCircle, Calendar } from 'lucide-react';
 import { logger } from '@/lib/logger';
 
-function todayISO(): string {
-  return new Date().toISOString().split('T')[0];
+/** Current date in local timezone as YYYY-MM-DD (for "today" logic and date picker). */
+function todayLocalISO(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 function isToday(dateStr: string): boolean {
-  return dateStr === todayISO();
+  return dateStr === todayLocalISO();
 }
 
 function formatTaskDateLabel(dateStr: string): string {
@@ -23,7 +28,7 @@ function formatTaskDateLabel(dateStr: string): string {
 export default function EmployeeDashboard() {
   const { user, logout } = useAuth();
   const { on } = useSocket();
-  const [selectedDate, setSelectedDate] = useState<string>(() => todayISO());
+  const [selectedDate, setSelectedDate] = useState<string>(() => todayLocalISO());
   const [tasks, setTasks] = useState<DailyTask[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [updatingTaskId, setUpdatingTaskId] = useState<string | null>(null);

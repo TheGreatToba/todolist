@@ -120,13 +120,12 @@ export const handleCreateEmployee: RequestHandler = async (req, res) => {
       return;
     }
 
-    const team = await getManagerFirstTeam(payload.userId);
-    if (!team) {
+    const teamIds = await getManagerTeamIds(payload.userId);
+    if (teamIds.length === 0) {
       res.status(404).json({ error: 'Team not found' });
       return;
     }
 
-    // Verify that all workstations exist and belong to one of the manager's teams
     const requestedWorkstations = await prisma.workstation.findMany({
       where: { id: { in: body.workstationIds } },
     });
@@ -136,7 +135,6 @@ export const handleCreateEmployee: RequestHandler = async (req, res) => {
       return;
     }
 
-    const teamIds = await getManagerTeamIds(payload.userId);
     const allowed = requestedWorkstations.every((ws) => ws.teamId && teamIds.includes(ws.teamId));
     if (!allowed) {
       res.status(403).json({
@@ -144,6 +142,20 @@ export const handleCreateEmployee: RequestHandler = async (req, res) => {
       });
       return;
     }
+
+    // Business rule: employee is assigned to one team; all workstations must belong to that same team.
+    const workstationTeamIds = [...new Set(requestedWorkstations.map((ws) => ws.teamId).filter(Boolean))] as string[];
+    if (workstationTeamIds.length === 0) {
+      res.status(400).json({ error: 'Selected workstations have no team. Please choose valid workstations.' });
+      return;
+    }
+    if (workstationTeamIds.length > 1) {
+      res.status(400).json({
+        error: 'All workstations must belong to the same team. Please select workstations from a single team.',
+      });
+      return;
+    }
+    const employeeTeamId = workstationTeamIds[0];
 
     const workstations = requestedWorkstations;
 
@@ -156,14 +168,14 @@ export const handleCreateEmployee: RequestHandler = async (req, res) => {
     const expiresAt = new Date();
     expiresAt.setHours(expiresAt.getHours() + expiryHours);
 
-    // Create employee with workstations and set-password token
+    // Create employee in the same team as the selected workstations
     const employee = await prisma.user.create({
       data: {
         name: body.name,
         email: body.email,
         passwordHash,
         role: 'EMPLOYEE',
-        teamId: team.id,
+        teamId: employeeTeamId,
         workstations: {
           create: body.workstationIds.map((wsId) => ({
             workstationId: wsId,

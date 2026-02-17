@@ -40,6 +40,9 @@ export async function getManagerFirstTeam(managerId: string): Promise<Team | nul
  * Returns true if the given teamId is one of the teams managed by managerId.
  */
 export async function isTeamManagedBy(teamId: string, managerId: string): Promise<boolean> {
-  const ids = await getManagerTeamIds(managerId);
-  return ids.includes(teamId);
+  const team = await prisma.team.findFirst({
+    where: { id: teamId, managerId },
+    select: { id: true },
+  });
+  return team !== null;
 }

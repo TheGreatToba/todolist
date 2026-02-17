@@ -24,10 +24,24 @@ const UpdateDailyTaskSchema = z.object({
   isCompleted: z.boolean(),
 });
 
-function paramString(value: string | string[] | undefined): string | null {
-  if (typeof value === 'string' && value) return value;
-  if (Array.isArray(value) && value[0]) return value[0];
-  return null;
+const DATE_QUERY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Parses an optional date query (YYYY-MM-DD). Returns start-of-day Date or null if invalid.
+ * Use for GET /api/tasks/daily and GET /api/manager/dashboard to avoid 500 on bad input.
+ */
+function parseDateQuery(value: string | string[] | undefined): Date | null {
+  const raw = typeof value === 'string' ? value : Array.isArray(value) ? value[0] : undefined;
+  if (!raw || typeof raw !== 'string') {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return today;
+  }
+  if (!DATE_QUERY_REGEX.test(raw)) return null;
+  const date = new Date(raw + 'T12:00:00');
+  if (Number.isNaN(date.getTime())) return null;
+  date.setHours(0, 0, 0, 0);
+  return date;
 }
 
 // Get all daily tasks for an employee on a specific date
@@ -35,9 +49,11 @@ export const handleGetEmployeeDailyTasks: RequestHandler = async (req, res) => {
   try {
     const payload = getAuthOrThrow(req, res);
     if (!payload) return;
-    const { date } = req.query;
-    const taskDate = date ? new Date(date as string) : new Date();
-    taskDate.setHours(0, 0, 0, 0);
+    const taskDate = parseDateQuery(req.query.date);
+    if (taskDate === null) {
+      res.status(400).json({ error: 'Invalid date. Use YYYY-MM-DD.' });
+      return;
+    }
 
     const tasks = await prisma.dailyTask.findMany({
       where: {
@@ -289,8 +305,11 @@ export const handleGetManagerDashboard: RequestHandler = async (req, res) => {
     const payload = getAuthOrThrow(req, res);
     if (!payload) return;
     const { date, employeeId, workstationId } = req.query;
-    const taskDate = date ? new Date(date as string) : new Date();
-    taskDate.setHours(0, 0, 0, 0);
+    const taskDate = parseDateQuery(date);
+    if (taskDate === null) {
+      res.status(400).json({ error: 'Invalid date. Use YYYY-MM-DD.' });
+      return;
+    }
 
     const teamIds = await getManagerTeamIds(payload.userId);
     if (teamIds.length === 0) {

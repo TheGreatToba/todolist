@@ -220,6 +220,65 @@ describe("Permissions - role-based access", () => {
     expect(res.body).toHaveProperty("dailyTasks");
   });
 
+  it("GET /api/manager/dashboard?date=invalid returns 400 with message", async () => {
+    const agent = request.agent(app);
+    await agent.post("/api/auth/login").send({ email: "mgr@test.com", password: "password" });
+
+    const res = await agent.get("/api/manager/dashboard?date=invalid");
+
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ error: expect.stringContaining("YYYY-MM-DD") });
+  });
+
+  it("GET /api/manager/dashboard as multi-team manager returns aggregated data from all teams", async () => {
+    const bcryptjs = (await import("bcryptjs")).default;
+    const manager = await prisma.user.findUnique({
+      where: { email: "mgr@test.com" },
+      select: { id: true },
+    });
+    expect(manager).not.toBeNull();
+
+    const secondTeam = await prisma.team.create({
+      data: {
+        name: "Second Team",
+        managerId: manager!.id,
+      },
+    });
+
+    const wsSecond = await prisma.workstation.create({
+      data: { name: "Multi-team WS", teamId: secondTeam.id },
+    });
+
+    const employeeSecondTeam = await prisma.user.create({
+      data: {
+        name: "Multi-team Employee",
+        email: `multi-${Date.now()}@test.com`,
+        passwordHash: await bcryptjs.hash("password", 10),
+        role: "EMPLOYEE",
+        teamId: secondTeam.id,
+        workstations: {
+          create: [{ workstationId: wsSecond.id }],
+        },
+      },
+    });
+
+    const agent = request.agent(app);
+    await agent.post("/api/auth/login").send({ email: "mgr@test.com", password: "password" });
+    const res = await agent.get("/api/manager/dashboard");
+
+    expect(res.status).toBe(200);
+    expect(res.body.team).toBeDefined();
+    const memberIds = (res.body.team.members as Array<{ id: string }>).map((m) => m.id);
+    expect(memberIds).toContain(employeeSecondTeam.id);
+    const workstationNames = (res.body.workstations as Array<{ name: string }>).map((w) => w.name);
+    expect(workstationNames).toContain("Multi-team WS");
+
+    await prisma.employeeWorkstation.deleteMany({ where: { employeeId: employeeSecondTeam.id } });
+    await prisma.user.delete({ where: { id: employeeSecondTeam.id } });
+    await prisma.workstation.delete({ where: { id: wsSecond.id } });
+    await prisma.team.delete({ where: { id: secondTeam.id } });
+  });
+
   it("POST /api/tasks/templates as EMPLOYEE returns 403", async () => {
     const agent = request.agent(app);
     await agent.post("/api/auth/login").send({ email: "emp@test.com", password: "password" });
@@ -250,6 +309,26 @@ describe("Daily tasks API", () => {
 
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body)).toBe(true);
+  });
+
+  it("GET /api/tasks/daily?date=YYYY-MM-DD returns 200 and array for that date", async () => {
+    const agent = request.agent(app);
+    await agent.post("/api/auth/login").send({ email: "emp@test.com", password: "password" });
+
+    const res = await agent.get("/api/tasks/daily?date=2025-02-15");
+
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+  });
+
+  it("GET /api/tasks/daily?date=invalid returns 400 with message", async () => {
+    const agent = request.agent(app);
+    await agent.post("/api/auth/login").send({ email: "emp@test.com", password: "password" });
+
+    const res = await agent.get("/api/tasks/daily?date=not-a-date");
+
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ error: expect.stringContaining("YYYY-MM-DD") });
   });
 });
 
@@ -444,5 +523,40 @@ describe("Workstations and employees API", () => {
     });
     expect(Array.isArray(res.body.workstations)).toBe(true);
     expect(res.body.workstations.length).toBeGreaterThan(0);
+  });
+
+  it("POST /api/employees with workstations from two different teams returns 400", async () => {
+    const manager = await prisma.user.findUnique({
+      where: { email: "mgr@test.com" },
+      select: { id: true, teamId: true },
+    });
+    expect(manager?.teamId).toBeTruthy();
+
+    const wsTeam1 = await prisma.workstation.findFirst({
+      where: { teamId: manager!.teamId! },
+      select: { id: true },
+    });
+    expect(wsTeam1).not.toBeNull();
+
+    const secondTeam = await prisma.team.create({
+      data: { name: "Other Team", managerId: manager!.id },
+    });
+    const wsTeam2 = await prisma.workstation.create({
+      data: { name: "WS Other Team", teamId: secondTeam.id },
+    });
+
+    const agent = request.agent(app);
+    await agent.post("/api/auth/login").send({ email: "mgr@test.com", password: "password" });
+    const res = await agent.post("/api/employees").send({
+      name: "Cross-team Employee",
+      email: `cross-${Date.now()}@test.com`,
+      workstationIds: [wsTeam1!.id, wsTeam2.id],
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/same team/);
+
+    await prisma.workstation.delete({ where: { id: wsTeam2.id } });
+    await prisma.team.delete({ where: { id: secondTeam.id } });
   });
 });
