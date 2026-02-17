@@ -7,7 +7,7 @@ const NotFound = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    logger.error("404 Error: User attempted to access non-existent route:", location.pathname);
+    logger.warn("404: User attempted to access non-existent route:", location.pathname);
   }, [location.pathname]);
 
   return (

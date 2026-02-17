@@ -4,6 +4,7 @@ import { z } from 'zod';
 import prisma from '../lib/db';
 import { hashPassword } from '../lib/auth';
 import { sendErrorResponse } from '../lib/errors';
+import { logger } from '../lib/logger';
 import { getAuthOrThrow } from '../middleware/requireAuth';
 import { sendSetPasswordEmail } from '../lib/email';
 import { getSetPasswordTokenExpiryHours } from '../lib/set-password-expiry';
@@ -227,7 +228,7 @@ export const handleCreateEmployee: RequestHandler = async (req, res) => {
     );
 
     if (!emailResult.success) {
-      console.warn('Failed to send email, but employee was created:', emailResult.error);
+      logger.warn('Failed to send email, but employee was created:', emailResult.error);
     }
 
     res.status(201).json({

@@ -1,5 +1,6 @@
 import { Response } from 'express';
 import { ZodError } from 'zod';
+import { logger } from './logger';
 
 /** Business/validation error with a safe message to send to the client. */
 export class AppError extends Error {
@@ -39,9 +40,9 @@ export function sendErrorResponse(res: Response, error: unknown): void {
   }
 
   // Unexpected error: log full details, send generic message to client
-  console.error('Unhandled error:', error);
+  logger.error('Unhandled error:', error);
   if (error instanceof Error && error.stack && process.env.NODE_ENV !== 'production') {
-    console.error(error.stack);
+    logger.error(error.stack);
   }
   res.status(500).json({ error: 'Internal server error' });
 }
