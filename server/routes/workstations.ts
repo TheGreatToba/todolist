@@ -23,11 +23,16 @@ const CreateWorkstationSchema = z.object({
 const CreateEmployeeSchema = z.object({
   name: z.string().min(1),
   email: z.string().email(),
-  workstationIds: z.array(z.string()).min(1),
+  workstationIds: z
+    .array(z.string())
+    .min(1)
+    .refine((ids) => new Set(ids).size === ids.length, { message: 'workstationIds must not contain duplicates' }),
 });
 
 const UpdateEmployeeWorkstationsSchema = z.object({
-  workstationIds: z.array(z.string()),
+  workstationIds: z
+    .array(z.string())
+    .refine((ids) => new Set(ids).size === ids.length, { message: 'workstationIds must not contain duplicates' }),
 });
 
 // Get all workstations used by the manager's teams (all managed teams)
@@ -214,21 +219,19 @@ export const handleCreateEmployee: RequestHandler = async (req, res) => {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
-      for (const wsId of body.workstationIds) {
-        const taskTemplates = await tx.taskTemplate.findMany({
-          where: { workstationId: wsId },
-        });
+      const taskTemplates = await tx.taskTemplate.findMany({
+        where: { workstationId: { in: body.workstationIds } },
+      });
 
-        for (const template of taskTemplates) {
-          await tx.dailyTask.create({
-            data: {
-              taskTemplateId: template.id,
-              employeeId: employee.id,
-              date: today,
-              isCompleted: false,
-            },
-          });
-        }
+      if (taskTemplates.length > 0) {
+        await tx.dailyTask.createMany({
+          data: taskTemplates.map((template) => ({
+            taskTemplateId: template.id,
+            employeeId: employee.id,
+            date: today,
+            isCompleted: false,
+          })),
+        });
       }
 
       return { employee };
@@ -447,8 +450,14 @@ export const handleUpdateEmployeeWorkstations: RequestHandler = async (req, res)
       });
     });
 
+    // Guard: employee may have been deleted between initial check and end of transaction (concurrent request).
+    if (!updatedEmployee) {
+      res.status(404).json({ error: 'Employee not found' });
+      return;
+    }
+
     const workstations =
-      updatedEmployee && 'workstations' in updatedEmployee && Array.isArray(updatedEmployee.workstations)
+      'workstations' in updatedEmployee && Array.isArray(updatedEmployee.workstations)
         ? updatedEmployee.workstations.map((ew: { workstationId: string; workstation: { name: string } }) => ({
             id: ew.workstationId,
             name: ew.workstation.name,
@@ -456,9 +465,9 @@ export const handleUpdateEmployeeWorkstations: RequestHandler = async (req, res)
         : [];
 
     res.json({
-      id: updatedEmployee?.id,
-      name: updatedEmployee?.name,
-      email: updatedEmployee?.email,
+      id: updatedEmployee.id,
+      name: updatedEmployee.name,
+      email: updatedEmployee.email,
       workstations,
     });
   } catch (error) {

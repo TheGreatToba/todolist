@@ -1235,6 +1235,33 @@ describe("Workstations and employees API", () => {
     expect(res.body.workstations.length).toBeGreaterThan(0);
   });
 
+  it("POST /api/employees with duplicate workstationIds returns 400 (validation)", async () => {
+    const agent = request.agent(app);
+    await agent.post("/api/auth/login").send({ email: "mgr@test.com", password: "password" });
+
+    const manager = await prisma.user.findUnique({
+      where: { email: "mgr@test.com" },
+      select: { teamId: true },
+    });
+    expect(manager?.teamId).toBeTruthy();
+
+    const workstation = await prisma.workstation.findFirst({
+      where: { teamId: manager!.teamId! },
+      select: { id: true },
+    });
+    expect(workstation).not.toBeNull();
+
+    const res = await agent.post("/api/employees").send({
+      name: "Dup Employee",
+      email: `dup-emp-${Date.now()}@test.com`,
+      workstationIds: [workstation!.id, workstation!.id],
+    });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("Validation error");
+    expect(res.body.details).toBeDefined();
+  });
+
   it("POST /api/employees with workstations from two different teams returns 400", async () => {
     const manager = await prisma.user.findUnique({
       where: { email: "mgr@test.com" },
@@ -1270,5 +1297,64 @@ describe("Workstations and employees API", () => {
       await prisma.workstation.delete({ where: { id: wsTeam2.id } });
       await prisma.team.delete({ where: { id: secondTeam.id } });
     }
+  });
+
+  it("POST /api/employees creates daily tasks from workstation templates (createMany non-regression)", async () => {
+    const agent = request.agent(app);
+    await agent.post("/api/auth/login").send({ email: "mgr@test.com", password: "password" });
+
+    const manager = await prisma.user.findUnique({
+      where: { email: "mgr@test.com" },
+      select: { id: true, teamId: true },
+    });
+    expect(manager?.teamId).toBeTruthy();
+
+    const ws1 = await prisma.workstation.create({
+      data: { name: `WS Daily ${Date.now()}`, teamId: manager!.teamId! },
+    });
+    const ws2 = await prisma.workstation.create({
+      data: { name: `WS Daily 2 ${Date.now()}`, teamId: manager!.teamId! },
+    });
+
+    await prisma.taskTemplate.create({
+      data: {
+        title: "Template A",
+        workstationId: ws1.id,
+        createdById: manager!.id,
+      },
+    });
+    await prisma.taskTemplate.create({
+      data: {
+        title: "Template B",
+        workstationId: ws2.id,
+        createdById: manager!.id,
+      },
+    });
+
+    const email = `daily-emp-${Date.now()}@test.com`;
+    const createRes = await agent.post("/api/employees").send({
+      name: "Daily Tasks Employee",
+      email,
+      workstationIds: [ws1.id, ws2.id],
+    });
+
+    expect(createRes.status).toBe(201);
+    const employeeId = createRes.body.id;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const dailyCount = await prisma.dailyTask.count({
+      where: { employeeId, date: today },
+    });
+    expect(dailyCount).toBe(2);
+
+    await prisma.dailyTask.deleteMany({ where: { employeeId } });
+    await prisma.employeeWorkstation.deleteMany({ where: { employeeId } });
+    await prisma.user.delete({ where: { id: employeeId } });
+    await prisma.taskTemplate.deleteMany({
+      where: { workstationId: { in: [ws1.id, ws2.id] } },
+    });
+    await prisma.workstation.deleteMany({ where: { id: { in: [ws1.id, ws2.id] } } });
   });
 });

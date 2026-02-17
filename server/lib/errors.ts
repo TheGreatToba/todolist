@@ -43,6 +43,32 @@ export function sendErrorResponse(res: Response, error: unknown, req?: RequestWi
     return;
   }
 
+  // Prisma known request errors → client-friendly status and message (avoid generic 500).
+  // Restrict to Prisma-shaped errors (code Pxxxx + meta) to avoid false positives from any object with a string code.
+  const prismaLike =
+    error &&
+    typeof error === 'object' &&
+    'code' in error &&
+    typeof (error as { code: string }).code === 'string' &&
+    /^P\d{4}$/.test((error as { code: string }).code) &&
+    'meta' in error;
+  if (prismaLike) {
+    const code = (error as { code: string }).code;
+    if (code === 'P2002') {
+      res.status(409).json({ error: 'A record with this value already exists.', code: 'CONFLICT' });
+      return;
+    }
+    // API convention: FK / constraint violations → 400 (invalid payload or bad reference).
+    if (code === 'P2003') {
+      res.status(400).json({ error: 'Referenced record not found or constraint violation.', code: 'CONSTRAINT' });
+      return;
+    }
+    if (code === 'P2025') {
+      res.status(404).json({ error: 'Record not found.', code: 'NOT_FOUND' });
+      return;
+    }
+  }
+
   // Unexpected error: structured log for prod/SIEM; stack only in non-prod
   const message = error instanceof Error ? error.message : String(error);
   const stack = error instanceof Error && error.stack && process.env.NODE_ENV !== 'production' ? error.stack : undefined;
