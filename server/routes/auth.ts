@@ -27,17 +27,15 @@ function logInvalidRole(
   user: { id: string; email: string; role: unknown },
   req: Request
 ): void {
-  logger.warn(
-    JSON.stringify({
-      event: 'invalid_role_rejected',
-      userId: user.id,
-      email: user.email,
-      role: user.role,
-      endpoint: req.path,
-      method: req.method,
-      requestId: req.requestId ?? undefined,
-    })
-  );
+  logger.structured('warn', {
+    event: 'invalid_role_rejected',
+    userId: user.id,
+    email: user.email,
+    role: user.role,
+    endpoint: req.path,
+    method: req.method,
+    requestId: req.requestId ?? undefined,
+  });
 }
 
 /** Returns JWT payload for cookie, or null after logging and sending 500. */

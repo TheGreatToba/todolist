@@ -5,6 +5,7 @@ import { fetchWithCsrf } from '@/lib/api';
 import { useSocket } from '@/hooks/useSocket';
 import { ManagerDashboard as ManagerDashboardType } from '@shared/api';
 import { Loader2, LogOut, Plus, Filter, Settings, Trash2, Users, X, Edit2, Calendar, Download } from 'lucide-react';
+import { logger } from '@/lib/logger';
 
 interface TeamMember {
   id: string;
@@ -99,7 +100,7 @@ export default function ManagerDashboard() {
         setDashboard(data);
       }
     } catch (error) {
-      console.error('Failed to fetch dashboard:', error);
+      logger.error('Failed to fetch dashboard:', error);
     } finally {
       setIsLoading(false);
     }
@@ -144,7 +145,7 @@ export default function ManagerDashboard() {
         setWorkstations(data);
       }
     } catch (error) {
-      console.error('Failed to fetch workstations:', error);
+      logger.error('Failed to fetch workstations:', error);
     }
   };
 
@@ -159,7 +160,7 @@ export default function ManagerDashboard() {
         setTeamMembers(data);
       }
     } catch (error) {
-      console.error('Failed to fetch team members:', error);
+      logger.error('Failed to fetch team members:', error);
     }
   };
 
@@ -191,7 +192,7 @@ export default function ManagerDashboard() {
       }
     } catch (error) {
       setOperationError('An error occurred');
-      console.error('Failed to create workstation:', error);
+      logger.error('Failed to create workstation:', error);
     }
   };
 
@@ -212,7 +213,7 @@ export default function ManagerDashboard() {
       }
     } catch (error) {
       setOperationError('An error occurred');
-      console.error('Failed to delete workstation:', error);
+      logger.error('Failed to delete workstation:', error);
     }
   };
 
@@ -244,7 +245,7 @@ export default function ManagerDashboard() {
       }
     } catch (error) {
       setOperationError('An error occurred');
-      console.error('Failed to create employee:', error);
+      logger.error('Failed to create employee:', error);
     }
   };
 
@@ -273,7 +274,7 @@ export default function ManagerDashboard() {
       }
     } catch (error) {
       setOperationError('An error occurred');
-      console.error('Failed to update employee:', error);
+      logger.error('Failed to update employee:', error);
     }
   };
 
@@ -319,7 +320,7 @@ export default function ManagerDashboard() {
         alert(data.error || 'Failed to create task');
       }
     } catch (error) {
-      console.error('Failed to create task:', error);
+      logger.error('Failed to create task:', error);
       alert('An error occurred while creating the task');
     }
   };

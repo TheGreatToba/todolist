@@ -62,7 +62,7 @@ export default function EmployeeDashboard() {
         setTasks(data);
       }
     } catch (error) {
-      console.error('Failed to fetch tasks:', error);
+      logger.error('Failed to fetch tasks:', error);
     } finally {
       setIsLoading(false);
     }
@@ -82,7 +82,7 @@ export default function EmployeeDashboard() {
         setTasks((prev) => prev.map((t) => (t.id === taskId ? updatedTask : t)));
       }
     } catch (error) {
-      console.error('Failed to update task:', error);
+      logger.error('Failed to update task:', error);
     } finally {
       setUpdatingTaskId(null);
     }

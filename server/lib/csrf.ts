@@ -70,14 +70,13 @@ export function validateCsrf(req: Request, res: Response, next: NextFunction): v
 
   if (!cookieToken || !headerToken || headerToken !== cookieToken) {
     // Structured log for ops/monitoring (no secrets). requestId correlates with proxy/APM.
-    // Note: req.path is relative to mount; with app.use('/api', router), path may be /auth/login not /api/auth/login.
-    logger.warn(JSON.stringify({
+    logger.structured('warn', {
       event: 'csrf_rejected',
       requestId: req.requestId ?? crypto.randomUUID(),
       method: req.method,
       path: req.path,
       reason: !cookieToken ? 'missing_cookie' : !headerToken ? 'missing_header' : 'mismatch',
-    }));
+    });
     res.status(403).json({ error: 'Invalid CSRF token' });
     return;
   }

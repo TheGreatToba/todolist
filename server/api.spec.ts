@@ -259,6 +259,36 @@ describe("Security middlewares", () => {
       expect(res.status).toBe(429);
       expect(res.body).toMatchObject({ error: "Too many attempts, please try again later" });
     });
+
+    it("allows requests again after rate limit window expires", async () => {
+      vi.useFakeTimers({ now: new Date("2025-01-15T10:00:00Z").getTime() });
+
+      const originalNodeEnv = process.env.NODE_ENV;
+      const originalDisableCsrf = process.env.DISABLE_CSRF;
+      process.env.NODE_ENV = "development";
+      process.env.DISABLE_CSRF = "true";
+      const limitedApp = createApp();
+      process.env.NODE_ENV = originalNodeEnv;
+      if (originalDisableCsrf === undefined) delete process.env.DISABLE_CSRF;
+      else process.env.DISABLE_CSRF = originalDisableCsrf;
+
+      const agent = request(limitedApp);
+      const windowMs = 15 * 60 * 1000;
+
+      for (let i = 0; i < 20; i++) {
+        await agent.post("/api/auth/login").send({ email: "mgr@test.com", password: "wrongpassword" });
+      }
+      const afterLimit = await agent.post("/api/auth/login").send({ email: "mgr@test.com", password: "wrongpassword" });
+      expect(afterLimit.status).toBe(429);
+
+      vi.advanceTimersByTime(windowMs + 1);
+
+      const afterWindow = await agent.post("/api/auth/login").send({ email: "mgr@test.com", password: "wrongpassword" });
+      expect(afterWindow.status).toBe(401);
+      expect(afterWindow.body?.error).not.toBe("Too many attempts, please try again later");
+
+      vi.useRealTimers();
+    });
   });
 });
 
