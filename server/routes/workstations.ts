@@ -9,6 +9,7 @@ import { getAuthOrThrow } from '../middleware/requireAuth';
 import { sendSetPasswordEmail } from '../lib/email';
 import { getSetPasswordTokenExpiryHours } from '../lib/set-password-expiry';
 import { getManagerTeamIds, getManagerFirstTeam, isTeamManagedBy } from '../lib/manager-teams';
+import { paramString } from '../lib/params';
 
 function generateSecureToken(): string {
   return crypto.randomBytes(32).toString('hex');
@@ -28,12 +29,6 @@ const CreateEmployeeSchema = z.object({
 const UpdateEmployeeWorkstationsSchema = z.object({
   workstationIds: z.array(z.string()),
 });
-
-function paramString(value: string | string[] | undefined): string | null {
-  if (typeof value === 'string' && value) return value;
-  if (Array.isArray(value) && value[0]) return value[0];
-  return null;
-}
 
 // Get all workstations used by the manager's teams (all managed teams)
 export const handleGetWorkstations: RequestHandler = async (req, res) => {
