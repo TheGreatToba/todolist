@@ -175,59 +175,64 @@ export const handleCreateEmployee: RequestHandler = async (req, res) => {
     const expiresAt = new Date();
     expiresAt.setHours(expiresAt.getHours() + expiryHours);
 
-    // Create employee in the same team as the selected workstations
-    const employee = await prisma.user.create({
-      data: {
-        name: body.name,
-        email: body.email,
-        passwordHash,
-        role: 'EMPLOYEE',
-        teamId: employeeTeamId,
-        workstations: {
-          create: body.workstationIds.map((wsId) => ({
-            workstationId: wsId,
-          })),
-        },
-        setPasswordToken: {
-          create: {
-            token: setPasswordToken,
-            expiresAt,
+    // Create employee and initial daily tasks in a single transaction to avoid partial writes.
+    const { employee } = await prisma.$transaction(async (tx) => {
+      // Create employee in the same team as the selected workstations
+      const employee = await tx.user.create({
+        data: {
+          name: body.name,
+          email: body.email,
+          passwordHash,
+          role: 'EMPLOYEE',
+          teamId: employeeTeamId,
+          workstations: {
+            create: body.workstationIds.map((wsId) => ({
+              workstationId: wsId,
+            })),
           },
-        },
-      },
-      include: {
-        workstations: {
-          include: {
-            workstation: {
-              select: { name: true },
+          setPasswordToken: {
+            create: {
+              token: setPasswordToken,
+              expiresAt,
             },
           },
         },
-      },
-    });
-
-    // Create daily tasks for this employee for today (from workstation-scoped templates only).
-    // Templates with assignedToEmployeeId are not applied here: they target a specific user
-    // and are created by the daily job or when the manager assigns a task to an existing employee.
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    for (const wsId of body.workstationIds) {
-      const taskTemplates = await prisma.taskTemplate.findMany({
-        where: { workstationId: wsId },
+        include: {
+          workstations: {
+            include: {
+              workstation: {
+                select: { name: true },
+              },
+            },
+          },
+        },
       });
 
-      for (const template of taskTemplates) {
-        await prisma.dailyTask.create({
-          data: {
-            taskTemplateId: template.id,
-            employeeId: employee.id,
-            date: today,
-            isCompleted: false,
-          },
+      // Create daily tasks for this employee for today (from workstation-scoped templates only).
+      // Templates with assignedToEmployeeId are not applied here: they target a specific user
+      // and are created by the daily job or when the manager assigns a task to an existing employee.
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      for (const wsId of body.workstationIds) {
+        const taskTemplates = await tx.taskTemplate.findMany({
+          where: { workstationId: wsId },
         });
+
+        for (const template of taskTemplates) {
+          await tx.dailyTask.create({
+            data: {
+              taskTemplateId: template.id,
+              employeeId: employee.id,
+              date: today,
+              isCompleted: false,
+            },
+          });
+        }
       }
-    }
+
+      return { employee };
+    });
 
     // Send email with set-password link (no password in email)
     const baseUrl = process.env.APP_URL || 'http://localhost:8080';
@@ -407,36 +412,39 @@ export const handleUpdateEmployeeWorkstations: RequestHandler = async (req, res)
       return;
     }
 
-    // Delete existing assignments
-    await prisma.employeeWorkstation.deleteMany({
-      where: { employeeId },
-    });
-
-    // Create new assignments
-    if (body.workstationIds.length > 0) {
-      await prisma.employeeWorkstation.createMany({
-        data: body.workstationIds.map((wsId) => ({
-          employeeId,
-          workstationId: wsId,
-        })),
+    // Update assignments and return updated employee in a single transaction to avoid partial writes.
+    const updatedEmployee = await prisma.$transaction(async (tx) => {
+      // Delete existing assignments
+      await tx.employeeWorkstation.deleteMany({
+        where: { employeeId },
       });
-    }
 
-    // Return updated employee
-    const updatedEmployee = await prisma.user.findUnique({
-      where: { id: employeeId },
-      include: {
-        workstations: {
-          include: {
-            workstation: {
-              select: {
-                id: true,
-                name: true,
+      // Create new assignments
+      if (body.workstationIds.length > 0) {
+        await tx.employeeWorkstation.createMany({
+          data: body.workstationIds.map((wsId) => ({
+            employeeId,
+            workstationId: wsId,
+          })),
+        });
+      }
+
+      // Return updated employee with fresh workstation relations
+      return tx.user.findUnique({
+        where: { id: employeeId },
+        include: {
+          workstations: {
+            include: {
+              workstation: {
+                select: {
+                  id: true,
+                  name: true,
+                },
               },
             },
           },
         },
-      },
+      });
     });
 
     const workstations =
