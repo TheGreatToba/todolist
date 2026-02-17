@@ -68,6 +68,16 @@ describe("sendErrorResponse", () => {
         code: "NOT_FOUND",
       });
     });
+
+    it("P2002 with clientVersion but without meta/name is still mapped (relaxed Prisma shape)", () => {
+      const res = mockRes() as unknown as Response;
+      sendErrorResponse(res, { code: "P2002", clientVersion: "5.22.0" });
+      expect(res.status).toHaveBeenCalledWith(409);
+      expect(res.json).toHaveBeenCalledWith({
+        error: "A record with this value already exists.",
+        code: "CONFLICT",
+      });
+    });
   });
 
   describe("AppError and ZodError", () => {
