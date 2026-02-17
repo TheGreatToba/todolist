@@ -35,6 +35,12 @@ describe('paramString', () => {
     expect(paramString(['   '])).toBeNull();
   });
 
+  it('returns null when first array element is not a string (second element ignored)', () => {
+    expect(paramString([42, 'valid'])).toBeNull();
+    expect(paramString([null, 'valid'])).toBeNull();
+    expect(paramString([{}, 'valid'])).toBeNull();
+  });
+
   it('returns null for undefined', () => {
     expect(paramString(undefined)).toBeNull();
   });
