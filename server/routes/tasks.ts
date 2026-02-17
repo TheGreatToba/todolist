@@ -6,7 +6,7 @@ import { sendErrorResponse } from '../lib/errors';
 import { getAuthOrThrow } from '../middleware/requireAuth';
 import { assignDailyTasksForDate } from '../jobs/daily-task-assignment';
 import { logger } from '../lib/logger';
-import { getManagerTeamIds, getManagerTeams } from '../lib/manager-teams';
+import { getManagerTeamIds, getManagerTeams, isTeamManagedBy } from '../lib/manager-teams';
 import { paramString } from '../lib/params';
 import { parseDateQuery } from '../lib/parse-date-query';
 
@@ -144,6 +144,36 @@ export const handleCreateTaskTemplate: RequestHandler = async (req, res) => {
     const payload = getAuthOrThrow(req, res);
     if (!payload) return;
     const body = CreateTaskTemplateSchema.parse(req.body);
+
+    // Ensure workstation and/or employee belong to a team managed by this manager
+    if (body.workstationId) {
+      const workstation = await prisma.workstation.findUnique({
+        where: { id: body.workstationId },
+        select: { teamId: true },
+      });
+      if (!workstation) {
+        res.status(404).json({ error: 'Workstation not found' });
+        return;
+      }
+      if (!workstation.teamId || !(await isTeamManagedBy(workstation.teamId, payload.userId))) {
+        res.status(403).json({ error: 'Workstation is not in one of your teams' });
+        return;
+      }
+    }
+    if (body.assignedToEmployeeId) {
+      const employee = await prisma.user.findUnique({
+        where: { id: body.assignedToEmployeeId },
+        select: { teamId: true },
+      });
+      if (!employee) {
+        res.status(404).json({ error: 'Employee not found' });
+        return;
+      }
+      if (!employee.teamId || !(await isTeamManagedBy(employee.teamId, payload.userId))) {
+        res.status(403).json({ error: 'Employee is not in one of your teams' });
+        return;
+      }
+    }
 
     const taskTemplate = await prisma.taskTemplate.create({
       data: {
