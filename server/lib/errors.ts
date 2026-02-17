@@ -44,16 +44,16 @@ export function sendErrorResponse(res: Response, error: unknown, req?: RequestWi
   }
 
   // Prisma known request errors → client-friendly status and message (avoid generic 500).
-  // Restrict to Prisma-shaped errors (code Pxxxx + meta) to avoid false positives from any object with a string code.
-  const prismaLike =
+  // Require code Pxxxx; accept with optional meta or other Prisma markers (name, clientVersion) so real Prisma errors without meta are still mapped.
+  const err = error as { code?: string; meta?: unknown; name?: string; clientVersion?: string };
+  const code = err?.code;
+  const hasPrismaShape =
     error &&
     typeof error === 'object' &&
-    'code' in error &&
-    typeof (error as { code: string }).code === 'string' &&
-    /^P\d{4}$/.test((error as { code: string }).code) &&
-    'meta' in error;
-  if (prismaLike) {
-    const code = (error as { code: string }).code;
+    typeof code === 'string' &&
+    /^P\d{4}$/.test(code) &&
+    ('meta' in (error as object) || err.name === 'PrismaClientKnownRequestError' || typeof err.clientVersion === 'string');
+  if (hasPrismaShape && code) {
     if (code === 'P2002') {
       res.status(409).json({ error: 'A record with this value already exists.', code: 'CONFLICT' });
       return;

@@ -14,7 +14,7 @@ function mockRes(): { status: ReturnType<typeof vi.fn>; json: ReturnType<typeof 
 }
 
 describe("sendErrorResponse", () => {
-  describe("Prisma-like error mappings (shape: code Pxxxx + meta)", () => {
+  describe("Prisma-like error mappings (shape: code Pxxxx + meta or name or clientVersion)", () => {
     it("P2002 returns 409 and CONFLICT", () => {
       const res = mockRes() as unknown as Response;
       sendErrorResponse(res, { code: "P2002", meta: { target: ["email"] } });
@@ -57,6 +57,16 @@ describe("sendErrorResponse", () => {
       sendErrorResponse(res, { code: "CONFLICT", meta: {} });
       expect(res.status).toHaveBeenCalledWith(500);
       expect(res.json).toHaveBeenCalledWith({ error: "Internal server error" });
+    });
+
+    it("P2025 with name but without meta is still mapped (relaxed Prisma shape)", () => {
+      const res = mockRes() as unknown as Response;
+      sendErrorResponse(res, { code: "P2025", name: "PrismaClientKnownRequestError" });
+      expect(res.status).toHaveBeenCalledWith(404);
+      expect(res.json).toHaveBeenCalledWith({
+        error: "Record not found.",
+        code: "NOT_FOUND",
+      });
     });
   });
 

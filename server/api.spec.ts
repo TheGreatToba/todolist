@@ -1316,45 +1316,54 @@ describe("Workstations and employees API", () => {
       data: { name: `WS Daily 2 ${Date.now()}`, teamId: manager!.teamId! },
     });
 
-    await prisma.taskTemplate.create({
-      data: {
-        title: "Template A",
-        workstationId: ws1.id,
-        createdById: manager!.id,
-      },
-    });
-    await prisma.taskTemplate.create({
-      data: {
-        title: "Template B",
-        workstationId: ws2.id,
-        createdById: manager!.id,
-      },
-    });
+    let employeeId: string | null = null;
+    try {
+      await prisma.taskTemplate.create({
+        data: {
+          title: "Template A",
+          workstationId: ws1.id,
+          createdById: manager!.id,
+        },
+      });
+      await prisma.taskTemplate.create({
+        data: {
+          title: "Template B",
+          workstationId: ws2.id,
+          createdById: manager!.id,
+        },
+      });
 
-    const email = `daily-emp-${Date.now()}@test.com`;
-    const createRes = await agent.post("/api/employees").send({
-      name: "Daily Tasks Employee",
-      email,
-      workstationIds: [ws1.id, ws2.id],
-    });
+      const email = `daily-emp-${Date.now()}@test.com`;
+      const createRes = await agent.post("/api/employees").send({
+        name: "Daily Tasks Employee",
+        email,
+        workstationIds: [ws1.id, ws2.id],
+      });
 
-    expect(createRes.status).toBe(201);
-    const employeeId = createRes.body.id;
+      expect(createRes.status).toBe(201);
+      employeeId = createRes.body.id;
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+      const startOfDay = new Date();
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000);
 
-    const dailyCount = await prisma.dailyTask.count({
-      where: { employeeId, date: today },
-    });
-    expect(dailyCount).toBe(2);
-
-    await prisma.dailyTask.deleteMany({ where: { employeeId } });
-    await prisma.employeeWorkstation.deleteMany({ where: { employeeId } });
-    await prisma.user.delete({ where: { id: employeeId } });
-    await prisma.taskTemplate.deleteMany({
-      where: { workstationId: { in: [ws1.id, ws2.id] } },
-    });
-    await prisma.workstation.deleteMany({ where: { id: { in: [ws1.id, ws2.id] } } });
+      const dailyCount = await prisma.dailyTask.count({
+        where: {
+          employeeId: employeeId!,
+          date: { gte: startOfDay, lt: endOfDay },
+        },
+      });
+      expect(dailyCount).toBe(2);
+    } finally {
+      if (employeeId) {
+        await prisma.dailyTask.deleteMany({ where: { employeeId } });
+        await prisma.employeeWorkstation.deleteMany({ where: { employeeId } });
+        await prisma.user.delete({ where: { id: employeeId } });
+      }
+      await prisma.taskTemplate.deleteMany({
+        where: { workstationId: { in: [ws1.id, ws2.id] } },
+      });
+      await prisma.workstation.deleteMany({ where: { id: { in: [ws1.id, ws2.id] } } });
+    }
   });
 });
