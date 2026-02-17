@@ -54,6 +54,12 @@ async function main() {
     data: { teamId: team.id },
   });
 
+  // Attach workstations to the team (required for manager scope checks)
+  await prisma.workstation.updateMany({
+    where: { id: { in: [checkoutWorkstation.id, kitchenWorkstation.id, receptionWorkstation.id] } },
+    data: { teamId: team.id },
+  });
+
   console.log('✅ Created team and manager');
 
   // Create employees

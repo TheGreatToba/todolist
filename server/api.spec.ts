@@ -298,6 +298,270 @@ describe("Permissions - role-based access", () => {
 
     expect(res.status).toBe(403);
   });
+
+  it("POST /api/tasks/templates with workstation not in manager teams returns 404", async () => {
+    const bcryptjs = (await import("bcryptjs")).default;
+    const otherManager = await prisma.user.create({
+      data: {
+        name: "Other Manager",
+        email: `other-mgr-${Date.now()}@test.com`,
+        passwordHash: await bcryptjs.hash("password", 10),
+        role: "MANAGER",
+      },
+    });
+    const otherTeam = await prisma.team.create({
+      data: { name: "Other Team", managerId: otherManager.id },
+    });
+    const otherWs = await prisma.workstation.create({
+      data: { name: "Other WS", teamId: otherTeam.id },
+    });
+    try {
+      const agent = request.agent(app);
+      await agent.post("/api/auth/login").send({ email: "mgr@test.com", password: "password" });
+      const res = await agent.post("/api/tasks/templates").send({
+        title: "Test",
+        workstationId: otherWs.id,
+        isRecurring: false,
+      });
+      expect(res.status).toBe(404);
+      expect(res.body).toMatchObject({ error: "Not found" });
+    } finally {
+      await prisma.workstation.delete({ where: { id: otherWs.id } });
+      await prisma.team.delete({ where: { id: otherTeam.id } });
+      await prisma.user.delete({ where: { id: otherManager.id } });
+    }
+  });
+
+  it("POST /api/tasks/templates with employee not in manager teams returns 404", async () => {
+    const bcryptjs = (await import("bcryptjs")).default;
+    const otherManager = await prisma.user.create({
+      data: {
+        name: "Other Manager",
+        email: `other-mgr2-${Date.now()}@test.com`,
+        passwordHash: await bcryptjs.hash("password", 10),
+        role: "MANAGER",
+      },
+    });
+    const otherTeam = await prisma.team.create({
+      data: { name: "Other Team 2", managerId: otherManager.id },
+    });
+    const otherEmployee = await prisma.user.create({
+      data: {
+        name: "Other Emp",
+        email: `other-emp-${Date.now()}@test.com`,
+        passwordHash: await bcryptjs.hash("password", 10),
+        role: "EMPLOYEE",
+        teamId: otherTeam.id,
+      },
+    });
+    try {
+      const agent = request.agent(app);
+      await agent.post("/api/auth/login").send({ email: "mgr@test.com", password: "password" });
+      const res = await agent.post("/api/tasks/templates").send({
+        title: "Test",
+        assignedToEmployeeId: otherEmployee.id,
+        isRecurring: false,
+      });
+      expect(res.status).toBe(404);
+      expect(res.body).toMatchObject({ error: "Not found" });
+    } finally {
+      await prisma.user.delete({ where: { id: otherEmployee.id } });
+      await prisma.team.delete({ where: { id: otherTeam.id } });
+      await prisma.user.delete({ where: { id: otherManager.id } });
+    }
+  });
+
+  it("POST /api/tasks/templates with workstation existing but teamId null returns 404", async () => {
+    const wsNoTeam = await prisma.workstation.create({
+      data: { name: "Orphan WS" },
+    });
+    try {
+      const agent = request.agent(app);
+      await agent.post("/api/auth/login").send({ email: "mgr@test.com", password: "password" });
+      const res = await agent.post("/api/tasks/templates").send({
+        title: "Test",
+        workstationId: wsNoTeam.id,
+        isRecurring: false,
+      });
+      expect(res.status).toBe(404);
+      expect(res.body).toMatchObject({ error: "Not found" });
+    } finally {
+      await prisma.workstation.delete({ where: { id: wsNoTeam.id } });
+    }
+  });
+
+  it("POST /api/tasks/templates with employee existing but teamId null returns 404", async () => {
+    const bcryptjs = (await import("bcryptjs")).default;
+    const empNoTeam = await prisma.user.create({
+      data: {
+        name: "Orphan Emp",
+        email: `orphan-emp-${Date.now()}@test.com`,
+        passwordHash: await bcryptjs.hash("password", 10),
+        role: "EMPLOYEE",
+      },
+    });
+    try {
+      const agent = request.agent(app);
+      await agent.post("/api/auth/login").send({ email: "mgr@test.com", password: "password" });
+      const res = await agent.post("/api/tasks/templates").send({
+        title: "Test",
+        assignedToEmployeeId: empNoTeam.id,
+        isRecurring: false,
+      });
+      expect(res.status).toBe(404);
+      expect(res.body).toMatchObject({ error: "Not found" });
+    } finally {
+      await prisma.user.delete({ where: { id: empNoTeam.id } });
+    }
+  });
+
+  it("POST /api/tasks/templates with assignedToEmployeeId as MANAGER returns 404", async () => {
+    const manager = await prisma.user.findUnique({
+      where: { email: "mgr@test.com" },
+      select: { id: true },
+    });
+    expect(manager).not.toBeNull();
+    const agent = request.agent(app);
+    await agent.post("/api/auth/login").send({ email: "mgr@test.com", password: "password" });
+    const res = await agent.post("/api/tasks/templates").send({
+      title: "Test",
+      assignedToEmployeeId: manager!.id,
+      isRecurring: false,
+    });
+    expect(res.status).toBe(404);
+    expect(res.body).toMatchObject({ error: "Not found" });
+  });
+
+  it("POST /api/tasks/templates with workstation and employee from different teams returns 400", async () => {
+    const bcryptjs = (await import("bcryptjs")).default;
+    const manager = await prisma.user.findUnique({
+      where: { email: "mgr@test.com" },
+      select: { id: true },
+    });
+    expect(manager).not.toBeNull();
+    const team1 = await prisma.team.findFirst({
+      where: { managerId: manager!.id },
+      select: { id: true },
+    });
+    expect(team1).not.toBeNull();
+    const secondTeam = await prisma.team.create({
+      data: { name: "Second Team Same Mgr", managerId: manager!.id },
+    });
+    const wsTeam1 = await prisma.workstation.findFirst({
+      where: { teamId: team1!.id },
+      select: { id: true },
+    });
+    const empTeam2 = await prisma.user.create({
+      data: {
+        name: "Emp Team 2",
+        email: `emp-t2-${Date.now()}@test.com`,
+        passwordHash: await bcryptjs.hash("password", 10),
+        role: "EMPLOYEE",
+        teamId: secondTeam.id,
+      },
+    });
+    try {
+      expect(wsTeam1).not.toBeNull();
+      const agent = request.agent(app);
+      await agent.post("/api/auth/login").send({ email: "mgr@test.com", password: "password" });
+      const res = await agent.post("/api/tasks/templates").send({
+        title: "Test",
+        workstationId: wsTeam1!.id,
+        assignedToEmployeeId: empTeam2.id,
+        isRecurring: false,
+      });
+      expect(res.status).toBe(400);
+      expect(res.body).toMatchObject({
+        error: "Workstation and employee must belong to the same team",
+      });
+    } finally {
+      await prisma.user.delete({ where: { id: empTeam2.id } });
+      await prisma.team.delete({ where: { id: secondTeam.id } });
+    }
+  });
+
+  it("POST /api/tasks/templates with workstation and employee in same team returns 201", async () => {
+    const manager = await prisma.user.findUnique({
+      where: { email: "mgr@test.com" },
+      select: { id: true },
+    });
+    expect(manager).not.toBeNull();
+    const team = await prisma.team.findFirst({
+      where: { managerId: manager!.id },
+      select: { id: true },
+    });
+    expect(team).not.toBeNull();
+    const workstation = await prisma.workstation.findFirst({
+      where: { teamId: team!.id },
+      select: { id: true },
+    });
+    const employee = await prisma.user.findFirst({
+      where: { teamId: team!.id, role: "EMPLOYEE" },
+      select: { id: true },
+    });
+    expect(workstation).not.toBeNull();
+    expect(employee).not.toBeNull();
+    const agent = request.agent(app);
+    await agent.post("/api/auth/login").send({ email: "mgr@test.com", password: "password" });
+    const res = await agent.post("/api/tasks/templates").send({
+      title: "Same-team task",
+      workstationId: workstation!.id,
+      assignedToEmployeeId: employee!.id,
+      isRecurring: false,
+    });
+    expect(res.status).toBe(201);
+    expect(res.body).toHaveProperty("id");
+    expect(res.body.workstation).toBeDefined();
+    expect(res.body.assignedToEmployee).toBeDefined();
+    await prisma.taskTemplate.delete({ where: { id: res.body.id } }).catch(() => {});
+  });
+
+  it("TaskTemplate invariant: direct Prisma create with cross-team workstation and employee throws", async () => {
+    const manager = await prisma.user.findUnique({
+      where: { email: "mgr@test.com" },
+      select: { id: true },
+    });
+    expect(manager).not.toBeNull();
+    const team1 = await prisma.team.findFirst({
+      where: { managerId: manager!.id },
+      select: { id: true },
+    });
+    expect(team1).not.toBeNull();
+    const secondTeam = await prisma.team.create({
+      data: { name: "Second Team Invariant", managerId: manager!.id },
+    });
+    const wsTeam1 = await prisma.workstation.findFirst({
+      where: { teamId: team1!.id },
+      select: { id: true },
+    });
+    const bcryptjs = (await import("bcryptjs")).default;
+    const empTeam2 = await prisma.user.create({
+      data: {
+        name: "Emp Team 2 Inv",
+        email: `emp-inv-${Date.now()}@test.com`,
+        passwordHash: await bcryptjs.hash("password", 10),
+        role: "EMPLOYEE",
+        teamId: secondTeam.id,
+      },
+    });
+    try {
+      expect(wsTeam1).not.toBeNull();
+      await expect(
+        prisma.taskTemplate.create({
+          data: {
+            title: "Cross-team template",
+            createdById: manager!.id,
+            workstationId: wsTeam1!.id,
+            assignedToEmployeeId: empTeam2.id,
+            isRecurring: false,
+          },
+        })
+      ).rejects.toThrow("Workstation and employee must belong to the same team");
+    } finally {
+      await prisma.user.delete({ where: { id: empTeam2.id } });
+      await prisma.team.delete({ where: { id: secondTeam.id } });
+    }
+  });
 });
 
 describe("Daily tasks API", () => {

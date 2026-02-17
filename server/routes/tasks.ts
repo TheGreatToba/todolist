@@ -6,7 +6,7 @@ import { sendErrorResponse } from '../lib/errors';
 import { getAuthOrThrow } from '../middleware/requireAuth';
 import { assignDailyTasksForDate } from '../jobs/daily-task-assignment';
 import { logger } from '../lib/logger';
-import { getManagerTeamIds, getManagerTeams, isTeamManagedBy } from '../lib/manager-teams';
+import { getManagerTeamIds, getManagerTeams } from '../lib/manager-teams';
 import { paramString } from '../lib/params';
 import { parseDateQuery } from '../lib/parse-date-query';
 
@@ -145,34 +145,46 @@ export const handleCreateTaskTemplate: RequestHandler = async (req, res) => {
     if (!payload) return;
     const body = CreateTaskTemplateSchema.parse(req.body);
 
-    // Ensure workstation and/or employee belong to a team managed by this manager
+    // Load managed team IDs once for authz checks (Set for O(1) .has() when many teams)
+    const managerTeamIds = new Set(await getManagerTeamIds(payload.userId));
+
+    let workstationTeamId: string | null = null;
     if (body.workstationId) {
       const workstation = await prisma.workstation.findUnique({
         where: { id: body.workstationId },
         select: { teamId: true },
       });
-      if (!workstation) {
-        res.status(404).json({ error: 'Workstation not found' });
+      if (!workstation || !workstation.teamId || !managerTeamIds.has(workstation.teamId)) {
+        res.status(404).json({ error: 'Not found' });
         return;
       }
-      if (!workstation.teamId || !(await isTeamManagedBy(workstation.teamId, payload.userId))) {
-        res.status(403).json({ error: 'Workstation is not in one of your teams' });
-        return;
-      }
+      workstationTeamId = workstation.teamId;
     }
+
+    let employeeTeamId: string | null = null;
     if (body.assignedToEmployeeId) {
-      const employee = await prisma.user.findUnique({
+      const user = await prisma.user.findUnique({
         where: { id: body.assignedToEmployeeId },
-        select: { teamId: true },
+        select: { teamId: true, role: true },
       });
-      if (!employee) {
-        res.status(404).json({ error: 'Employee not found' });
+      if (
+        !user ||
+        user.role !== 'EMPLOYEE' ||
+        !user.teamId ||
+        !managerTeamIds.has(user.teamId)
+      ) {
+        res.status(404).json({ error: 'Not found' });
         return;
       }
-      if (!employee.teamId || !(await isTeamManagedBy(employee.teamId, payload.userId))) {
-        res.status(403).json({ error: 'Employee is not in one of your teams' });
-        return;
-      }
+      employeeTeamId = user.teamId;
+    }
+
+    // When both are provided, they must belong to the same team (no cross-team mixed template)
+    if (workstationTeamId !== null && employeeTeamId !== null && workstationTeamId !== employeeTeamId) {
+      res.status(400).json({
+        error: 'Workstation and employee must belong to the same team',
+      });
+      return;
     }
 
     const taskTemplate = await prisma.taskTemplate.create({
