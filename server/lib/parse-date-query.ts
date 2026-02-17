@@ -3,6 +3,11 @@ const DATE_QUERY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 /**
  * Parses an optional date query (YYYY-MM-DD). Returns start-of-day Date or null if invalid.
  * Rejects impossible calendar dates (e.g. 2025-02-31) via round-trip validation.
+ *
+ * Default: when value is undefined, empty string, or empty-first-element array, returns
+ * today at 00:00:00. If you reuse this elsewhere, rely on this default only when
+ * "no date = today" is the intended behaviour.
+ *
  * Used by GET /api/tasks/daily, GET /api/manager/dashboard, and POST /api/cron/daily-tasks.
  */
 export function parseDateQuery(value: string | string[] | undefined): Date | null {

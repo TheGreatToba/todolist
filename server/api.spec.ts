@@ -347,6 +347,26 @@ describe("Daily tasks API", () => {
   });
 });
 
+describe("Cron API", () => {
+  const originalCronSecret = process.env.CRON_SECRET;
+
+  afterAll(() => {
+    if (originalCronSecret === undefined) delete process.env.CRON_SECRET;
+    else process.env.CRON_SECRET = originalCronSecret;
+  });
+
+  it("POST /api/cron/daily-tasks with invalid date returns 400 (route + auth + validation)", async () => {
+    process.env.CRON_SECRET = "test-cron-secret";
+
+    const res = await request(app)
+      .post("/api/cron/daily-tasks?date=2025-02-31")
+      .set("x-cron-secret", "test-cron-secret");
+
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ error: expect.stringContaining("YYYY-MM-DD") });
+  });
+});
+
 describe("Security middlewares", () => {
   describe("CSRF validation", () => {
     const originalNodeEnv = process.env.NODE_ENV;
