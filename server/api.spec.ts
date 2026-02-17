@@ -355,6 +355,26 @@ describe("Cron API", () => {
     else process.env.CRON_SECRET = originalCronSecret;
   });
 
+  it("POST /api/cron/daily-tasks with missing x-cron-secret returns 401", async () => {
+    process.env.CRON_SECRET = "test-cron-secret";
+
+    const res = await request(app).post("/api/cron/daily-tasks");
+
+    expect(res.status).toBe(401);
+    expect(res.body).toMatchObject({ error: "Unauthorized" });
+  });
+
+  it("POST /api/cron/daily-tasks with wrong x-cron-secret returns 401", async () => {
+    process.env.CRON_SECRET = "test-cron-secret";
+
+    const res = await request(app)
+      .post("/api/cron/daily-tasks")
+      .set("x-cron-secret", "wrong-secret");
+
+    expect(res.status).toBe(401);
+    expect(res.body).toMatchObject({ error: "Unauthorized" });
+  });
+
   it("POST /api/cron/daily-tasks with invalid date returns 400 (route + auth + validation)", async () => {
     process.env.CRON_SECRET = "test-cron-secret";
 
