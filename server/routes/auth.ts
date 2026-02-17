@@ -73,51 +73,57 @@ export const handleSignup: RequestHandler = async (req, res) => {
   try {
     const body = SignupSchema.parse(req.body);
 
-    // Check if user already exists
-    const existingUser = await prisma.user.findUnique({
-      where: { email: body.email },
-    });
+    const user = await prisma.$transaction(async (tx) => {
+      // Check if user already exists
+      const existingUser = await tx.user.findUnique({
+        where: { email: body.email },
+      });
 
-    if (existingUser) {
-      res.status(400).json({ error: 'Email already registered' });
-      return;
-    }
+      if (existingUser) {
+        // short-circuit by throwing; sendErrorResponse will map this
+        throw new AppError(400, 'Email already registered');
+      }
 
-    // Hash password
-    const passwordHash = await hashPassword(body.password);
+      // Hash password
+      const passwordHash = await hashPassword(body.password);
 
-    // Create user
-    const user = await prisma.user.create({
-      data: {
-        name: body.name,
-        email: body.email,
-        passwordHash,
-        role: body.role,
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        teamId: true,
-      },
-    });
-
-    // If manager, create a default team
-    if (body.role === 'MANAGER') {
-      const team = await prisma.team.create({
+      // Create user
+      const createdUser = await tx.user.create({
         data: {
-          name: `${body.name}'s Team`,
-          managerId: user.id,
+          name: body.name,
+          email: body.email,
+          passwordHash,
+          role: body.role,
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          teamId: true,
         },
       });
 
-      // Update user with team ID
-      await prisma.user.update({
-        where: { id: user.id },
-        data: { teamId: team.id },
-      });
-    }
+      // If manager, create a default team and attach it to the user
+      if (body.role === 'MANAGER') {
+        const team = await tx.team.create({
+          data: {
+            name: `${body.name}'s Team`,
+            managerId: createdUser.id,
+          },
+        });
+
+        await tx.user.update({
+          where: { id: createdUser.id },
+          data: { teamId: team.id },
+        });
+
+        // Reflect the updated teamId in the returned object
+        createdUser.teamId = team.id;
+      }
+
+      return createdUser;
+    });
 
     const token = createTokenOrFail(req, res, user);
     if (!token) return;

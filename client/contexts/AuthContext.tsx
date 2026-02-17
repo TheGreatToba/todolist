@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { User } from '@shared/api';
+import { User, LoginResponse, SignupResponse, ProfileResponse } from '@shared/api';
 import { fetchWithCsrf } from '@/lib/api';
 
 interface AuthContextType {
@@ -25,7 +25,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const response = await fetch('/api/auth/profile', { credentials: 'include' });
 
       if (response.ok) {
-        const userData = await response.json();
+        const userData: ProfileResponse = await response.json();
         setUser(userData);
         setToken('cookie');
       } else {
@@ -59,7 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error(data.error || 'Login failed');
       }
 
-      const { user: userData } = await response.json();
+      const { user: userData }: LoginResponse = await response.json();
       setToken('cookie');
       setUser(userData);
     } catch (err) {
@@ -86,7 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error(data.error || 'Signup failed');
       }
 
-      const { user: userData } = await response.json();
+      const { user: userData }: SignupResponse = await response.json();
       setToken('cookie');
       setUser(userData);
     } catch (err) {

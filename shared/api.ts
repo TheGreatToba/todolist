@@ -20,8 +20,27 @@ export interface User {
   teamId?: string;
 }
 
+/** Legacy alias kept for backwards compatibility. */
 export interface AuthResponse {
-  token: string;
+  user: User;
+}
+
+/** Response payload for POST /api/auth/login */
+export interface LoginResponse {
+  user: User;
+}
+
+/** Response payload for POST /api/auth/signup */
+export interface SignupResponse {
+  user: User;
+}
+
+/** Response payload for GET /api/auth/profile */
+export type ProfileResponse = User;
+
+/** Response payload for POST /api/auth/set-password */
+export interface SetPasswordResponse {
+  success: boolean;
   user: User;
 }
 

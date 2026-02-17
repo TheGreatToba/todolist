@@ -90,7 +90,15 @@ describe("sendErrorResponse", () => {
 
     it("ZodError returns 400 with details", () => {
       const res = mockRes() as unknown as Response;
-      const err = new ZodError([{ path: ["x"], message: "Required", code: "invalid_type" }]);
+      const err = new ZodError([
+        {
+          path: ["x"],
+          message: "Required",
+          code: "invalid_type",
+          expected: "string",
+          received: "undefined",
+        },
+      ]);
       sendErrorResponse(res, err);
       expect(res.status).toHaveBeenCalledWith(400);
       expect(res.json).toHaveBeenCalledWith({

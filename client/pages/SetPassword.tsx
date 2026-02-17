@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Loader2, Lock } from 'lucide-react';
+import { SetPasswordResponse } from '@shared/api';
 
 export default function SetPassword() {
   const navigate = useNavigate();
@@ -49,9 +50,10 @@ export default function SetPassword() {
         body: JSON.stringify({ token, password }),
       });
 
-      const data = await response.json();
+      const raw = await response.json();
 
       if (response.ok) {
+        const data = raw as SetPasswordResponse;
         setSuccess(true);
         // AuthContext will get user from /api/auth/profile on next request,
         // but we need to trigger a refresh. The cookie is set, so we can
@@ -62,8 +64,9 @@ export default function SetPassword() {
         // We need to either: 1) add setUser to AuthContext, or 2) force
         // window.location.href to /employee to trigger full reload and
         // profile fetch. Option 2 is simpler for now.
-        window.location.href = data.user?.role === 'MANAGER' ? '/manager' : '/employee';
+        window.location.href = data.user.role === 'MANAGER' ? '/manager' : '/employee';
       } else {
+        const data = raw as { error?: string };
         setError(data.error || 'Failed to set password');
       }
     } catch {
