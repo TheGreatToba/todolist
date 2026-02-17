@@ -385,6 +385,21 @@ describe("Cron API", () => {
     expect(res.status).toBe(400);
     expect(res.body).toMatchObject({ error: expect.stringContaining("YYYY-MM-DD") });
   });
+
+  it("POST /api/cron/daily-tasks with valid secret and date returns 200 (happy path)", async () => {
+    process.env.CRON_SECRET = "test-cron-secret";
+
+    const res = await request(app)
+      .post("/api/cron/daily-tasks?date=2025-02-15")
+      .set("x-cron-secret", "test-cron-secret");
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ success: true, date: "2025-02-15" });
+    expect(typeof res.body.created).toBe("number");
+    expect(typeof res.body.skipped).toBe("number");
+    expect(res.body.created).toBeGreaterThanOrEqual(0);
+    expect(res.body.skipped).toBeGreaterThanOrEqual(0);
+  });
 });
 
 describe("Security middlewares", () => {
