@@ -38,6 +38,14 @@ function logInvalidRole(
   logger.structured('warn', payload);
 }
 
+/** Safely extract Prisma P2002 meta.target as string array (no `as any`). */
+function getP2002TargetFields(err: { meta?: unknown } | null | undefined): string[] {
+  if (!err?.meta || typeof err.meta !== 'object' || !('target' in err.meta)) return [];
+  const target = (err.meta as { target?: unknown }).target;
+  if (!Array.isArray(target)) return [];
+  return target.map((t) => String(t));
+}
+
 /** Returns JWT payload for cookie, or null after logging and sending 500. */
 function createTokenOrFail(
   req: Request,
@@ -121,11 +129,10 @@ export const handleSignup: RequestHandler = async (req, res) => {
     res.status(201).json({ user });
   } catch (error) {
     // Let the DB unique constraint handle email races; present a domain-specific message.
-    const prismaError = error as { code?: string; meta?: { target?: unknown } };
-    const target = prismaError?.meta && (prismaError.meta as any).target;
-    const targets = Array.isArray(target) ? target : [];
+    const prismaError = error as { code?: string; meta?: unknown };
+    const targets = getP2002TargetFields(prismaError);
     const isEmailUniqueViolation =
-      prismaError?.code === 'P2002' && targets.some((t) => String(t).toLowerCase().includes('email'));
+      prismaError?.code === 'P2002' && targets.some((t) => t.toLowerCase().includes('email'));
 
     if (isEmailUniqueViolation) {
       res.status(409).json({ error: 'Email already registered', code: 'CONFLICT' });

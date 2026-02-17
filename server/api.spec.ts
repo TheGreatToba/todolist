@@ -1173,6 +1173,30 @@ describe("Workstations and employees API", () => {
     expect(res.body).toMatchObject({ name });
   });
 
+  it("POST /api/workstations duplicate (teamId, name) returns 409 CONFLICT (P2002 non-email fallback)", async () => {
+    const manager = await prisma.user.findUnique({
+      where: { email: "mgr@test.com" },
+      select: { teamId: true },
+    });
+    expect(manager?.teamId).toBeTruthy();
+
+    const agent = request.agent(app);
+    await agent.post("/api/auth/login").send({ email: "mgr@test.com", password: "password" });
+
+    const name = `P2002-fallback-${Date.now()}`;
+    const first = await agent.post("/api/workstations").send({ name, teamId: manager!.teamId! });
+    expect(first.status).toBe(201);
+
+    const second = await agent.post("/api/workstations").send({ name, teamId: manager!.teamId! });
+    expect(second.status).toBe(409);
+    expect(second.body).toMatchObject({
+      error: "A record with this value already exists.",
+      code: "CONFLICT",
+    });
+
+    await prisma.workstation.delete({ where: { id: first.body.id } }).catch(() => {});
+  });
+
   it("POST /api/workstations with valid teamId creates workstation in that team", async () => {
     const manager = await prisma.user.findUnique({
       where: { email: "mgr@test.com" },
