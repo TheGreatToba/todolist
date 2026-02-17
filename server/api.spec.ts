@@ -11,6 +11,10 @@ import { createApp } from "./index";
 import prisma from "./lib/db";
 import { validateCsrf } from "./lib/csrf";
 import { redactEmailForLog, emailHashForLog, EMAIL_HASH_FORMAT_REGEX } from "./lib/log-pii";
+import {
+  TASK_TEMPLATE_SAME_TEAM_MESSAGE,
+  TASK_TEMPLATE_BULK_UPDATE_FORBIDDEN_MESSAGE,
+} from "./lib/task-template-invariant";
 import type { Request, Response, NextFunction } from "express";
 
 const app = createApp();
@@ -472,7 +476,7 @@ describe("Permissions - role-based access", () => {
       });
       expect(res.status).toBe(400);
       expect(res.body).toMatchObject({
-        error: "Workstation and employee must belong to the same team",
+        error: TASK_TEMPLATE_SAME_TEAM_MESSAGE,
       });
     } finally {
       await prisma.user.delete({ where: { id: empTeam2.id } });
@@ -556,7 +560,7 @@ describe("Permissions - role-based access", () => {
             isRecurring: false,
           },
         })
-      ).rejects.toThrow("Workstation and employee must belong to the same team");
+      ).rejects.toThrow(TASK_TEMPLATE_SAME_TEAM_MESSAGE);
     } finally {
       await prisma.user.delete({ where: { id: empTeam2.id } });
       await prisma.team.delete({ where: { id: secondTeam.id } });
@@ -614,10 +618,10 @@ describe("Permissions - role-based access", () => {
         prisma.taskTemplate.update({
           where: { id: template.id },
           data: {
-            assignedToEmployeeId: empTeam2.id,
+            assignedToEmployeeId: { set: empTeam2.id },
           },
         })
-      ).rejects.toThrow("Workstation and employee must belong to the same team");
+      ).rejects.toThrow(TASK_TEMPLATE_SAME_TEAM_MESSAGE);
     } finally {
       await prisma.taskTemplate.delete({ where: { id: template.id } }).catch(() => {});
       await prisma.user.delete({ where: { id: empTeam2.id } });
@@ -683,10 +687,10 @@ describe("Permissions - role-based access", () => {
             isRecurring: false,
           },
           update: {
-            assignedToEmployeeId: empTeam2.id,
+            assignedToEmployeeId: { set: empTeam2.id },
           },
         })
-      ).rejects.toThrow("Workstation and employee must belong to the same team");
+      ).rejects.toThrow(TASK_TEMPLATE_SAME_TEAM_MESSAGE);
     } finally {
       await prisma.taskTemplate.delete({ where: { id: template.id } }).catch(() => {});
       await prisma.user.delete({ where: { id: empTeam2.id } });
@@ -741,7 +745,7 @@ describe("Permissions - role-based access", () => {
           },
           update: {},
         })
-      ).rejects.toThrow("Workstation and employee must belong to the same team");
+      ).rejects.toThrow(TASK_TEMPLATE_SAME_TEAM_MESSAGE);
     } finally {
       await prisma.user.delete({ where: { id: empTeam2.id } });
       await prisma.team.delete({ where: { id: secondTeam.id } });
@@ -768,11 +772,9 @@ describe("Permissions - role-based access", () => {
     await expect(
       prisma.taskTemplate.updateMany({
         where: { workstationId: wsTeam1!.id },
-        data: { assignedToEmployeeId: null },
+        data: { assignedToEmployeeId: { set: null } },
       })
-    ).rejects.toThrow(
-      "Bulk updates to workstationId/assignedToEmployeeId are not allowed; update templates individually"
-    );
+    ).rejects.toThrow(TASK_TEMPLATE_BULK_UPDATE_FORBIDDEN_MESSAGE);
   });
 });
 
