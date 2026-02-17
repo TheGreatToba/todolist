@@ -7,6 +7,7 @@ import { getAuthOrThrow } from '../middleware/requireAuth';
 import { assignDailyTasksForDate } from '../jobs/daily-task-assignment';
 import { logger } from '../lib/logger';
 import { getManagerTeamIds, getManagerTeams } from '../lib/manager-teams';
+import { parseDateQuery } from '../lib/parse-date-query';
 
 const CreateTaskTemplateSchema = z.object({
   title: z.string().min(1),
@@ -23,26 +24,6 @@ const CreateTaskTemplateSchema = z.object({
 const UpdateDailyTaskSchema = z.object({
   isCompleted: z.boolean(),
 });
-
-const DATE_QUERY_REGEX = /^\d{4}-\d{2}-\d{2}$/;
-
-/**
- * Parses an optional date query (YYYY-MM-DD). Returns start-of-day Date or null if invalid.
- * Use for GET /api/tasks/daily and GET /api/manager/dashboard to avoid 500 on bad input.
- */
-function parseDateQuery(value: string | string[] | undefined): Date | null {
-  const raw = typeof value === 'string' ? value : Array.isArray(value) ? value[0] : undefined;
-  if (!raw || typeof raw !== 'string') {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return today;
-  }
-  if (!DATE_QUERY_REGEX.test(raw)) return null;
-  const date = new Date(raw + 'T12:00:00');
-  if (Number.isNaN(date.getTime())) return null;
-  date.setHours(0, 0, 0, 0);
-  return date;
-}
 
 // Get all daily tasks for an employee on a specific date
 export const handleGetEmployeeDailyTasks: RequestHandler = async (req, res) => {
@@ -284,14 +265,21 @@ export const handleDailyTaskAssignment: RequestHandler = async (req, res) => {
       return;
     }
 
-    const dateParam = req.query.date as string | undefined;
-    const targetDate = dateParam ? new Date(dateParam) : new Date();
+    const targetDate = parseDateQuery(req.query.date);
+    if (targetDate === null) {
+      res.status(400).json({ error: 'Invalid date. Use YYYY-MM-DD.' });
+      return;
+    }
 
     const result = await assignDailyTasksForDate(targetDate);
 
+    const y = targetDate.getFullYear();
+    const m = String(targetDate.getMonth() + 1).padStart(2, '0');
+    const d = String(targetDate.getDate()).padStart(2, '0');
+
     res.json({
       success: true,
-      date: targetDate.toISOString().split('T')[0],
+      date: `${y}-${m}-${d}`,
       ...result,
     });
   } catch (error) {

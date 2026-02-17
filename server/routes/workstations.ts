@@ -16,6 +16,7 @@ function generateSecureToken(): string {
 
 const CreateWorkstationSchema = z.object({
   name: z.string().min(1),
+  teamId: z.string().optional(),
 });
 
 const CreateEmployeeSchema = z.object({
@@ -71,14 +72,25 @@ export const handleGetWorkstations: RequestHandler = async (req, res) => {
   }
 };
 
-// Create a new workstation (scoped to manager's first team; name unique per team)
+// Create a new workstation (scoped to a managed team; name unique per team).
+// Optional teamId: when manager has multiple teams, specify which team. Otherwise first team is used.
 export const handleCreateWorkstation: RequestHandler = async (req, res) => {
   try {
     const payload = getAuthOrThrow(req, res);
     if (!payload) return;
     const body = CreateWorkstationSchema.parse(req.body);
 
-    const team = await getManagerFirstTeam(payload.userId);
+    let team: Awaited<ReturnType<typeof getManagerFirstTeam>>;
+    if (body.teamId) {
+      const allowed = await isTeamManagedBy(body.teamId, payload.userId);
+      if (!allowed) {
+        res.status(403).json({ error: 'Team not found or you do not manage this team.' });
+        return;
+      }
+      team = await prisma.team.findUnique({ where: { id: body.teamId } });
+    } else {
+      team = await getManagerFirstTeam(payload.userId);
+    }
     if (!team) {
       res.status(404).json({ error: 'Team not found' });
       return;

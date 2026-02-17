@@ -22,7 +22,7 @@ function isToday(dateStr: string): boolean {
 function formatTaskDateLabel(dateStr: string): string {
   if (isToday(dateStr)) return "Today's Tasks";
   const d = new Date(dateStr + 'T12:00:00');
-  return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) + ' – Tasks';
+  return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) + ' - Tasks';
 }
 
 export default function EmployeeDashboard() {
@@ -262,13 +262,13 @@ export default function EmployeeDashboard() {
                         )}
                         {task.taskTemplate.workstation && (
                           <p className="text-xs text-muted-foreground mt-2">
-                            📍 {task.taskTemplate.workstation.name}
+                            WS: {task.taskTemplate.workstation.name}
                           </p>
                         )}
                       </div>
                       {task.completedAt && (
                         <div className="text-xs text-primary font-medium flex-shrink-0">
-                          ✓ Done
+                          Done
                         </div>
                       )}
                     </div>
