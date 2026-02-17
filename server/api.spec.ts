@@ -37,6 +37,32 @@ describe("Auth API", () => {
     expect(res.body.user.email).toBe(email);
   });
 
+  it("POST /api/auth/signup with duplicate MANAGER email returns 409 CONFLICT", async () => {
+    const email = `dup-mgr-${Date.now()}@test.com`;
+
+    const first = await request(app)
+      .post("/api/auth/signup")
+      .send({
+        name: "Dup Manager 1",
+        email,
+        password: "password123",
+        role: "MANAGER",
+      });
+    expect(first.status).toBe(201);
+
+    const second = await request(app)
+      .post("/api/auth/signup")
+      .send({
+        name: "Dup Manager 2",
+        email,
+        password: "password123",
+        role: "MANAGER",
+      });
+
+    expect(second.status).toBe(409);
+    expect(second.body).toMatchObject({ error: "Email already registered", code: "CONFLICT" });
+  });
+
   it("POST /api/auth/signup with EMPLOYEE returns 400 (only MANAGER allowed)", async () => {
     const res = await request(app)
       .post("/api/auth/signup")
@@ -81,7 +107,8 @@ describe("Auth API", () => {
     const res = await agent.get("/api/auth/profile");
 
     expect(res.status).toBe(200);
-    expect(res.body.email).toBe("mgr@test.com");
+    expect(res.body).toHaveProperty("user");
+    expect(res.body.user.email).toBe("mgr@test.com");
   });
 
   it("POST /api/auth/login with invalid role in DB returns 500 and logs structured event (no JWT)", async () => {

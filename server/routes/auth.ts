@@ -121,11 +121,17 @@ export const handleSignup: RequestHandler = async (req, res) => {
     res.status(201).json({ user });
   } catch (error) {
     // Let the DB unique constraint handle email races; present a domain-specific message.
-    const prismaError = error as { code?: string };
-    if (prismaError && prismaError.code === 'P2002') {
+    const prismaError = error as { code?: string; meta?: { target?: unknown } };
+    const target = prismaError?.meta && (prismaError.meta as any).target;
+    const targets = Array.isArray(target) ? target : [];
+    const isEmailUniqueViolation =
+      prismaError?.code === 'P2002' && targets.some((t) => String(t).toLowerCase().includes('email'));
+
+    if (isEmailUniqueViolation) {
       res.status(409).json({ error: 'Email already registered', code: 'CONFLICT' });
       return;
     }
+
     sendErrorResponse(res, error, req);
   }
 };

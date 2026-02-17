@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Loader2, Lock } from 'lucide-react';
-import { SetPasswordResponse } from '@shared/api';
 import { z } from 'zod';
 
 const SetPasswordResponseSchema = z.object({
@@ -69,7 +68,7 @@ export default function SetPassword() {
       const raw = await response.json();
 
       if (response.ok) {
-        const data: SetPasswordResponse = SetPasswordResponseSchema.parse(raw);
+        const data = SetPasswordResponseSchema.parse(raw);
         setSuccess(true);
         // AuthContext will get user from /api/auth/profile on next request,
         // but we need to trigger a refresh. The cookie is set, so we can

@@ -17,7 +17,7 @@ export interface User {
   name: string;
   email: string;
   role: 'EMPLOYEE' | 'MANAGER';
-  teamId?: string;
+  teamId?: string | null;
 }
 
 /** Legacy alias kept for backwards compatibility. */
