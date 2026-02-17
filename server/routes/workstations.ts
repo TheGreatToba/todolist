@@ -8,6 +8,7 @@ import { logger } from '../lib/logger';
 import { getAuthOrThrow } from '../middleware/requireAuth';
 import { sendSetPasswordEmail } from '../lib/email';
 import { getSetPasswordTokenExpiryHours } from '../lib/set-password-expiry';
+import { getManagerTeamIds, getManagerFirstTeam, isTeamManagedBy } from '../lib/manager-teams';
 
 function generateSecureToken(): string {
   return crypto.randomBytes(32).toString('hex');
@@ -33,26 +34,23 @@ function paramString(value: string | string[] | undefined): string | null {
   return null;
 }
 
-// Get all workstations used by the manager's team (filtered by team scope)
+// Get all workstations used by the manager's teams (all managed teams)
 export const handleGetWorkstations: RequestHandler = async (req, res) => {
   try {
     const payload = getAuthOrThrow(req, res);
     if (!payload) return;
-    const team = await prisma.team.findFirst({
-      where: { managerId: payload.userId },
-    });
+    const teamIds = await getManagerTeamIds(payload.userId);
 
-    if (!team) {
+    if (teamIds.length === 0) {
       res.status(404).json({ error: 'Team not found' });
       return;
     }
 
-    // Return workstations belonging to this team (name is unique per team)
     const workstations = await prisma.workstation.findMany({
-      where: { teamId: team.id },
+      where: { teamId: { in: teamIds } },
       include: {
         employees: {
-          where: { employee: { teamId: team.id } },
+          where: { employee: { teamId: { in: teamIds } } },
           include: {
             employee: {
               select: {
@@ -73,16 +71,14 @@ export const handleGetWorkstations: RequestHandler = async (req, res) => {
   }
 };
 
-// Create a new workstation (scoped to manager's team; name unique per team)
+// Create a new workstation (scoped to manager's first team; name unique per team)
 export const handleCreateWorkstation: RequestHandler = async (req, res) => {
   try {
     const payload = getAuthOrThrow(req, res);
     if (!payload) return;
     const body = CreateWorkstationSchema.parse(req.body);
 
-    const team = await prisma.team.findFirst({
-      where: { managerId: payload.userId },
-    });
+    const team = await getManagerFirstTeam(payload.userId);
     if (!team) {
       res.status(404).json({ error: 'Team not found' });
       return;
@@ -124,17 +120,13 @@ export const handleCreateEmployee: RequestHandler = async (req, res) => {
       return;
     }
 
-    // Get the manager's team
-    const team = await prisma.team.findFirst({
-      where: { managerId: payload.userId },
-    });
-
+    const team = await getManagerFirstTeam(payload.userId);
     if (!team) {
       res.status(404).json({ error: 'Team not found' });
       return;
     }
 
-    // Verify that all workstations exist and belong to the manager's team
+    // Verify that all workstations exist and belong to one of the manager's teams
     const requestedWorkstations = await prisma.workstation.findMany({
       where: { id: { in: body.workstationIds } },
     });
@@ -144,10 +136,11 @@ export const handleCreateEmployee: RequestHandler = async (req, res) => {
       return;
     }
 
-    const allowed = requestedWorkstations.every((ws) => ws.teamId === team.id);
+    const teamIds = await getManagerTeamIds(payload.userId);
+    const allowed = requestedWorkstations.every((ws) => ws.teamId && teamIds.includes(ws.teamId));
     if (!allowed) {
       res.status(403).json({
-        error: 'One or more workstations do not belong to your team.',
+        error: 'One or more workstations do not belong to your team(s).',
       });
       return;
     }
@@ -194,7 +187,9 @@ export const handleCreateEmployee: RequestHandler = async (req, res) => {
       },
     });
 
-    // Create daily tasks for this employee for today (from existing templates)
+    // Create daily tasks for this employee for today (from workstation-scoped templates only).
+    // Templates with assignedToEmployeeId are not applied here: they target a specific user
+    // and are created by the daily job or when the manager assigns a task to an existing employee.
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -258,10 +253,8 @@ export const handleDeleteWorkstation: RequestHandler = async (req, res) => {
       return;
     }
 
-    const team = await prisma.team.findFirst({
-      where: { managerId: payload.userId },
-    });
-    if (!team) {
+    const teamIds = await getManagerTeamIds(payload.userId);
+    if (teamIds.length === 0) {
       res.status(404).json({ error: 'Team not found' });
       return;
     }
@@ -269,7 +262,7 @@ export const handleDeleteWorkstation: RequestHandler = async (req, res) => {
     const workstation = await prisma.workstation.findUnique({
       where: { id: workstationId },
     });
-    if (!workstation || workstation.teamId !== team.id) {
+    if (!workstation || !workstation.teamId || !teamIds.includes(workstation.teamId)) {
       res.status(404).json({ error: 'Workstation not found' });
       return;
     }
@@ -292,39 +285,39 @@ export const handleDeleteWorkstation: RequestHandler = async (req, res) => {
   }
 };
 
-// Get team members with their workstations
+// Get team members (from all managed teams) with their workstations
 export const handleGetTeamMembers: RequestHandler = async (req, res) => {
   try {
     const payload = getAuthOrThrow(req, res);
     if (!payload) return;
-    const team = await prisma.team.findFirst({
-      where: { managerId: payload.userId },
+    const teamIds = await getManagerTeamIds(payload.userId);
+
+    if (teamIds.length === 0) {
+      res.status(404).json({ error: 'Team not found' });
+      return;
+    }
+
+    const membersData = await prisma.user.findMany({
+      where: {
+        teamId: { in: teamIds },
+        role: 'EMPLOYEE',
+      },
       include: {
-        members: {
-          where: { role: 'EMPLOYEE' },
+        workstations: {
           include: {
-            workstations: {
-              include: {
-                workstation: {
-                  select: {
-                    id: true,
-                    name: true,
-                  },
-                },
+            workstation: {
+              select: {
+                id: true,
+                name: true,
               },
             },
           },
         },
       },
+      orderBy: { name: 'asc' },
     });
 
-    if (!team) {
-      res.status(404).json({ error: 'Team not found' });
-      return;
-    }
-
-    // Transform the data for easier frontend consumption
-    const members = team.members.map((member) => ({
+    const members = membersData.map((member) => ({
       id: member.id,
       name: member.name,
       email: member.email,
@@ -364,17 +357,17 @@ export const handleUpdateEmployeeWorkstations: RequestHandler = async (req, res)
       return;
     }
 
-    // Verify manager owns this employee's team
-    const managerTeam = await prisma.team.findFirst({
-      where: { managerId: payload.userId },
-    });
-
-    if (!managerTeam || employee.teamId !== managerTeam.id) {
+    if (!employee.teamId) {
       res.status(403).json({ error: 'You do not have permission to update this employee' });
       return;
     }
 
-    // Verify all workstations exist and belong to the manager's team
+    const isManaged = await isTeamManagedBy(employee.teamId, payload.userId);
+    if (!isManaged) {
+      res.status(403).json({ error: 'You do not have permission to update this employee' });
+      return;
+    }
+
     const requestedWorkstations = await prisma.workstation.findMany({
       where: { id: { in: body.workstationIds } },
     });
@@ -384,7 +377,10 @@ export const handleUpdateEmployeeWorkstations: RequestHandler = async (req, res)
       return;
     }
 
-    const allowed = requestedWorkstations.every((ws) => ws.teamId === managerTeam.id);
+    const managerTeamIds = await getManagerTeamIds(payload.userId);
+    const allowed = requestedWorkstations.every(
+      (ws) => ws.teamId && managerTeamIds.includes(ws.teamId)
+    );
     if (!allowed) {
       res.status(403).json({
         error: 'One or more workstations do not belong to your team.',

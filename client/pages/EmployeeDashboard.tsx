@@ -1,14 +1,29 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { fetchWithCsrf } from '@/lib/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSocket } from '@/hooks/useSocket';
 import { DailyTask } from '@shared/api';
-import { Check, Loader2, LogOut, X, AlertCircle } from 'lucide-react';
+import { Check, Loader2, LogOut, X, AlertCircle, Calendar } from 'lucide-react';
 import { logger } from '@/lib/logger';
+
+function todayISO(): string {
+  return new Date().toISOString().split('T')[0];
+}
+
+function isToday(dateStr: string): boolean {
+  return dateStr === todayISO();
+}
+
+function formatTaskDateLabel(dateStr: string): string {
+  if (isToday(dateStr)) return "Today's Tasks";
+  const d = new Date(dateStr + 'T12:00:00');
+  return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) + ' – Tasks';
+}
 
 export default function EmployeeDashboard() {
   const { user, logout } = useAuth();
   const { on } = useSocket();
+  const [selectedDate, setSelectedDate] = useState<string>(() => todayISO());
   const [tasks, setTasks] = useState<DailyTask[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [updatingTaskId, setUpdatingTaskId] = useState<string | null>(null);
@@ -17,43 +32,11 @@ export default function EmployeeDashboard() {
     description?: string;
   } | null>(null);
 
-  useEffect(() => {
-    fetchDailyTasks();
-
-    // Listen for real-time task updates
-    const unsubscribeUpdate = on('task:updated', (data) => {
-      logger.debug('Task updated:', data);
-    });
-
-    // Listen for new task assignments
-    const unsubscribeAssigned = on('task:assigned', (data) => {
-      if (data.employeeId === user?.id) {
-        logger.debug('New task assigned:', data);
-        setNotification({
-          title: data.taskTitle,
-          description: data.taskDescription,
-        });
-        // Refresh tasks to show the new assignment
-        setTimeout(() => {
-          fetchDailyTasks();
-        }, 500);
-        // Auto-hide notification after 6 seconds
-        setTimeout(() => {
-          setNotification(null);
-        }, 6000);
-      }
-    });
-
-    return () => {
-      unsubscribeUpdate();
-      unsubscribeAssigned();
-    };
-  }, [on, user?.id]);
-
-  const fetchDailyTasks = async () => {
+  const fetchDailyTasks = useCallback(async () => {
     try {
       setIsLoading(true);
-      const response = await fetch('/api/tasks/daily', {
+      const url = selectedDate ? `/api/tasks/daily?date=${encodeURIComponent(selectedDate)}` : '/api/tasks/daily';
+      const response = await fetch(url, {
         credentials: 'include',
       });
 
@@ -66,7 +49,39 @@ export default function EmployeeDashboard() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [selectedDate]);
+
+  useEffect(() => {
+    fetchDailyTasks();
+  }, [fetchDailyTasks]);
+
+  useEffect(() => {
+    // Listen for real-time task updates (only refetch if viewing today)
+    const unsubscribeUpdate = on('task:updated', (data) => {
+      logger.debug('Task updated:', data);
+      if (isToday(selectedDate)) fetchDailyTasks();
+    });
+
+    // Listen for new task assignments
+    const unsubscribeAssigned = on('task:assigned', (data) => {
+      if (data.employeeId === user?.id) {
+        logger.debug('New task assigned:', data);
+        setNotification({
+          title: data.taskTitle,
+          description: data.taskDescription,
+        });
+        if (isToday(selectedDate)) {
+          setTimeout(() => fetchDailyTasks(), 500);
+        }
+        setTimeout(() => setNotification(null), 6000);
+      }
+    });
+
+    return () => {
+      unsubscribeUpdate();
+      unsubscribeAssigned();
+    };
+  }, [on, user?.id, selectedDate, fetchDailyTasks]);
 
   const handleToggleTask = async (taskId: string, isCompleted: boolean) => {
     try {
@@ -96,18 +111,32 @@ export default function EmployeeDashboard() {
     <div className="min-h-screen bg-gradient-to-b from-primary/5 to-background">
       {/* Header */}
       <div className="bg-card border-b border-border sticky top-0 z-10 shadow-sm">
-        <div className="max-w-2xl mx-auto px-4 py-4 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">Today's Tasks</h1>
-            <p className="text-sm text-muted-foreground">Welcome, {user?.name}</p>
+        <div className="max-w-2xl mx-auto px-4 py-4">
+          <div className="flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <h1 className="text-2xl font-bold text-foreground truncate">{formatTaskDateLabel(selectedDate)}</h1>
+              <p className="text-sm text-muted-foreground">Welcome, {user?.name}</p>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <label className="inline-flex items-center gap-2 text-muted-foreground text-sm">
+                <Calendar className="w-4 h-4" aria-hidden />
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  className="rounded-lg border border-border bg-background px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                  aria-label="Select date"
+                />
+              </label>
+              <button
+                onClick={logout}
+                className="inline-flex items-center gap-2 px-3 py-2 text-muted-foreground hover:text-foreground hover:bg-secondary rounded-lg transition"
+                title="Sign out"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
           </div>
-          <button
-            onClick={logout}
-            className="inline-flex items-center gap-2 px-3 py-2 text-muted-foreground hover:text-foreground hover:bg-secondary rounded-lg transition"
-            title="Sign out"
-          >
-            <LogOut className="w-4 h-4" />
-          </button>
         </div>
       </div>
 
@@ -140,7 +169,9 @@ export default function EmployeeDashboard() {
         <div className="bg-card rounded-xl border border-border p-6 shadow-sm">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <p className="text-sm text-muted-foreground font-medium">Today's Progress</p>
+              <p className="text-sm text-muted-foreground font-medium">
+                {isToday(selectedDate) ? "Today's Progress" : `Progress for ${new Date(selectedDate + 'T12:00:00').toLocaleDateString()}`}
+              </p>
               <p className="text-3xl font-bold text-foreground mt-1">
                 {completedCount}<span className="text-lg text-muted-foreground">/{totalCount}</span>
               </p>
@@ -171,7 +202,11 @@ export default function EmployeeDashboard() {
               <Check className="w-8 h-8 text-primary" />
             </div>
             <h3 className="text-lg font-semibold text-foreground mb-2">All tasks completed!</h3>
-            <p className="text-muted-foreground">Great job! You've finished all your tasks for today.</p>
+            <p className="text-muted-foreground">
+              {isToday(selectedDate)
+                ? "Great job! You've finished all your tasks for today."
+                : `No tasks for ${new Date(selectedDate + 'T12:00:00').toLocaleDateString()}.`}
+            </p>
           </div>
         ) : (
           <div className="space-y-3">

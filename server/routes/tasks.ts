@@ -6,6 +6,7 @@ import { sendErrorResponse } from '../lib/errors';
 import { getAuthOrThrow } from '../middleware/requireAuth';
 import { assignDailyTasksForDate } from '../jobs/daily-task-assignment';
 import { logger } from '../lib/logger';
+import { getManagerTeamIds, getManagerTeams } from '../lib/manager-teams';
 
 const CreateTaskTemplateSchema = z.object({
   title: z.string().min(1),
@@ -282,7 +283,7 @@ export const handleDailyTaskAssignment: RequestHandler = async (req, res) => {
   }
 };
 
-// Get dashboard data for manager
+// Get dashboard data for manager (all managed teams; multi-team supported)
 export const handleGetManagerDashboard: RequestHandler = async (req, res) => {
   try {
     const payload = getAuthOrThrow(req, res);
@@ -291,30 +292,33 @@ export const handleGetManagerDashboard: RequestHandler = async (req, res) => {
     const taskDate = date ? new Date(date as string) : new Date();
     taskDate.setHours(0, 0, 0, 0);
 
-    // Get manager's team
-    const team = await prisma.team.findFirst({
-      where: { managerId: payload.userId },
-      include: {
-        members: {
-          where: { role: 'EMPLOYEE' },
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
-      },
-    });
-
-    if (!team) {
+    const teamIds = await getManagerTeamIds(payload.userId);
+    if (teamIds.length === 0) {
       res.status(404).json({ error: 'Team not found' });
       return;
     }
 
-    // Build filter: team members only, optional employee filter
-    const employeeFilter: Record<string, unknown> = { teamId: team.id };
+    const teams = await getManagerTeams(payload.userId);
+    const firstTeam = teams[0];
+
+    // All members from all managed teams (for filters and display)
+    const members = await prisma.user.findMany({
+      where: {
+        teamId: { in: teamIds },
+        role: 'EMPLOYEE',
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+      },
+      orderBy: { name: 'asc' },
+    });
+
+    // Build filter: any managed team, optional employee filter
+    const employeeFilter: Record<string, unknown> = { teamId: { in: teamIds } };
     if (employeeId && typeof employeeId === 'string') {
-      const isTeamMember = team.members.some((m) => m.id === employeeId);
+      const isTeamMember = members.some((m) => m.id === employeeId);
       if (isTeamMember) {
         employeeFilter.id = employeeId;
       }
@@ -333,7 +337,6 @@ export const handleGetManagerDashboard: RequestHandler = async (req, res) => {
         workstationId === '__direct__' ? { workstationId: null } : { workstationId };
     }
 
-    // Get all daily tasks for the team on the date
     const dailyTasks = await prisma.dailyTask.findMany({
       where: taskWhere,
       include: {
@@ -360,14 +363,22 @@ export const handleGetManagerDashboard: RequestHandler = async (req, res) => {
       orderBy: [{ employee: { name: 'asc' } }, { createdAt: 'asc' }],
     });
 
-    // Get workstations belonging to this team (name unique per team)
+    // Workstations from all managed teams
     const workstations = await prisma.workstation.findMany({
-      where: { teamId: team.id },
+      where: { teamId: { in: teamIds } },
       select: {
         id: true,
         name: true,
       },
+      orderBy: { name: 'asc' },
     });
+
+    // Backward compat: expose first team with aggregated members
+    const team = {
+      id: firstTeam.id,
+      name: firstTeam.name,
+      members,
+    };
 
     res.json({
       team,
