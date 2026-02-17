@@ -10,7 +10,7 @@ import request from "supertest";
 import { createApp } from "./index";
 import prisma from "./lib/db";
 import { validateCsrf } from "./lib/csrf";
-import { redactEmailForLog, emailHashForLog } from "./lib/log-pii";
+import { redactEmailForLog, emailHashForLog, EMAIL_HASH_FORMAT_REGEX } from "./lib/log-pii";
 import type { Request, Response, NextFunction } from "express";
 
 const app = createApp();
@@ -129,7 +129,7 @@ describe("Auth API", () => {
 
       const hash = emailHashForLog("user@test.com");
       expect(hash).toBeDefined();
-      expect(hash).toMatch(/^v1_[a-f0-9]{24}$/);
+      expect(hash).toMatch(EMAIL_HASH_FORMAT_REGEX);
       expect(emailHashForLog("user@test.com")).toBe(hash);
       expect(emailHashForLog("  User@Test.com  ")).toBe(hash);
     } finally {
@@ -144,6 +144,20 @@ describe("Auth API", () => {
     const originalLogHashSecret = process.env.LOG_HASH_SECRET;
     process.env.NODE_ENV = "production";
     delete process.env.LOG_HASH_SECRET;
+    try {
+      expect(emailHashForLog("user@test.com")).toBeUndefined();
+    } finally {
+      process.env.NODE_ENV = originalNodeEnv;
+      if (originalLogHashSecret === undefined) delete process.env.LOG_HASH_SECRET;
+      else process.env.LOG_HASH_SECRET = originalLogHashSecret;
+    }
+  });
+
+  it("emailHashForLog returns undefined when LOG_HASH_SECRET is empty string (production)", () => {
+    const originalNodeEnv = process.env.NODE_ENV;
+    const originalLogHashSecret = process.env.LOG_HASH_SECRET;
+    process.env.NODE_ENV = "production";
+    process.env.LOG_HASH_SECRET = "";
     try {
       expect(emailHashForLog("user@test.com")).toBeUndefined();
     } finally {
