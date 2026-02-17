@@ -1,8 +1,12 @@
 /**
- * Normalizes Express route param (string | string[] | ParsedQs | undefined) to a single string or null.
+ * Normalizes a single route param (e.g. req.params.taskId) to a non-empty trimmed string or null.
+ * Use for validating IDs: rejects undefined, empty string, whitespace-only, and non-string values.
  */
 export function paramString(value: unknown): string | null {
-  if (typeof value === 'string' && value) return value;
-  if (Array.isArray(value) && value[0] && typeof value[0] === 'string') return value[0];
-  return null;
+  let s: string | null = null;
+  if (typeof value === 'string') s = value;
+  else if (Array.isArray(value) && value[0] && typeof value[0] === 'string') s = value[0];
+  if (s == null) return null;
+  const trimmed = s.trim();
+  return trimmed === '' ? null : trimmed;
 }

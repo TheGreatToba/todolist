@@ -345,6 +345,64 @@ describe("Daily tasks API", () => {
     expect(res.status).toBe(400);
     expect(res.body).toMatchObject({ error: expect.stringContaining("YYYY-MM-DD") });
   });
+
+  it("PATCH /api/tasks/daily/:taskId without auth returns 401", async () => {
+    const res = await request(app)
+      .patch("/api/tasks/daily/some-id")
+      .send({ isCompleted: true });
+
+    expect(res.status).toBe(401);
+  });
+
+  it("PATCH /api/tasks/daily with whitespace-only taskId returns 400 (Invalid task ID)", async () => {
+    const agent = request.agent(app);
+    await agent.post("/api/auth/login").send({ email: "emp@test.com", password: "password" });
+
+    // Space as taskId: paramString trims to empty and returns null -> 400
+    const res = await agent
+      .patch("/api/tasks/daily/%20")
+      .send({ isCompleted: true });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ error: "Invalid task ID" });
+  });
+
+  it("PATCH /api/tasks/daily/:taskId with non-existent taskId returns 404", async () => {
+    const agent = request.agent(app);
+    await agent.post("/api/auth/login").send({ email: "emp@test.com", password: "password" });
+
+    const res = await agent
+      .patch("/api/tasks/daily/00000000-0000-0000-0000-000000000000")
+      .send({ isCompleted: true });
+
+    expect(res.status).toBe(404);
+    expect(res.body).toMatchObject({ error: "Task not found" });
+  });
+
+  it("PATCH /api/tasks/daily/:taskId with valid employee and own task returns 200", async () => {
+    const employee = await prisma.user.findUnique({
+      where: { email: "emp@test.com" },
+      select: { id: true },
+    });
+    expect(employee).not.toBeNull();
+
+    const dailyTask = await prisma.dailyTask.findFirst({
+      where: { employeeId: employee!.id },
+      select: { id: true, isCompleted: true },
+    });
+    expect(dailyTask).not.toBeNull();
+
+    const agent = request.agent(app);
+    await agent.post("/api/auth/login").send({ email: "emp@test.com", password: "password" });
+
+    const newCompleted = !dailyTask!.isCompleted;
+    const res = await agent
+      .patch(`/api/tasks/daily/${dailyTask!.id}`)
+      .send({ isCompleted: newCompleted });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ isCompleted: newCompleted });
+  });
 });
 
 describe("Cron API", () => {
