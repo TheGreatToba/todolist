@@ -66,7 +66,7 @@ export const handleGetEmployeeDailyTasks: RequestHandler = async (req, res) => {
 
     res.json(tasks);
   } catch (error) {
-    sendErrorResponse(res, error);
+    sendErrorResponse(res, error, req);
   }
 };
 
@@ -135,7 +135,7 @@ export const handleUpdateDailyTask: RequestHandler = async (req, res) => {
 
     res.json(updatedTask);
   } catch (error) {
-    sendErrorResponse(res, error);
+    sendErrorResponse(res, error, req);
   }
 };
 
@@ -245,7 +245,7 @@ export const handleCreateTaskTemplate: RequestHandler = async (req, res) => {
 
     res.status(201).json(taskTemplate);
   } catch (error) {
-    sendErrorResponse(res, error);
+    sendErrorResponse(res, error, req);
   }
 };
 
@@ -278,7 +278,7 @@ export const handleDailyTaskAssignment: RequestHandler = async (req, res) => {
       ...result,
     });
   } catch (error) {
-    sendErrorResponse(res, error);
+    sendErrorResponse(res, error, req);
   }
 };
 
@@ -376,6 +376,6 @@ export const handleGetManagerDashboard: RequestHandler = async (req, res) => {
       workstations,
     });
   } catch (error) {
-    sendErrorResponse(res, error);
+    sendErrorResponse(res, error, req);
   }
 };

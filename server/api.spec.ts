@@ -262,15 +262,12 @@ describe("Security middlewares", () => {
 
     it("allows requests again after rate limit window expires", async () => {
       vi.useFakeTimers({ now: new Date("2025-01-15T10:00:00Z").getTime() });
+      const originalNodeEnv = process.env.NODE_ENV;
+      const originalDisableCsrf = process.env.DISABLE_CSRF;
       try {
-        const originalNodeEnv = process.env.NODE_ENV;
-        const originalDisableCsrf = process.env.DISABLE_CSRF;
         process.env.NODE_ENV = "development";
         process.env.DISABLE_CSRF = "true";
         const limitedApp = createApp();
-        process.env.NODE_ENV = originalNodeEnv;
-        if (originalDisableCsrf === undefined) delete process.env.DISABLE_CSRF;
-        else process.env.DISABLE_CSRF = originalDisableCsrf;
 
         const agent = request(limitedApp);
         const windowMs = 15 * 60 * 1000;
@@ -288,6 +285,9 @@ describe("Security middlewares", () => {
         expect(afterWindow.body?.error).not.toBe("Too many attempts, please try again later");
       } finally {
         vi.useRealTimers();
+        process.env.NODE_ENV = originalNodeEnv;
+        if (originalDisableCsrf === undefined) delete process.env.DISABLE_CSRF;
+        else process.env.DISABLE_CSRF = originalDisableCsrf;
       }
     });
   });

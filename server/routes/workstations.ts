@@ -69,7 +69,7 @@ export const handleGetWorkstations: RequestHandler = async (req, res) => {
 
     res.json(workstations);
   } catch (error) {
-    sendErrorResponse(res, error);
+    sendErrorResponse(res, error, req);
   }
 };
 
@@ -103,7 +103,7 @@ export const handleCreateWorkstation: RequestHandler = async (req, res) => {
 
     res.status(201).json(workstation);
   } catch (error) {
-    sendErrorResponse(res, error);
+    sendErrorResponse(res, error, req);
   }
 };
 
@@ -243,7 +243,7 @@ export const handleCreateEmployee: RequestHandler = async (req, res) => {
       emailSent: emailResult.success,
     });
   } catch (error) {
-    sendErrorResponse(res, error);
+    sendErrorResponse(res, error, req);
   }
 };
 
@@ -288,7 +288,7 @@ export const handleDeleteWorkstation: RequestHandler = async (req, res) => {
 
     res.json({ success: true });
   } catch (error) {
-    sendErrorResponse(res, error);
+    sendErrorResponse(res, error, req);
   }
 };
 
@@ -336,7 +336,7 @@ export const handleGetTeamMembers: RequestHandler = async (req, res) => {
 
     res.json(members);
   } catch (error) {
-    sendErrorResponse(res, error);
+    sendErrorResponse(res, error, req);
   }
 };
 
@@ -439,6 +439,6 @@ export const handleUpdateEmployeeWorkstations: RequestHandler = async (req, res)
       workstations,
     });
   } catch (error) {
-    sendErrorResponse(res, error);
+    sendErrorResponse(res, error, req);
   }
 };

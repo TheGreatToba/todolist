@@ -1,6 +1,9 @@
 type LogArgs = unknown[];
 
-const isProd = process.env.NODE_ENV === 'production';
+/** Read at call time so NODE_ENV changes (e.g. in tests) are respected. */
+function isProd(): boolean {
+  return process.env.NODE_ENV === 'production';
+}
 
 /** Payload for structured logs (object native, serialized at transport for observability). */
 export type StructuredPayload = Record<string, unknown>;
@@ -8,7 +11,7 @@ export type StructuredPayload = Record<string, unknown>;
 export const logger = {
   // Debug logs are suppressed in production by default
   debug: (...args: LogArgs) => {
-    if (!isProd) {
+    if (!isProd()) {
       // eslint-disable-next-line no-console
       console.debug(...args);
     }

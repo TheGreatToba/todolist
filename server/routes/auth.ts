@@ -124,7 +124,7 @@ export const handleSignup: RequestHandler = async (req, res) => {
     res.cookie(AUTH_COOKIE_NAME, token, getAuthCookieOptions());
     res.status(201).json({ user });
   } catch (error) {
-    sendErrorResponse(res, error);
+    sendErrorResponse(res, error, req);
   }
 };
 
@@ -161,7 +161,7 @@ export const handleLogin: RequestHandler = async (req, res) => {
       },
     });
   } catch (error) {
-    sendErrorResponse(res, error);
+    sendErrorResponse(res, error, req);
   }
 };
 
@@ -188,7 +188,7 @@ export const handleProfile: RequestHandler = async (req, res) => {
 
     res.json(user);
   } catch (error) {
-    sendErrorResponse(res, error);
+    sendErrorResponse(res, error, req);
   }
 };
 
@@ -242,6 +242,6 @@ export const handleSetPassword: RequestHandler = async (req, res) => {
       },
     });
   } catch (error) {
-    sendErrorResponse(res, error);
+    sendErrorResponse(res, error, req);
   }
 };
