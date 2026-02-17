@@ -26,7 +26,7 @@ export function isAppError(err: unknown): err is AppError {
  * Send error response and optionally log. Use in route catch blocks:
  * - AppError: send status + message (no stack to client)
  * - ZodError: 400 with details (instanceof for robustness)
- * - Other: log structured event (SIEM/observability), send generic 500 in production
+ * - Other: log structured event (SIEM/observability); send generic 500 to client in all environments
  * @param req Optional request for structured log correlation (requestId, method, path)
  */
 export function sendErrorResponse(res: Response, error: unknown, req?: RequestWithId): void {

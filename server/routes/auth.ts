@@ -15,13 +15,16 @@ import { sendErrorResponse } from '../lib/errors';
 import { getAuthOrThrow } from '../middleware/requireAuth';
 import { logger } from '../lib/logger';
 
+/** Redact email for production logs (GDPR/SIEM): keep domain only, mask local part. */
+function redactEmailForLog(email: string): string {
+  if (process.env.NODE_ENV !== 'production') return email;
+  const at = email.indexOf('@');
+  return at >= 0 ? `***@${email.slice(at + 1)}` : '***';
+}
+
 /**
  * Structured log when role from DB is invalid (do not emit JWT).
- * For production: use a centralized logger (pino/winston); consider redacting or hashing
- * email (PII); ensure requestId is always set (middleware + fallback) for correlation.
- *
- * NOTE: Currently logs the raw email for simplicity. To enforce PII policy, replace
-"email" with a redacted / hashed version when NODE_ENV === 'production'.
+ * In production, email is redacted (domain only) for GDPR/SIEM.
  */
 function logInvalidRole(
   user: { id: string; email: string; role: unknown },
@@ -30,7 +33,7 @@ function logInvalidRole(
   logger.structured('warn', {
     event: 'invalid_role_rejected',
     userId: user.id,
-    email: user.email,
+    email: redactEmailForLog(user.email),
     role: user.role,
     endpoint: req.path,
     method: req.method,
