@@ -66,22 +66,18 @@ export function sendErrorResponse(
       typeof err.clientVersion === "string");
   if (hasPrismaShape && code) {
     if (code === "P2002") {
-      res
-        .status(409)
-        .json({
-          error: "A record with this value already exists.",
-          code: "CONFLICT",
-        });
+      res.status(409).json({
+        error: "A record with this value already exists.",
+        code: "CONFLICT",
+      });
       return;
     }
     // API convention: FK / constraint violations → 400 (invalid payload or bad reference).
     if (code === "P2003") {
-      res
-        .status(400)
-        .json({
-          error: "Referenced record not found or constraint violation.",
-          code: "CONSTRAINT",
-        });
+      res.status(400).json({
+        error: "Referenced record not found or constraint violation.",
+        code: "CONSTRAINT",
+      });
       return;
     }
     if (code === "P2025") {

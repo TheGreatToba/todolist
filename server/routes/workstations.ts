@@ -111,11 +111,9 @@ export const handleCreateWorkstation: RequestHandler = async (req, res) => {
       where: { teamId: team.id, name: body.name },
     });
     if (existing) {
-      res
-        .status(400)
-        .json({
-          error: "A workstation with this name already exists in your team",
-        });
+      res.status(400).json({
+        error: "A workstation with this name already exists in your team",
+      });
       return;
     }
 
@@ -176,12 +174,10 @@ export const handleCreateEmployee: RequestHandler = async (req, res) => {
       ...new Set(requestedWorkstations.map((ws) => ws.teamId).filter(Boolean)),
     ] as string[];
     if (workstationTeamIds.length === 0) {
-      res
-        .status(400)
-        .json({
-          error:
-            "Selected workstations have no team. Please choose valid workstations.",
-        });
+      res.status(400).json({
+        error:
+          "Selected workstations have no team. Please choose valid workstations.",
+      });
       return;
     }
     if (workstationTeamIds.length > 1) {

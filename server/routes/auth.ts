@@ -232,23 +232,19 @@ export const handleSetPassword: RequestHandler = async (req, res) => {
     });
 
     if (!record) {
-      res
-        .status(400)
-        .json({
-          error:
-            "Invalid or expired link. Please ask your manager to resend the invitation.",
-        });
+      res.status(400).json({
+        error:
+          "Invalid or expired link. Please ask your manager to resend the invitation.",
+      });
       return;
     }
 
     if (record.expiresAt < new Date()) {
       await prisma.setPasswordToken.delete({ where: { id: record.id } });
-      res
-        .status(400)
-        .json({
-          error:
-            "This link has expired. Please ask your manager to resend the invitation.",
-        });
+      res.status(400).json({
+        error:
+          "This link has expired. Please ask your manager to resend the invitation.",
+      });
       return;
     }
 
