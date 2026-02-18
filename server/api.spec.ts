@@ -7,10 +7,15 @@
 import "dotenv/config";
 import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
 import request from "supertest";
+import { z } from "zod";
 import { createApp } from "./index";
 import prisma from "./lib/db";
 import { validateCsrf } from "./lib/csrf";
-import { redactEmailForLog, emailHashForLog, EMAIL_HASH_FORMAT_REGEX } from "./lib/log-pii";
+import {
+  redactEmailForLog,
+  emailHashForLog,
+  EMAIL_HASH_FORMAT_REGEX,
+} from "./lib/log-pii";
 import {
   TASK_TEMPLATE_SAME_TEAM_MESSAGE,
   TASK_TEMPLATE_BULK_UPDATE_FORBIDDEN_MESSAGE,
@@ -22,14 +27,12 @@ const app = createApp();
 describe("Auth API", () => {
   it("POST /api/auth/signup with MANAGER returns 201 and user", async () => {
     const email = `mgr-${Date.now()}@test.com`;
-    const res = await request(app)
-      .post("/api/auth/signup")
-      .send({
-        name: "Test Manager",
-        email,
-        password: "password123",
-        role: "MANAGER",
-      });
+    const res = await request(app).post("/api/auth/signup").send({
+      name: "Test Manager",
+      email,
+      password: "password123",
+      role: "MANAGER",
+    });
 
     expect(res.status).toBe(201);
     expect(res.body).toHaveProperty("user");
@@ -40,27 +43,26 @@ describe("Auth API", () => {
   it("POST /api/auth/signup with duplicate MANAGER email returns 409 CONFLICT", async () => {
     const email = `dup-mgr-${Date.now()}@test.com`;
 
-    const first = await request(app)
-      .post("/api/auth/signup")
-      .send({
-        name: "Dup Manager 1",
-        email,
-        password: "password123",
-        role: "MANAGER",
-      });
+    const first = await request(app).post("/api/auth/signup").send({
+      name: "Dup Manager 1",
+      email,
+      password: "password123",
+      role: "MANAGER",
+    });
     expect(first.status).toBe(201);
 
-    const second = await request(app)
-      .post("/api/auth/signup")
-      .send({
-        name: "Dup Manager 2",
-        email,
-        password: "password123",
-        role: "MANAGER",
-      });
+    const second = await request(app).post("/api/auth/signup").send({
+      name: "Dup Manager 2",
+      email,
+      password: "password123",
+      role: "MANAGER",
+    });
 
     expect(second.status).toBe(409);
-    expect(second.body).toMatchObject({ error: "Email already registered", code: "CONFLICT" });
+    expect(second.body).toMatchObject({
+      error: "Email already registered",
+      code: "CONFLICT",
+    });
   });
 
   it("POST /api/auth/signup with EMPLOYEE returns 400 (only MANAGER allowed)", async () => {
@@ -102,7 +104,9 @@ describe("Auth API", () => {
 
   it("GET /api/auth/profile with valid cookie returns 200 and user", async () => {
     const agent = request.agent(app);
-    await agent.post("/api/auth/login").send({ email: "mgr@test.com", password: "password" });
+    await agent
+      .post("/api/auth/login")
+      .send({ email: "mgr@test.com", password: "password" });
 
     const res = await agent.get("/api/auth/profile");
 
@@ -122,13 +126,21 @@ describe("Auth API", () => {
     expect(signupRes.status).toBe(201);
     const userId = signupRes.body.user.id as string;
 
-    await prisma.$executeRawUnsafe("UPDATE User SET role = ? WHERE id = ?", "INVALID", userId);
+    await prisma.$executeRawUnsafe(
+      "UPDATE User SET role = ? WHERE id = ?",
+      "INVALID",
+      userId,
+    );
 
     const warnCalls: unknown[] = [];
-    const warnSpy = vi.spyOn(console, "warn").mockImplementation((arg: unknown) => {
-      warnCalls.push(arg);
-    });
-    const loginRes = await request(app).post("/api/auth/login").send({ email, password: "password123" });
+    const warnSpy = vi
+      .spyOn(console, "warn")
+      .mockImplementation((arg: unknown) => {
+        warnCalls.push(arg);
+      });
+    const loginRes = await request(app)
+      .post("/api/auth/login")
+      .send({ email, password: "password123" });
     warnSpy.mockRestore();
 
     expect(loginRes.status).toBe(500);
@@ -144,7 +156,12 @@ describe("Auth API", () => {
     });
     expect(invalidRoleLog).toBeDefined();
     const log = JSON.parse(invalidRoleLog as string);
-    expect(log).toMatchObject({ event: "invalid_role_rejected", userId, email, role: "INVALID" });
+    expect(log).toMatchObject({
+      event: "invalid_role_rejected",
+      userId,
+      email,
+      role: "INVALID",
+    });
     expect(log.endpoint).toBe("/api/auth/login");
   });
 
@@ -166,7 +183,8 @@ describe("Auth API", () => {
       expect(emailHashForLog("  User@Test.com  ")).toBe(hash);
     } finally {
       process.env.NODE_ENV = originalNodeEnv;
-      if (originalLogHashSecret === undefined) delete process.env.LOG_HASH_SECRET;
+      if (originalLogHashSecret === undefined)
+        delete process.env.LOG_HASH_SECRET;
       else process.env.LOG_HASH_SECRET = originalLogHashSecret;
     }
   });
@@ -180,7 +198,8 @@ describe("Auth API", () => {
       expect(emailHashForLog("user@test.com")).toBeUndefined();
     } finally {
       process.env.NODE_ENV = originalNodeEnv;
-      if (originalLogHashSecret === undefined) delete process.env.LOG_HASH_SECRET;
+      if (originalLogHashSecret === undefined)
+        delete process.env.LOG_HASH_SECRET;
       else process.env.LOG_HASH_SECRET = originalLogHashSecret;
     }
   });
@@ -194,7 +213,8 @@ describe("Auth API", () => {
       expect(emailHashForLog("user@test.com")).toBeUndefined();
     } finally {
       process.env.NODE_ENV = originalNodeEnv;
-      if (originalLogHashSecret === undefined) delete process.env.LOG_HASH_SECRET;
+      if (originalLogHashSecret === undefined)
+        delete process.env.LOG_HASH_SECRET;
       else process.env.LOG_HASH_SECRET = originalLogHashSecret;
     }
   });
@@ -208,7 +228,8 @@ describe("Auth API", () => {
       expect(emailHashForLog("user@test.com")).toBeUndefined();
     } finally {
       process.env.NODE_ENV = originalNodeEnv;
-      if (originalLogHashSecret === undefined) delete process.env.LOG_HASH_SECRET;
+      if (originalLogHashSecret === undefined)
+        delete process.env.LOG_HASH_SECRET;
       else process.env.LOG_HASH_SECRET = originalLogHashSecret;
     }
   });
@@ -225,7 +246,8 @@ describe("Auth API", () => {
       expect(hashNoSpaces).toBe(hashWithSpaces);
     } finally {
       process.env.NODE_ENV = originalNodeEnv;
-      if (originalLogHashSecret === undefined) delete process.env.LOG_HASH_SECRET;
+      if (originalLogHashSecret === undefined)
+        delete process.env.LOG_HASH_SECRET;
       else process.env.LOG_HASH_SECRET = originalLogHashSecret;
     }
   });
@@ -234,7 +256,9 @@ describe("Auth API", () => {
 describe("Permissions - role-based access", () => {
   it("GET /api/manager/dashboard as EMPLOYEE returns 403", async () => {
     const agent = request.agent(app);
-    await agent.post("/api/auth/login").send({ email: "emp@test.com", password: "password" });
+    await agent
+      .post("/api/auth/login")
+      .send({ email: "emp@test.com", password: "password" });
 
     const res = await agent.get("/api/manager/dashboard");
 
@@ -243,7 +267,9 @@ describe("Permissions - role-based access", () => {
 
   it("GET /api/manager/dashboard as MANAGER returns 200", async () => {
     const agent = request.agent(app);
-    await agent.post("/api/auth/login").send({ email: "mgr@test.com", password: "password" });
+    await agent
+      .post("/api/auth/login")
+      .send({ email: "mgr@test.com", password: "password" });
 
     const res = await agent.get("/api/manager/dashboard");
 
@@ -253,12 +279,84 @@ describe("Permissions - role-based access", () => {
 
   it("GET /api/manager/dashboard?date=invalid returns 400 with message", async () => {
     const agent = request.agent(app);
-    await agent.post("/api/auth/login").send({ email: "mgr@test.com", password: "password" });
+    await agent
+      .post("/api/auth/login")
+      .send({ email: "mgr@test.com", password: "password" });
 
     const res = await agent.get("/api/manager/dashboard?date=invalid");
 
     expect(res.status).toBe(400);
-    expect(res.body).toMatchObject({ error: expect.stringContaining("YYYY-MM-DD") });
+    expect(res.body).toMatchObject({
+      error: expect.stringContaining("YYYY-MM-DD"),
+    });
+  });
+
+  it("GET /api/manager/dashboard with date[foo]=bar returns 400 (malformed date query)", async () => {
+    const agent = request.agent(app);
+    await agent
+      .post("/api/auth/login")
+      .send({ email: "mgr@test.com", password: "password" });
+
+    const res = await agent
+      .get("/api/manager/dashboard")
+      .query({ "date[foo]": "bar" });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({
+      error: expect.stringContaining("YYYY-MM-DD"),
+    });
+  });
+
+  it("GET /api/manager/dashboard with date and date[foo] together returns 400 (strict policy)", async () => {
+    const agent = request.agent(app);
+    await agent
+      .post("/api/auth/login")
+      .send({ email: "mgr@test.com", password: "password" });
+
+    const res = await agent
+      .get("/api/manager/dashboard")
+      .query({ date: "2025-02-15", "date[foo]": "bar" });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({
+      error: expect.stringContaining("YYYY-MM-DD"),
+    });
+  });
+
+  it("GET /api/manager/dashboard with repeated employeeId returns 400", async () => {
+    const agent = request.agent(app);
+    await agent
+      .post("/api/auth/login")
+      .send({ email: "mgr@test.com", password: "password" });
+
+    const res = await agent
+      .get("/api/manager/dashboard")
+      .query({ employeeId: ["emp-1", "emp-2"] });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({
+      error: expect.stringContaining(
+        "Repeated query parameters are not allowed",
+      ),
+    });
+  });
+
+  it("GET /api/manager/dashboard with repeated workstationId returns 400", async () => {
+    const agent = request.agent(app);
+    await agent
+      .post("/api/auth/login")
+      .send({ email: "mgr@test.com", password: "password" });
+
+    const res = await agent
+      .get("/api/manager/dashboard")
+      .query({ workstationId: ["ws-1", "ws-2"] });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({
+      error: expect.stringContaining(
+        "Repeated query parameters are not allowed",
+      ),
+    });
   });
 
   it("GET /api/manager/dashboard as multi-team manager returns aggregated data from all teams", async () => {
@@ -296,36 +394,45 @@ describe("Permissions - role-based access", () => {
       });
 
       const agent = request.agent(app);
-      await agent.post("/api/auth/login").send({ email: "mgr@test.com", password: "password" });
+      await agent
+        .post("/api/auth/login")
+        .send({ email: "mgr@test.com", password: "password" });
       const res = await agent.get("/api/manager/dashboard");
 
       expect(res.status).toBe(200);
       expect(res.body.team).toBeDefined();
-      const memberIds = (res.body.team.members as Array<{ id: string }>).map((m) => m.id);
+      const memberIds = (res.body.team.members as Array<{ id: string }>).map(
+        (m) => m.id,
+      );
       expect(memberIds).toContain(employeeSecondTeam.id);
-      const workstationNames = (res.body.workstations as Array<{ name: string }>).map((w) => w.name);
+      const workstationNames = (
+        res.body.workstations as Array<{ name: string }>
+      ).map((w) => w.name);
       expect(workstationNames).toContain("Multi-team WS");
     } finally {
       if (employeeSecondTeam) {
-        await prisma.employeeWorkstation.deleteMany({ where: { employeeId: employeeSecondTeam.id } });
+        await prisma.employeeWorkstation.deleteMany({
+          where: { employeeId: employeeSecondTeam.id },
+        });
         await prisma.user.delete({ where: { id: employeeSecondTeam.id } });
       }
-      if (wsSecond) await prisma.workstation.delete({ where: { id: wsSecond.id } });
+      if (wsSecond)
+        await prisma.workstation.delete({ where: { id: wsSecond.id } });
       await prisma.team.delete({ where: { id: secondTeam.id } });
     }
   });
 
   it("POST /api/tasks/templates as EMPLOYEE returns 403", async () => {
     const agent = request.agent(app);
-    await agent.post("/api/auth/login").send({ email: "emp@test.com", password: "password" });
+    await agent
+      .post("/api/auth/login")
+      .send({ email: "emp@test.com", password: "password" });
 
-    const res = await agent
-      .post("/api/tasks/templates")
-      .send({
-        title: "Test task",
-        workstationId: "some-id",
-        isRecurring: false,
-      });
+    const res = await agent.post("/api/tasks/templates").send({
+      title: "Test task",
+      workstationId: "some-id",
+      isRecurring: false,
+    });
 
     expect(res.status).toBe(403);
   });
@@ -348,7 +455,9 @@ describe("Permissions - role-based access", () => {
     });
     try {
       const agent = request.agent(app);
-      await agent.post("/api/auth/login").send({ email: "mgr@test.com", password: "password" });
+      await agent
+        .post("/api/auth/login")
+        .send({ email: "mgr@test.com", password: "password" });
       const res = await agent.post("/api/tasks/templates").send({
         title: "Test",
         workstationId: otherWs.id,
@@ -387,7 +496,9 @@ describe("Permissions - role-based access", () => {
     });
     try {
       const agent = request.agent(app);
-      await agent.post("/api/auth/login").send({ email: "mgr@test.com", password: "password" });
+      await agent
+        .post("/api/auth/login")
+        .send({ email: "mgr@test.com", password: "password" });
       const res = await agent.post("/api/tasks/templates").send({
         title: "Test",
         assignedToEmployeeId: otherEmployee.id,
@@ -408,7 +519,9 @@ describe("Permissions - role-based access", () => {
     });
     try {
       const agent = request.agent(app);
-      await agent.post("/api/auth/login").send({ email: "mgr@test.com", password: "password" });
+      await agent
+        .post("/api/auth/login")
+        .send({ email: "mgr@test.com", password: "password" });
       const res = await agent.post("/api/tasks/templates").send({
         title: "Test",
         workstationId: wsNoTeam.id,
@@ -433,7 +546,9 @@ describe("Permissions - role-based access", () => {
     });
     try {
       const agent = request.agent(app);
-      await agent.post("/api/auth/login").send({ email: "mgr@test.com", password: "password" });
+      await agent
+        .post("/api/auth/login")
+        .send({ email: "mgr@test.com", password: "password" });
       const res = await agent.post("/api/tasks/templates").send({
         title: "Test",
         assignedToEmployeeId: empNoTeam.id,
@@ -453,7 +568,9 @@ describe("Permissions - role-based access", () => {
     });
     expect(manager).not.toBeNull();
     const agent = request.agent(app);
-    await agent.post("/api/auth/login").send({ email: "mgr@test.com", password: "password" });
+    await agent
+      .post("/api/auth/login")
+      .send({ email: "mgr@test.com", password: "password" });
     const res = await agent.post("/api/tasks/templates").send({
       title: "Test",
       assignedToEmployeeId: manager!.id,
@@ -494,7 +611,9 @@ describe("Permissions - role-based access", () => {
     try {
       expect(wsTeam1).not.toBeNull();
       const agent = request.agent(app);
-      await agent.post("/api/auth/login").send({ email: "mgr@test.com", password: "password" });
+      await agent
+        .post("/api/auth/login")
+        .send({ email: "mgr@test.com", password: "password" });
       const res = await agent.post("/api/tasks/templates").send({
         title: "Test",
         workstationId: wsTeam1!.id,
@@ -533,7 +652,9 @@ describe("Permissions - role-based access", () => {
     expect(workstation).not.toBeNull();
     expect(employee).not.toBeNull();
     const agent = request.agent(app);
-    await agent.post("/api/auth/login").send({ email: "mgr@test.com", password: "password" });
+    await agent
+      .post("/api/auth/login")
+      .send({ email: "mgr@test.com", password: "password" });
     const res = await agent.post("/api/tasks/templates").send({
       title: "Same-team task",
       workstationId: workstation!.id,
@@ -544,7 +665,9 @@ describe("Permissions - role-based access", () => {
     expect(res.body).toHaveProperty("id");
     expect(res.body.workstation).toBeDefined();
     expect(res.body.assignedToEmployee).toBeDefined();
-    await prisma.taskTemplate.delete({ where: { id: res.body.id } }).catch(() => {});
+    await prisma.taskTemplate
+      .delete({ where: { id: res.body.id } })
+      .catch(() => {});
   });
 
   it("TaskTemplate invariant: direct Prisma create with cross-team workstation and employee throws", async () => {
@@ -586,7 +709,7 @@ describe("Permissions - role-based access", () => {
             assignedToEmployeeId: empTeam2.id,
             isRecurring: false,
           },
-        })
+        }),
       ).rejects.toThrow(TASK_TEMPLATE_SAME_TEAM_MESSAGE);
     } finally {
       await prisma.user.delete({ where: { id: empTeam2.id } });
@@ -647,10 +770,12 @@ describe("Permissions - role-based access", () => {
           data: {
             assignedToEmployeeId: { set: empTeam2.id },
           },
-        })
+        }),
       ).rejects.toThrow(TASK_TEMPLATE_SAME_TEAM_MESSAGE);
     } finally {
-      await prisma.taskTemplate.delete({ where: { id: template.id } }).catch(() => {});
+      await prisma.taskTemplate
+        .delete({ where: { id: template.id } })
+        .catch(() => {});
       await prisma.user.delete({ where: { id: empTeam2.id } });
       await prisma.team.delete({ where: { id: secondTeam.id } });
     }
@@ -716,10 +841,12 @@ describe("Permissions - role-based access", () => {
           update: {
             assignedToEmployeeId: { set: empTeam2.id },
           },
-        })
+        }),
       ).rejects.toThrow(TASK_TEMPLATE_SAME_TEAM_MESSAGE);
     } finally {
-      await prisma.taskTemplate.delete({ where: { id: template.id } }).catch(() => {});
+      await prisma.taskTemplate
+        .delete({ where: { id: template.id } })
+        .catch(() => {});
       await prisma.user.delete({ where: { id: empTeam2.id } });
       await prisma.team.delete({ where: { id: secondTeam.id } });
     }
@@ -771,7 +898,7 @@ describe("Permissions - role-based access", () => {
             isRecurring: false,
           },
           update: {},
-        })
+        }),
       ).rejects.toThrow(TASK_TEMPLATE_SAME_TEAM_MESSAGE);
     } finally {
       await prisma.user.delete({ where: { id: empTeam2.id } });
@@ -800,7 +927,7 @@ describe("Permissions - role-based access", () => {
       prisma.taskTemplate.updateMany({
         where: { workstationId: wsTeam1!.id },
         data: { assignedToEmployeeId: { set: null } },
-      })
+      }),
     ).rejects.toThrow(TASK_TEMPLATE_BULK_UPDATE_FORBIDDEN_MESSAGE);
   });
 
@@ -836,10 +963,12 @@ describe("Permissions - role-based access", () => {
           where: { id: template.id },
           // @ts-expect-error – intentional invalid payload for invariant middleware
           data: { assignedToEmployeeId: { set: 123 } },
-        })
+        }),
       ).rejects.toThrow("Invalid TaskTemplate linkage payload");
     } finally {
-      await prisma.taskTemplate.delete({ where: { id: template.id } }).catch(() => {});
+      await prisma.taskTemplate
+        .delete({ where: { id: template.id } })
+        .catch(() => {});
     }
   });
 });
@@ -852,7 +981,9 @@ describe("Daily tasks API", () => {
 
   it("GET /api/tasks/daily with valid employee cookie returns 200 and array", async () => {
     const agent = request.agent(app);
-    await agent.post("/api/auth/login").send({ email: "emp@test.com", password: "password" });
+    await agent
+      .post("/api/auth/login")
+      .send({ email: "emp@test.com", password: "password" });
 
     const res = await agent.get("/api/tasks/daily");
 
@@ -862,7 +993,9 @@ describe("Daily tasks API", () => {
 
   it("GET /api/tasks/daily?date=YYYY-MM-DD returns 200 and array for that date", async () => {
     const agent = request.agent(app);
-    await agent.post("/api/auth/login").send({ email: "emp@test.com", password: "password" });
+    await agent
+      .post("/api/auth/login")
+      .send({ email: "emp@test.com", password: "password" });
 
     const res = await agent.get("/api/tasks/daily?date=2025-02-15");
 
@@ -872,33 +1005,79 @@ describe("Daily tasks API", () => {
 
   it("GET /api/tasks/daily?date=invalid returns 400 with message", async () => {
     const agent = request.agent(app);
-    await agent.post("/api/auth/login").send({ email: "emp@test.com", password: "password" });
+    await agent
+      .post("/api/auth/login")
+      .send({ email: "emp@test.com", password: "password" });
 
     const res = await agent.get("/api/tasks/daily?date=not-a-date");
 
     expect(res.status).toBe(400);
-    expect(res.body).toMatchObject({ error: expect.stringContaining("YYYY-MM-DD") });
+    expect(res.body).toMatchObject({
+      error: expect.stringContaining("YYYY-MM-DD"),
+    });
   });
 
   it("GET /api/tasks/daily?date=2025-02-31 returns 400 (invalid calendar date)", async () => {
     const agent = request.agent(app);
-    await agent.post("/api/auth/login").send({ email: "emp@test.com", password: "password" });
+    await agent
+      .post("/api/auth/login")
+      .send({ email: "emp@test.com", password: "password" });
 
     const res = await agent.get("/api/tasks/daily?date=2025-02-31");
 
     expect(res.status).toBe(400);
-    expect(res.body).toMatchObject({ error: expect.stringContaining("YYYY-MM-DD") });
+    expect(res.body).toMatchObject({
+      error: expect.stringContaining("YYYY-MM-DD"),
+    });
   });
 
   it("GET /api/tasks/daily with non-string date query returns 400 (invalid type)", async () => {
     const agent = request.agent(app);
-    await agent.post("/api/auth/login").send({ email: "emp@test.com", password: "password" });
+    await agent
+      .post("/api/auth/login")
+      .send({ email: "emp@test.com", password: "password" });
 
     // Express will parse this into req.query.date as an object, not a string
-    const res = await agent.get("/api/tasks/daily").query({ date: { foo: "bar" } });
+    const res = await agent
+      .get("/api/tasks/daily")
+      .query({ date: { foo: "bar" } });
 
     expect(res.status).toBe(400);
-    expect(res.body).toMatchObject({ error: expect.stringContaining("YYYY-MM-DD") });
+    expect(res.body).toMatchObject({
+      error: expect.stringContaining("YYYY-MM-DD"),
+    });
+  });
+
+  it("GET /api/tasks/daily with date[foo]=bar returns 400 (malformed date query)", async () => {
+    const agent = request.agent(app);
+    await agent
+      .post("/api/auth/login")
+      .send({ email: "emp@test.com", password: "password" });
+
+    const res = await agent
+      .get("/api/tasks/daily")
+      .query({ "date[foo]": "bar" });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({
+      error: expect.stringContaining("YYYY-MM-DD"),
+    });
+  });
+
+  it("GET /api/tasks/daily with date and date[foo] together returns 400 (strict policy)", async () => {
+    const agent = request.agent(app);
+    await agent
+      .post("/api/auth/login")
+      .send({ email: "emp@test.com", password: "password" });
+
+    const res = await agent
+      .get("/api/tasks/daily")
+      .query({ date: "2025-02-15", "date[foo]": "bar" });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({
+      error: expect.stringContaining("YYYY-MM-DD"),
+    });
   });
 
   it("PATCH /api/tasks/daily/:taskId without auth returns 401", async () => {
@@ -911,7 +1090,9 @@ describe("Daily tasks API", () => {
 
   it("PATCH /api/tasks/daily with whitespace-only taskId returns 400 (Invalid task ID)", async () => {
     const agent = request.agent(app);
-    await agent.post("/api/auth/login").send({ email: "emp@test.com", password: "password" });
+    await agent
+      .post("/api/auth/login")
+      .send({ email: "emp@test.com", password: "password" });
 
     // Space as taskId: paramString trims to empty and returns null -> 400
     const res = await agent
@@ -924,7 +1105,9 @@ describe("Daily tasks API", () => {
 
   it("PATCH /api/tasks/daily/:taskId with non-existent taskId returns 404", async () => {
     const agent = request.agent(app);
-    await agent.post("/api/auth/login").send({ email: "emp@test.com", password: "password" });
+    await agent
+      .post("/api/auth/login")
+      .send({ email: "emp@test.com", password: "password" });
 
     const res = await agent
       .patch("/api/tasks/daily/00000000-0000-0000-0000-000000000000")
@@ -948,7 +1131,9 @@ describe("Daily tasks API", () => {
     expect(dailyTask).not.toBeNull();
 
     const agent = request.agent(app);
-    await agent.post("/api/auth/login").send({ email: "emp@test.com", password: "password" });
+    await agent
+      .post("/api/auth/login")
+      .send({ email: "emp@test.com", password: "password" });
 
     const newCompleted = !dailyTask!.isCompleted;
     const res = await agent
@@ -957,6 +1142,108 @@ describe("Daily tasks API", () => {
 
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ isCompleted: newCompleted });
+  });
+
+  it("PATCH /api/tasks/daily/:taskId with missing isCompleted returns 400 (validation)", async () => {
+    const employee = await prisma.user.findUnique({
+      where: { email: "emp@test.com" },
+      select: { id: true },
+    });
+    expect(employee).not.toBeNull();
+
+    const dailyTask = await prisma.dailyTask.findFirst({
+      where: { employeeId: employee!.id },
+      select: { id: true },
+    });
+    expect(dailyTask).not.toBeNull();
+
+    const agent = request.agent(app);
+    await agent
+      .post("/api/auth/login")
+      .send({ email: "emp@test.com", password: "password" });
+
+    const res = await agent.patch(`/api/tasks/daily/${dailyTask!.id}`).send({});
+
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ error: "Validation error" });
+    expect(res.body.details).toBeDefined();
+    const details = res.body.details as z.ZodIssue[];
+    const isCompletedError = details.find(
+      (e) => Array.isArray(e.path) && e.path.includes("isCompleted"),
+    );
+    expect(isCompletedError).toBeDefined();
+    expect(isCompletedError!.code).toBeDefined();
+    expect(isCompletedError!.message).toBeDefined();
+  });
+
+  it("PATCH /api/tasks/daily/:taskId with non-boolean isCompleted returns 400 (validation)", async () => {
+    const employee = await prisma.user.findUnique({
+      where: { email: "emp@test.com" },
+      select: { id: true },
+    });
+    expect(employee).not.toBeNull();
+
+    const dailyTask = await prisma.dailyTask.findFirst({
+      where: { employeeId: employee!.id },
+      select: { id: true },
+    });
+    expect(dailyTask).not.toBeNull();
+
+    const agent = request.agent(app);
+    await agent
+      .post("/api/auth/login")
+      .send({ email: "emp@test.com", password: "password" });
+
+    const res = await agent
+      .patch(`/api/tasks/daily/${dailyTask!.id}`)
+      .send({ isCompleted: "true" });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({ error: "Validation error" });
+    expect(res.body.details).toBeDefined();
+    const details = res.body.details as z.ZodIssue[];
+    const isCompletedError = details.find(
+      (e) => Array.isArray(e.path) && e.path.includes("isCompleted"),
+    );
+    expect(isCompletedError).toBeDefined();
+    expect(isCompletedError!.code).toBeDefined();
+    expect(isCompletedError!.message).toBeDefined();
+  });
+
+  it("PATCH /api/tasks/daily/:taskId as employee on another employee's task returns 403", async () => {
+    const otherEmployee = await prisma.user.findUnique({
+      where: { email: "carol@test.com" },
+      select: { id: true },
+    });
+    expect(otherEmployee).not.toBeNull();
+
+    const otherTask = await prisma.dailyTask.findFirst({
+      where: { employeeId: otherEmployee!.id },
+      select: { id: true, isCompleted: true, completedAt: true },
+    });
+    expect(otherTask).not.toBeNull();
+
+    const agent = request.agent(app);
+    await agent
+      .post("/api/auth/login")
+      .send({ email: "emp@test.com", password: "password" });
+
+    const res = await agent
+      .patch(`/api/tasks/daily/${otherTask!.id}`)
+      .send({ isCompleted: true });
+
+    expect(res.status).toBe(403);
+    expect(res.body).toMatchObject({ error: "Forbidden" });
+
+    const after = await prisma.dailyTask.findUnique({
+      where: { id: otherTask!.id },
+      select: { isCompleted: true, completedAt: true },
+    });
+    expect(after).not.toBeNull();
+    expect(after!.isCompleted).toBe(otherTask!.isCompleted);
+    expect(after!.completedAt?.getTime() ?? null).toBe(
+      otherTask!.completedAt?.getTime() ?? null,
+    );
   });
 });
 
@@ -975,6 +1262,17 @@ describe("Cron API", () => {
 
     expect(res.status).toBe(401);
     expect(res.body).toMatchObject({ error: "Unauthorized" });
+  });
+
+  it("POST /api/cron/daily-tasks with CRON_SECRET not configured returns 503", async () => {
+    delete process.env.CRON_SECRET;
+
+    const res = await request(app).post("/api/cron/daily-tasks");
+
+    expect(res.status).toBe(503);
+    expect(res.body).toMatchObject({
+      error: expect.stringContaining("Cron endpoint is disabled"),
+    });
   });
 
   it("POST /api/cron/daily-tasks with wrong x-cron-secret returns 401", async () => {
@@ -996,7 +1294,37 @@ describe("Cron API", () => {
       .set("x-cron-secret", "test-cron-secret");
 
     expect(res.status).toBe(400);
-    expect(res.body).toMatchObject({ error: expect.stringContaining("YYYY-MM-DD") });
+    expect(res.body).toMatchObject({
+      error: expect.stringContaining("YYYY-MM-DD"),
+    });
+  });
+
+  it("POST /api/cron/daily-tasks with date[foo]=bar returns 400 (malformed date query)", async () => {
+    process.env.CRON_SECRET = "test-cron-secret";
+
+    const res = await request(app)
+      .post("/api/cron/daily-tasks")
+      .query({ "date[foo]": "bar" })
+      .set("x-cron-secret", "test-cron-secret");
+
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({
+      error: expect.stringContaining("YYYY-MM-DD"),
+    });
+  });
+
+  it("POST /api/cron/daily-tasks with date and date[foo] together returns 400 (strict policy)", async () => {
+    process.env.CRON_SECRET = "test-cron-secret";
+
+    const res = await request(app)
+      .post("/api/cron/daily-tasks")
+      .query({ date: "2025-02-15", "date[foo]": "bar" })
+      .set("x-cron-secret", "test-cron-secret");
+
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({
+      error: expect.stringContaining("YYYY-MM-DD"),
+    });
   });
 
   it("POST /api/cron/daily-tasks with valid secret and date returns 200 (happy path)", async () => {
@@ -1012,6 +1340,73 @@ describe("Cron API", () => {
     expect(Number.isInteger(res.body.skipped)).toBe(true);
     expect(res.body.created).toBeGreaterThanOrEqual(0);
     expect(res.body.skipped).toBeGreaterThanOrEqual(0);
+  });
+
+  it("POST /api/cron/daily-tasks respects rate limit (max 2/min in non-test mode)", async () => {
+    const originalNodeEnv = process.env.NODE_ENV;
+    const originalCronSecret = process.env.CRON_SECRET;
+
+    try {
+      process.env.NODE_ENV = "development"; // Non-test mode to enforce rate limit
+      process.env.CRON_SECRET = "test-cron-secret";
+      // Create new app after env change to ensure rate limiter uses correct config
+      const limitedApp = createApp();
+
+      // First request should succeed
+      const res1 = await request(limitedApp)
+        .post("/api/cron/daily-tasks?date=2025-02-15")
+        .set("x-cron-secret", "test-cron-secret");
+      expect(res1.status).toBe(200);
+
+      // Second request should succeed (max is 2/min)
+      const res2 = await request(limitedApp)
+        .post("/api/cron/daily-tasks?date=2025-02-15")
+        .set("x-cron-secret", "test-cron-secret");
+      expect(res2.status).toBe(200);
+
+      // Third request should be rate limited
+      const res3 = await request(limitedApp)
+        .post("/api/cron/daily-tasks?date=2025-02-15")
+        .set("x-cron-secret", "test-cron-secret");
+      expect(res3.status).toBe(429);
+      expect(res3.body).toMatchObject({
+        error: expect.stringContaining("Too many cron requests"),
+      });
+    } finally {
+      process.env.NODE_ENV = originalNodeEnv;
+      if (originalCronSecret === undefined) delete process.env.CRON_SECRET;
+      else process.env.CRON_SECRET = originalCronSecret;
+    }
+  });
+
+  it("POST /api/cron/daily-tasks rejects invalid secrets without consuming rate limit quota", async () => {
+    const originalNodeEnv = process.env.NODE_ENV;
+    const originalCronSecret = process.env.CRON_SECRET;
+
+    try {
+      process.env.NODE_ENV = "development";
+      process.env.CRON_SECRET = "test-cron-secret";
+      const limitedApp = createApp();
+
+      // Send many requests with invalid secret - should all be rejected immediately
+      for (let i = 0; i < 10; i++) {
+        const res = await request(limitedApp)
+          .post("/api/cron/daily-tasks?date=2025-02-15")
+          .set("x-cron-secret", "wrong-secret");
+        expect(res.status).toBe(401);
+        expect(res.body).toMatchObject({ error: "Unauthorized" });
+      }
+
+      // Valid secret requests should still work (quota not consumed by invalid requests)
+      const validRes = await request(limitedApp)
+        .post("/api/cron/daily-tasks?date=2025-02-15")
+        .set("x-cron-secret", "test-cron-secret");
+      expect(validRes.status).toBe(200);
+    } finally {
+      process.env.NODE_ENV = originalNodeEnv;
+      if (originalCronSecret === undefined) delete process.env.CRON_SECRET;
+      else process.env.CRON_SECRET = originalCronSecret;
+    }
   });
 });
 
@@ -1090,13 +1485,19 @@ describe("Security middlewares", () => {
 
         // Exceed the non-test authLimiter max (20) with invalid credentials
         for (let i = 0; i < 21; i++) {
-          await agent.post("/api/auth/login").send({ email: "mgr@test.com", password: "wrongpassword" });
+          await agent
+            .post("/api/auth/login")
+            .send({ email: "mgr@test.com", password: "wrongpassword" });
         }
 
-        const res = await agent.post("/api/auth/login").send({ email: "mgr@test.com", password: "wrongpassword" });
+        const res = await agent
+          .post("/api/auth/login")
+          .send({ email: "mgr@test.com", password: "wrongpassword" });
 
         expect(res.status).toBe(429);
-        expect(res.body).toMatchObject({ error: "Too many attempts, please try again later" });
+        expect(res.body).toMatchObject({
+          error: "Too many attempts, please try again later",
+        });
       } finally {
         process.env.NODE_ENV = originalNodeEnv;
         if (originalDisableCsrf === undefined) delete process.env.DISABLE_CSRF;
@@ -1117,16 +1518,24 @@ describe("Security middlewares", () => {
         const windowMs = 15 * 60 * 1000;
 
         for (let i = 0; i < 20; i++) {
-          await agent.post("/api/auth/login").send({ email: "mgr@test.com", password: "wrongpassword" });
+          await agent
+            .post("/api/auth/login")
+            .send({ email: "mgr@test.com", password: "wrongpassword" });
         }
-        const afterLimit = await agent.post("/api/auth/login").send({ email: "mgr@test.com", password: "wrongpassword" });
+        const afterLimit = await agent
+          .post("/api/auth/login")
+          .send({ email: "mgr@test.com", password: "wrongpassword" });
         expect(afterLimit.status).toBe(429);
 
         vi.advanceTimersByTime(windowMs + 1);
 
-        const afterWindow = await agent.post("/api/auth/login").send({ email: "mgr@test.com", password: "wrongpassword" });
+        const afterWindow = await agent
+          .post("/api/auth/login")
+          .send({ email: "mgr@test.com", password: "wrongpassword" });
         expect(afterWindow.status).toBe(401);
-        expect(afterWindow.body?.error).not.toBe("Too many attempts, please try again later");
+        expect(afterWindow.body?.error).not.toBe(
+          "Too many attempts, please try again later",
+        );
       } finally {
         vi.useRealTimers();
         process.env.NODE_ENV = originalNodeEnv;
@@ -1145,7 +1554,9 @@ describe("Workstations and employees API", () => {
 
   it("GET /api/workstations as EMPLOYEE returns 403", async () => {
     const agent = request.agent(app);
-    await agent.post("/api/auth/login").send({ email: "emp@test.com", password: "password" });
+    await agent
+      .post("/api/auth/login")
+      .send({ email: "emp@test.com", password: "password" });
 
     const res = await agent.get("/api/workstations");
 
@@ -1154,7 +1565,9 @@ describe("Workstations and employees API", () => {
 
   it("GET /api/workstations as MANAGER returns 200 and array", async () => {
     const agent = request.agent(app);
-    await agent.post("/api/auth/login").send({ email: "mgr@test.com", password: "password" });
+    await agent
+      .post("/api/auth/login")
+      .send({ email: "mgr@test.com", password: "password" });
 
     const res = await agent.get("/api/workstations");
 
@@ -1164,7 +1577,9 @@ describe("Workstations and employees API", () => {
 
   it("POST /api/workstations as MANAGER creates a workstation", async () => {
     const agent = request.agent(app);
-    await agent.post("/api/auth/login").send({ email: "mgr@test.com", password: "password" });
+    await agent
+      .post("/api/auth/login")
+      .send({ email: "mgr@test.com", password: "password" });
 
     const name = `Test WS ${Date.now()}`;
     const res = await agent.post("/api/workstations").send({ name });
@@ -1181,20 +1596,28 @@ describe("Workstations and employees API", () => {
     expect(manager?.teamId).toBeTruthy();
 
     const agent = request.agent(app);
-    await agent.post("/api/auth/login").send({ email: "mgr@test.com", password: "password" });
+    await agent
+      .post("/api/auth/login")
+      .send({ email: "mgr@test.com", password: "password" });
 
     const name = `P2002-fallback-${Date.now()}`;
-    const first = await agent.post("/api/workstations").send({ name, teamId: manager!.teamId! });
+    const first = await agent
+      .post("/api/workstations")
+      .send({ name, teamId: manager!.teamId! });
     expect(first.status).toBe(201);
 
-    const second = await agent.post("/api/workstations").send({ name, teamId: manager!.teamId! });
+    const second = await agent
+      .post("/api/workstations")
+      .send({ name, teamId: manager!.teamId! });
     expect(second.status).toBe(409);
     expect(second.body).toMatchObject({
       error: "A record with this value already exists.",
       code: "CONFLICT",
     });
 
-    await prisma.workstation.delete({ where: { id: first.body.id } }).catch(() => {});
+    await prisma.workstation
+      .delete({ where: { id: first.body.id } })
+      .catch(() => {});
   });
 
   it("POST /api/workstations with valid teamId creates workstation in that team", async () => {
@@ -1205,18 +1628,23 @@ describe("Workstations and employees API", () => {
     expect(manager?.teamId).toBeTruthy();
 
     const agent = request.agent(app);
-    await agent.post("/api/auth/login").send({ email: "mgr@test.com", password: "password" });
+    await agent
+      .post("/api/auth/login")
+      .send({ email: "mgr@test.com", password: "password" });
 
     const name = `Test WS teamId ${Date.now()}`;
     let createdId: string | null = null;
     try {
-      const res = await agent.post("/api/workstations").send({ name, teamId: manager!.teamId! });
+      const res = await agent
+        .post("/api/workstations")
+        .send({ name, teamId: manager!.teamId! });
 
       expect(res.status).toBe(201);
       expect(res.body).toMatchObject({ name, teamId: manager!.teamId! });
       createdId = res.body.id;
     } finally {
-      if (createdId) await prisma.workstation.delete({ where: { id: createdId } });
+      if (createdId)
+        await prisma.workstation.delete({ where: { id: createdId } });
     }
   });
 
@@ -1236,7 +1664,9 @@ describe("Workstations and employees API", () => {
 
     try {
       const agent = request.agent(app);
-      await agent.post("/api/auth/login").send({ email: "mgr@test.com", password: "password" });
+      await agent
+        .post("/api/auth/login")
+        .send({ email: "mgr@test.com", password: "password" });
 
       const res = await agent.post("/api/workstations").send({
         name: "Should Fail",
@@ -1244,7 +1674,9 @@ describe("Workstations and employees API", () => {
       });
 
       expect(res.status).toBe(403);
-      expect(res.body.error).toBe("Team not found or you do not manage this team.");
+      expect(res.body.error).toBe(
+        "Team not found or you do not manage this team.",
+      );
     } finally {
       await prisma.team.delete({ where: { id: otherTeam.id } });
       await prisma.user.delete({ where: { id: otherManager.id } });
@@ -1253,7 +1685,9 @@ describe("Workstations and employees API", () => {
 
   it("POST /api/employees as MANAGER creates employee with workstation assignment", async () => {
     const agent = request.agent(app);
-    await agent.post("/api/auth/login").send({ email: "mgr@test.com", password: "password" });
+    await agent
+      .post("/api/auth/login")
+      .send({ email: "mgr@test.com", password: "password" });
 
     const manager = await prisma.user.findUnique({
       where: { email: "mgr@test.com" },
@@ -1288,7 +1722,9 @@ describe("Workstations and employees API", () => {
 
   it("POST /api/employees with duplicate workstationIds returns 400 (validation)", async () => {
     const agent = request.agent(app);
-    await agent.post("/api/auth/login").send({ email: "mgr@test.com", password: "password" });
+    await agent
+      .post("/api/auth/login")
+      .send({ email: "mgr@test.com", password: "password" });
 
     const manager = await prisma.user.findUnique({
       where: { email: "mgr@test.com" },
@@ -1335,7 +1771,9 @@ describe("Workstations and employees API", () => {
 
     try {
       const agent = request.agent(app);
-      await agent.post("/api/auth/login").send({ email: "mgr@test.com", password: "password" });
+      await agent
+        .post("/api/auth/login")
+        .send({ email: "mgr@test.com", password: "password" });
       const res = await agent.post("/api/employees").send({
         name: "Cross-team Employee",
         email: `cross-${Date.now()}@test.com`,
@@ -1352,7 +1790,9 @@ describe("Workstations and employees API", () => {
 
   it("POST /api/employees creates daily tasks from workstation templates (createMany non-regression)", async () => {
     const agent = request.agent(app);
-    await agent.post("/api/auth/login").send({ email: "mgr@test.com", password: "password" });
+    await agent
+      .post("/api/auth/login")
+      .send({ email: "mgr@test.com", password: "password" });
 
     const manager = await prisma.user.findUnique({
       where: { email: "mgr@test.com" },
@@ -1414,7 +1854,9 @@ describe("Workstations and employees API", () => {
       await prisma.taskTemplate.deleteMany({
         where: { workstationId: { in: [ws1.id, ws2.id] } },
       });
-      await prisma.workstation.deleteMany({ where: { id: { in: [ws1.id, ws2.id] } } });
+      await prisma.workstation.deleteMany({
+        where: { id: { in: [ws1.id, ws2.id] } },
+      });
     }
   });
 });
