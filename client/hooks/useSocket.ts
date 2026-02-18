@@ -64,7 +64,7 @@ export function useSocket() {
       const socket = socketRef.current;
       if (!socket) return () => {};
 
-      const wrapped = (...args: any[]) => {
+      const wrapped = (...args: unknown[]) => {
         if (
           !socketRef.current ||
           socketRef.current !== socket ||
@@ -75,10 +75,16 @@ export function useSocket() {
         callback(payload);
       };
 
-      (socket as any).on(event, wrapped);
+      socket.on(
+        event as keyof SocketEventMap,
+        wrapped as (payload: unknown) => void,
+      );
 
       return () => {
-        (socket as any).off(event, wrapped);
+        socket.off(
+          event as keyof SocketEventMap,
+          wrapped as (payload: unknown) => void,
+        );
       };
     },
     [],

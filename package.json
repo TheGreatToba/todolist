@@ -11,6 +11,7 @@
     ]
   },
   "scripts": {
+    "prepare": "husky",
     "postinstall": "prisma generate",
     "dev": "vite",
     "prebuild": "prisma generate",
@@ -28,6 +29,15 @@
     "typecheck": "tsc",
     "seed": "pnpm exec tsx prisma/seed.ts",
     "backfill:workstation-team": "tsx server/scripts/backfill-workstation-team.ts"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,css,md,yml,yaml}": [
+      "prettier --write"
+    ]
   },
   "prisma": {
     "seed": "pnpm exec tsx prisma/seed.ts"
@@ -108,7 +118,9 @@
     "eslint-config-prettier": "^10.1.8",
     "framer-motion": "^12.23.12",
     "globals": "^16.3.0",
+    "husky": "^9.1.7",
     "input-otp": "^1.4.2",
+    "lint-staged": "^16.2.7",
     "lucide-react": "^0.539.0",
     "next-themes": "^0.4.6",
     "postcss": "^8.5.6",

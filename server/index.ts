@@ -57,7 +57,7 @@ export function createApp(): Express {
   // See: https://expressjs.com/en/guide/behind-proxies.html
   const trustProxyEnv = process.env.TRUST_PROXY;
   if (trustProxyEnv && trustProxyEnv !== "false") {
-    let trustProxyValue: number = 1;
+    let trustProxyValue: number;
     if (trustProxyEnv === "true") {
       trustProxyValue = 1;
     } else {

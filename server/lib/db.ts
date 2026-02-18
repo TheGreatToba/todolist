@@ -12,13 +12,17 @@ function createPrismaWithMiddleware(): InstanceType<typeof PrismaClient> {
   return client;
 }
 
+const globalForPrisma = globalThis as typeof globalThis & {
+  prisma?: InstanceType<typeof PrismaClient>;
+};
+
 if (process.env.NODE_ENV === "production") {
   prisma = createPrismaWithMiddleware();
 } else {
-  if (!(global as any).prisma) {
-    (global as any).prisma = createPrismaWithMiddleware();
+  if (!globalForPrisma.prisma) {
+    globalForPrisma.prisma = createPrismaWithMiddleware();
   }
-  prisma = (global as any).prisma;
+  prisma = globalForPrisma.prisma;
 }
 
 export default prisma;

@@ -1,6 +1,7 @@
 import path from "path";
-import { createServer } from "./index";
+import type { Request, Response } from "express";
 import express from "express";
+import { createServer } from "./index";
 import { logger } from "./lib/logger";
 
 const httpServer = createServer();
@@ -10,14 +11,14 @@ const port = process.env.PORT || 3000;
 const __dirname = import.meta.dirname;
 const distPath = path.join(__dirname, "../dist/spa");
 
-// Get Express app from HTTP server
-const app = httpServer as any;
+// Get Express app from HTTP server (createServer returns app when used as handler)
+const app = httpServer as unknown as express.Express;
 
 // Serve static files
 app.use(express.static(distPath));
 
 // Handle React Router - serve index.html for all non-API routes
-app.get("*", (req: any, res: any) => {
+app.get("*", (req: Request, res: Response) => {
   // Don't serve index.html for API routes or WebSocket routes
   if (
     req.path.startsWith("/api/") ||

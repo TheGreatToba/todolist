@@ -293,7 +293,7 @@ export const handleCreateTaskTemplate: RequestHandler = async (req, res) => {
                 body.title,
                 body.description,
               );
-            } catch (emailError) {
+            } catch {
               logger.info(
                 "Email notification skipped (email service not available)",
               );

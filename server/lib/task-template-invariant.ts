@@ -12,7 +12,11 @@ function extractScalar(value: unknown): string | null | undefined {
   if (value === null || typeof value === "string") {
     return value as string | null;
   }
-  if (typeof value === "object" && value !== null && "set" in (value as any)) {
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    "set" in (value as Record<string, unknown>)
+  ) {
     const setVal = (value as { set: unknown }).set;
     if (setVal === null || typeof setVal === "string") {
       return setVal as string | null;
@@ -33,8 +37,10 @@ function resolveWorkstationAndEmployeeIds(
 }> {
   if (action === "create") {
     const data = args.data as Record<string, unknown>;
-    const ws = extractScalar((data as any).workstationId);
-    const emp = extractScalar((data as any).assignedToEmployeeId);
+    const ws = extractScalar((data as Record<string, unknown>).workstationId);
+    const emp = extractScalar(
+      (data as Record<string, unknown>).assignedToEmployeeId,
+    );
     return Promise.resolve({
       workstationId: ws ?? null,
       assignedToEmployeeId: emp ?? null,
@@ -52,8 +58,12 @@ function resolveWorkstationAndEmployeeIds(
       .then((existing) => {
         if (!existing)
           return { workstationId: null, assignedToEmployeeId: null };
-        const wsUpdate = extractScalar((data as any).workstationId);
-        const empUpdate = extractScalar((data as any).assignedToEmployeeId);
+        const wsUpdate = extractScalar(
+          (data as Record<string, unknown>).workstationId,
+        );
+        const empUpdate = extractScalar(
+          (data as Record<string, unknown>).assignedToEmployeeId,
+        );
         return {
           workstationId:
             wsUpdate !== undefined ? wsUpdate : existing.workstationId,
@@ -74,8 +84,12 @@ function resolveWorkstationAndEmployeeIds(
     })
     .then((existing) => {
       if (existing) {
-        const wsUpdate = extractScalar((update as any).workstationId);
-        const empUpdate = extractScalar((update as any).assignedToEmployeeId);
+        const wsUpdate = extractScalar(
+          (update as Record<string, unknown>).workstationId,
+        );
+        const empUpdate = extractScalar(
+          (update as Record<string, unknown>).assignedToEmployeeId,
+        );
         return {
           workstationId:
             wsUpdate !== undefined ? wsUpdate : existing.workstationId,
@@ -83,8 +97,12 @@ function resolveWorkstationAndEmployeeIds(
             empUpdate !== undefined ? empUpdate : existing.assignedToEmployeeId,
         };
       }
-      const wsCreate = extractScalar((create as any).workstationId);
-      const empCreate = extractScalar((create as any).assignedToEmployeeId);
+      const wsCreate = extractScalar(
+        (create as Record<string, unknown>).workstationId,
+      );
+      const empCreate = extractScalar(
+        (create as Record<string, unknown>).assignedToEmployeeId,
+      );
       return {
         workstationId: wsCreate ?? null,
         assignedToEmployeeId: empCreate ?? null,
@@ -108,12 +126,12 @@ export function applyTaskTemplateInvariantMiddleware(
     // Disallow bulk updates that touch these linkage fields, to avoid
     // silently breaking the invariant on many rows at once.
     if (params.action === "updateMany") {
-      const data = (params.args as any).data as
+      const data = (params.args as Record<string, unknown>).data as
         | Record<string, unknown>
         | undefined;
       if (data) {
-        const ws = extractScalar((data as any).workstationId);
-        const emp = extractScalar((data as any).assignedToEmployeeId);
+        const ws = extractScalar(data.workstationId);
+        const emp = extractScalar(data.assignedToEmployeeId);
         if (ws !== undefined || emp !== undefined) {
           throw new AppError(400, TASK_TEMPLATE_BULK_UPDATE_FORBIDDEN_MESSAGE);
         }

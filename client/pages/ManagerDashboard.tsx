@@ -59,7 +59,7 @@ type TasksByWorkstationMap = Record<
 
 export default function ManagerDashboard() {
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { logout } = useAuth();
   const { on } = useSocket();
   const [dashboard, setDashboard] = useState<ManagerDashboardType | null>(null);
 
