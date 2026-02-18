@@ -20,6 +20,7 @@
     "build:client": "vite build",
     "build:server": "vite build --config vite.config.server.ts",
     "start": "node dist/server/node-build.mjs",
+    "smoke:prod": "node scripts/smoke-prod-server.mjs",
     "pretest": "prisma generate",
     "test": "vitest --run",
     "ci": "pnpm run typecheck && pnpm run seed && pnpm run test",
