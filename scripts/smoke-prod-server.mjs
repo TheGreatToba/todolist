@@ -36,7 +36,7 @@ function waitForExit(child, timeoutMs = 5000) {
       child.kill("SIGKILL");
       reject(new Error(`Process did not exit within ${timeoutMs} ms`));
     }, timeoutMs);
-    child.on("exit", () => {
+    child.once("exit", () => {
       clearTimeout(t);
       resolve();
     });
@@ -49,6 +49,11 @@ async function main() {
     stdio: ["ignore", "pipe", "pipe"],
   });
 
+  child.on("error", (err) => {
+    console.error("Smoke test failed: could not start server process", err);
+    process.exit(1);
+  });
+
   let stderr = "";
   child.stderr?.on("data", (chunk) => {
     stderr += chunk.toString();
@@ -57,6 +62,7 @@ async function main() {
   const res = await waitForServer();
   if (!res) {
     child.kill("SIGTERM");
+    await waitForExit(child).catch(() => {});
     console.error(
       "Smoke test failed: server did not respond to GET /api/ping within",
       MAX_WAIT_MS,
@@ -66,9 +72,21 @@ async function main() {
     process.exit(1);
   }
 
+  const contentType = res.headers.get("content-type") ?? "";
+  if (!contentType.includes("application/json")) {
+    child.kill("SIGTERM");
+    await waitForExit(child).catch(() => {});
+    console.error(
+      "Smoke test failed: /api/ping content-type is not JSON",
+      contentType,
+    );
+    process.exit(1);
+  }
+
   const data = await res.json();
   if (typeof data?.message !== "string") {
     child.kill("SIGTERM");
+    await waitForExit(child).catch(() => {});
     console.error(
       "Smoke test failed: /api/ping JSON invalid (expected { message: string })",
       data,
