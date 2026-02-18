@@ -21,13 +21,26 @@ async function waitForServer() {
   while (Date.now() < deadline) {
     try {
       const res = await fetch(PING_URL);
-      if (res.ok) return true;
+      if (res.ok) return res;
     } catch {
       // not ready yet
     }
     await sleep(POLL_MS);
   }
-  return false;
+  return null;
+}
+
+function waitForExit(child, timeoutMs = 5000) {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => {
+      child.kill("SIGKILL");
+      reject(new Error(`Process did not exit within ${timeoutMs} ms`));
+    }, timeoutMs);
+    child.on("exit", () => {
+      clearTimeout(t);
+      resolve();
+    });
+  });
 }
 
 async function main() {
@@ -41,16 +54,34 @@ async function main() {
     stderr += chunk.toString();
   });
 
-  const ready = await waitForServer();
-  child.kill("SIGTERM");
-
-  if (!ready) {
-    console.error("Smoke test failed: server did not respond to GET /api/ping within", MAX_WAIT_MS, "ms");
+  const res = await waitForServer();
+  if (!res) {
+    child.kill("SIGTERM");
+    console.error(
+      "Smoke test failed: server did not respond to GET /api/ping within",
+      MAX_WAIT_MS,
+      "ms",
+    );
     if (stderr) console.error("Server stderr:", stderr);
     process.exit(1);
   }
 
-  console.log("Smoke test OK: prod server started and responded to GET /api/ping");
+  const data = await res.json();
+  if (typeof data?.message !== "string") {
+    child.kill("SIGTERM");
+    console.error(
+      "Smoke test failed: /api/ping JSON invalid (expected { message: string })",
+      data,
+    );
+    process.exit(1);
+  }
+
+  child.kill("SIGTERM");
+  await waitForExit(child);
+
+  console.log(
+    "Smoke test OK: prod server started, GET /api/ping returned 200 and valid JSON",
+  );
   process.exit(0);
 }
 
