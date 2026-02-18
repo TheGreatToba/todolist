@@ -1172,7 +1172,7 @@ describe("Daily tasks API", () => {
       (e) => Array.isArray(e.path) && e.path.includes("isCompleted"),
     );
     expect(isCompletedError).toBeDefined();
-    expect(isCompletedError!.code).toBeDefined();
+    expect(isCompletedError!.code).toBe("invalid_type");
     expect(isCompletedError!.message).toBeDefined();
   });
 
@@ -1206,7 +1206,7 @@ describe("Daily tasks API", () => {
       (e) => Array.isArray(e.path) && e.path.includes("isCompleted"),
     );
     expect(isCompletedError).toBeDefined();
-    expect(isCompletedError!.code).toBeDefined();
+    expect(isCompletedError!.code).toBe("invalid_type");
     expect(isCompletedError!.message).toBeDefined();
   });
 
