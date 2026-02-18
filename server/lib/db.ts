@@ -1,6 +1,6 @@
 // Namespace import for ESM/CJS compat (Vitest, Vite, Node)
-import * as PrismaPkg from '@prisma/client';
-import { applyTaskTemplateInvariantMiddleware } from './task-template-invariant';
+import * as PrismaPkg from "@prisma/client";
+import { applyTaskTemplateInvariantMiddleware } from "./task-template-invariant";
 
 const PrismaClient = PrismaPkg.PrismaClient;
 
@@ -12,7 +12,7 @@ function createPrismaWithMiddleware(): InstanceType<typeof PrismaClient> {
   return client;
 }
 
-if (process.env.NODE_ENV === 'production') {
+if (process.env.NODE_ENV === "production") {
   prisma = createPrismaWithMiddleware();
 } else {
   if (!(global as any).prisma) {

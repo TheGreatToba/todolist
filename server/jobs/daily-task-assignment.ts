@@ -2,7 +2,7 @@
  * Daily task assignment job: creates DailyTasks for all recurring TaskTemplates
  * for a given date. Call this each morning (via cron or scheduled job).
  */
-import prisma from '../lib/db';
+import prisma from "../lib/db";
 
 export async function assignDailyTasksForDate(date: Date): Promise<{
   created: number;

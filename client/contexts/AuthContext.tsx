@@ -1,6 +1,17 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { User, LoginResponse, SignupResponse, ProfileResponse } from '@shared/api';
-import { fetchWithCsrf } from '@/lib/api';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  ReactNode,
+} from "react";
+import {
+  User,
+  LoginResponse,
+  SignupResponse,
+  ProfileResponse,
+} from "@shared/api";
+import { fetchWithCsrf } from "@/lib/api";
 
 interface AuthContextType {
   user: User | null;
@@ -22,7 +33,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchProfile = async () => {
     try {
-      const response = await fetch('/api/auth/profile', { credentials: 'include' });
+      const response = await fetch("/api/auth/profile", {
+        credentials: "include",
+      });
 
       if (response.ok) {
         const { user: userData }: ProfileResponse = await response.json();
@@ -48,22 +61,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await fetchWithCsrf('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetchWithCsrf("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
 
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.error || 'Login failed');
+        throw new Error(data.error || "Login failed");
       }
 
       const { user: userData }: LoginResponse = await response.json();
       setIsAuthenticated(true);
       setUser(userData);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'An error occurred';
+      const message = err instanceof Error ? err.message : "An error occurred";
       setError(message);
       throw err;
     } finally {
@@ -75,22 +88,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await fetchWithCsrf('/api/auth/signup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password, role: 'MANAGER' }),
+      const response = await fetchWithCsrf("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email, password, role: "MANAGER" }),
       });
 
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.error || 'Signup failed');
+        throw new Error(data.error || "Signup failed");
       }
 
       const { user: userData }: SignupResponse = await response.json();
       setIsAuthenticated(true);
       setUser(userData);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'An error occurred';
+      const message = err instanceof Error ? err.message : "An error occurred";
       setError(message);
       throw err;
     } finally {
@@ -102,11 +115,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsAuthenticated(false);
     setUser(null);
     setError(null);
-    fetchWithCsrf('/api/auth/logout', { method: 'POST' }).catch(() => {});
+    fetchWithCsrf("/api/auth/logout", { method: "POST" }).catch(() => {});
   };
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated, login, signup, logout, isLoading, error }}>
+    <AuthContext.Provider
+      value={{ user, isAuthenticated, login, signup, logout, isLoading, error }}
+    >
       {children}
     </AuthContext.Provider>
   );
@@ -115,7 +130,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    throw new Error("useAuth must be used within an AuthProvider");
   }
   return context;
 }

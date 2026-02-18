@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useAuth } from '@/contexts/AuthContext';
-import { Loader2, Lock } from 'lucide-react';
-import { z } from 'zod';
+import React, { useState, useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+import { Loader2, Lock } from "lucide-react";
+import { z } from "zod";
 
 const SetPasswordResponseSchema = z.object({
   success: z.boolean(),
@@ -10,7 +10,7 @@ const SetPasswordResponseSchema = z.object({
     id: z.string(),
     name: z.string(),
     email: z.string().email(),
-    role: z.enum(['EMPLOYEE', 'MANAGER']),
+    role: z.enum(["EMPLOYEE", "MANAGER"]),
     teamId: z.string().nullable().optional(),
   }),
 });
@@ -22,18 +22,20 @@ const ErrorResponseSchema = z.object({
 export default function SetPassword() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const token = searchParams.get('token');
+  const token = searchParams.get("token");
   const { user } = useAuth();
 
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
   useEffect(() => {
     if (user && success) {
-      navigate(user.role === 'MANAGER' ? '/manager' : '/employee', { replace: true });
+      navigate(user.role === "MANAGER" ? "/manager" : "/employee", {
+        replace: true,
+      });
     }
   }, [user, success, navigate]);
 
@@ -42,26 +44,26 @@ export default function SetPassword() {
     setError(null);
 
     if (!token) {
-      setError('Invalid link. Please use the link from your welcome email.');
+      setError("Invalid link. Please use the link from your welcome email.");
       return;
     }
 
     if (password.length < 6) {
-      setError('Password must be at least 6 characters.');
+      setError("Password must be at least 6 characters.");
       return;
     }
 
     if (password !== confirmPassword) {
-      setError('Passwords do not match.');
+      setError("Passwords do not match.");
       return;
     }
 
     setIsLoading(true);
     try {
-      const response = await fetch('/api/auth/set-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
+      const response = await fetch("/api/auth/set-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ token, password }),
       });
 
@@ -79,13 +81,14 @@ export default function SetPassword() {
         // We need to either: 1) add setUser to AuthContext, or 2) force
         // window.location.href to /employee to trigger full reload and
         // profile fetch. Option 2 is simpler for now.
-        window.location.href = data.user.role === 'MANAGER' ? '/manager' : '/employee';
+        window.location.href =
+          data.user.role === "MANAGER" ? "/manager" : "/employee";
       } else {
         const data = ErrorResponseSchema.parse(raw);
-        setError(data.error ?? 'Failed to set password');
+        setError(data.error ?? "Failed to set password");
       }
     } catch {
-      setError('An error occurred. Please try again.');
+      setError("An error occurred. Please try again.");
     } finally {
       setIsLoading(false);
     }
@@ -98,12 +101,15 @@ export default function SetPassword() {
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-destructive/15 mb-4">
             <Lock className="w-8 h-8 text-destructive" />
           </div>
-          <h1 className="text-2xl font-bold text-foreground mb-2">Invalid link</h1>
+          <h1 className="text-2xl font-bold text-foreground mb-2">
+            Invalid link
+          </h1>
           <p className="text-muted-foreground mb-6">
-            Please use the link from your welcome email to set your password. The link may have expired.
+            Please use the link from your welcome email to set your password.
+            The link may have expired.
           </p>
           <button
-            onClick={() => navigate('/login')}
+            onClick={() => navigate("/login")}
             className="px-6 py-3 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-medium transition"
           >
             Go to sign in
@@ -120,11 +126,18 @@ export default function SetPassword() {
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/15 mb-4">
             <Lock className="w-8 h-8 text-primary" />
           </div>
-          <h1 className="text-3xl font-bold text-foreground mb-2">Set your password</h1>
-          <p className="text-muted-foreground">Create a secure password for your TaskFlow account</p>
+          <h1 className="text-3xl font-bold text-foreground mb-2">
+            Set your password
+          </h1>
+          <p className="text-muted-foreground">
+            Create a secure password for your TaskFlow account
+          </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-5 bg-card rounded-2xl shadow-sm border border-border p-8">
+        <form
+          onSubmit={handleSubmit}
+          className="space-y-5 bg-card rounded-2xl shadow-sm border border-border p-8"
+        >
           {error && (
             <div className="bg-destructive/10 border border-destructive/20 rounded-lg px-4 py-3 text-sm text-destructive">
               {error}
@@ -132,7 +145,10 @@ export default function SetPassword() {
           )}
 
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-foreground mb-2">
+            <label
+              htmlFor="password"
+              className="block text-sm font-medium text-foreground mb-2"
+            >
               New password
             </label>
             <input
@@ -144,11 +160,16 @@ export default function SetPassword() {
               minLength={6}
               className="w-full px-4 py-3 rounded-lg border border-input bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition"
             />
-            <p className="text-xs text-muted-foreground mt-1">At least 6 characters</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              At least 6 characters
+            </p>
           </div>
 
           <div>
-            <label htmlFor="confirmPassword" className="block text-sm font-medium text-foreground mb-2">
+            <label
+              htmlFor="confirmPassword"
+              className="block text-sm font-medium text-foreground mb-2"
+            >
               Confirm password
             </label>
             <input
@@ -173,7 +194,7 @@ export default function SetPassword() {
                 Setting password...
               </>
             ) : (
-              'Set password & sign in'
+              "Set password & sign in"
             )}
           </button>
         </form>

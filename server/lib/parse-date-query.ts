@@ -19,11 +19,11 @@ export function parseDateQuery(value: unknown): Date | null {
   }
   let raw: string | undefined;
 
-  if (typeof value === 'string') {
+  if (typeof value === "string") {
     raw = value;
   } else if (Array.isArray(value)) {
     const first = value[0];
-    raw = typeof first === 'string' ? first : undefined;
+    raw = typeof first === "string" ? first : undefined;
   } else {
     // Present but not a string / string[] → treat as invalid
     return null;
@@ -36,12 +36,12 @@ export function parseDateQuery(value: unknown): Date | null {
     return today;
   }
   if (!DATE_QUERY_REGEX.test(raw)) return null;
-  const date = new Date(raw + 'T12:00:00');
+  const date = new Date(raw + "T12:00:00");
   if (Number.isNaN(date.getTime())) return null;
   // Round-trip: ensure the date is calendar-valid (reject e.g. 2025-02-31)
   const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
   if (`${y}-${m}-${d}` !== raw) return null;
   date.setHours(0, 0, 0, 0);
   return date;

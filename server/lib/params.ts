@@ -5,9 +5,10 @@
  */
 export function paramString(value: unknown): string | null {
   let s: string | null = null;
-  if (typeof value === 'string') s = value;
-  else if (Array.isArray(value) && value[0] && typeof value[0] === 'string') s = value[0];
+  if (typeof value === "string") s = value;
+  else if (Array.isArray(value) && value[0] && typeof value[0] === "string")
+    s = value[0];
   if (s == null) return null;
   const trimmed = s.trim();
-  return trimmed === '' ? null : trimmed;
+  return trimmed === "" ? null : trimmed;
 }

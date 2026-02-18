@@ -36,7 +36,9 @@ describe("runBackfill", () => {
   });
 
   afterAll(async () => {
-    await prisma.employeeWorkstation.deleteMany({ where: { workstationId: wsNoTeamId } });
+    await prisma.employeeWorkstation.deleteMany({
+      where: { workstationId: wsNoTeamId },
+    });
     await prisma.workstation.deleteMany({ where: { id: wsNoTeamId } });
     await prisma.user.deleteMany({ where: { id: userNoTeamId } });
   });

@@ -1,7 +1,7 @@
-import { RequestHandler } from 'express';
-import { z } from 'zod';
-import prisma from '../lib/db';
-import { Request, Response } from 'express';
+import { RequestHandler } from "express";
+import { z } from "zod";
+import prisma from "../lib/db";
+import { Request, Response } from "express";
 import {
   hashPassword,
   verifyPassword,
@@ -10,11 +10,11 @@ import {
   AUTH_COOKIE_NAME,
   getAuthCookieOptions,
   getAuthCookieClearOptions,
-} from '../lib/auth';
-import { sendErrorResponse } from '../lib/errors';
-import { redactEmailForLog, emailHashForLog } from '../lib/log-pii';
-import { getAuthOrThrow } from '../middleware/requireAuth';
-import { logger } from '../lib/logger';
+} from "../lib/auth";
+import { sendErrorResponse } from "../lib/errors";
+import { redactEmailForLog, emailHashForLog } from "../lib/log-pii";
+import { getAuthOrThrow } from "../middleware/requireAuth";
+import { logger } from "../lib/logger";
 
 /**
  * Structured log when role from DB is invalid (do not emit JWT).
@@ -22,10 +22,10 @@ import { logger } from '../lib/logger';
  */
 function logInvalidRole(
   user: { id: string; email: string; role: unknown },
-  req: Request
+  req: Request,
 ): void {
   const payload: Record<string, unknown> = {
-    event: 'invalid_role_rejected',
+    event: "invalid_role_rejected",
     userId: user.id,
     email: redactEmailForLog(user.email),
     role: user.role,
@@ -35,12 +35,15 @@ function logInvalidRole(
   };
   const hash = emailHashForLog(user.email);
   if (hash) payload.emailHash = hash;
-  logger.structured('warn', payload);
+  logger.structured("warn", payload);
 }
 
 /** Safely extract Prisma P2002 meta.target as string array (no `as any`). */
-function getP2002TargetFields(err: { meta?: unknown } | null | undefined): string[] {
-  if (!err?.meta || typeof err.meta !== 'object' || !('target' in err.meta)) return [];
+function getP2002TargetFields(
+  err: { meta?: unknown } | null | undefined,
+): string[] {
+  if (!err?.meta || typeof err.meta !== "object" || !("target" in err.meta))
+    return [];
   const target = (err.meta as { target?: unknown }).target;
   if (!Array.isArray(target)) return [];
   return target.map((t) => String(t));
@@ -50,11 +53,11 @@ function getP2002TargetFields(err: { meta?: unknown } | null | undefined): strin
 function createTokenOrFail(
   req: Request,
   res: Response,
-  user: { id: string; email: string; role: unknown }
+  user: { id: string; email: string; role: unknown },
 ): string | null {
   if (!isRole(user.role)) {
     logInvalidRole(user, req);
-    res.status(500).json({ error: 'Invalid user role' });
+    res.status(500).json({ error: "Invalid user role" });
     return null;
   }
   return generateToken({ userId: user.id, email: user.email, role: user.role });
@@ -69,7 +72,7 @@ const SignupSchema = z.object({
   name: z.string().min(1),
   email: z.string().email(),
   password: z.string().min(6),
-  role: z.enum(['MANAGER']), // Only managers can signup directly
+  role: z.enum(["MANAGER"]), // Only managers can signup directly
 });
 
 const LoginSchema = z.object({
@@ -103,7 +106,7 @@ export const handleSignup: RequestHandler = async (req, res) => {
       });
 
       // If manager, create a default team and attach it to the user
-      if (body.role === 'MANAGER') {
+      if (body.role === "MANAGER") {
         const team = await tx.team.create({
           data: {
             name: `${body.name}'s Team`,
@@ -132,10 +135,13 @@ export const handleSignup: RequestHandler = async (req, res) => {
     const prismaError = error as { code?: string; meta?: unknown };
     const targets = getP2002TargetFields(prismaError);
     const isEmailUniqueViolation =
-      prismaError?.code === 'P2002' && targets.some((t) => t.toLowerCase().includes('email'));
+      prismaError?.code === "P2002" &&
+      targets.some((t) => t.toLowerCase().includes("email"));
 
     if (isEmailUniqueViolation) {
-      res.status(409).json({ error: 'Email already registered', code: 'CONFLICT' });
+      res
+        .status(409)
+        .json({ error: "Email already registered", code: "CONFLICT" });
       return;
     }
 
@@ -152,14 +158,17 @@ export const handleLogin: RequestHandler = async (req, res) => {
     });
 
     if (!user) {
-      res.status(401).json({ error: 'Invalid email or password' });
+      res.status(401).json({ error: "Invalid email or password" });
       return;
     }
 
-    const passwordValid = await verifyPassword(body.password, user.passwordHash);
+    const passwordValid = await verifyPassword(
+      body.password,
+      user.passwordHash,
+    );
 
     if (!passwordValid) {
-      res.status(401).json({ error: 'Invalid email or password' });
+      res.status(401).json({ error: "Invalid email or password" });
       return;
     }
 
@@ -197,7 +206,7 @@ export const handleProfile: RequestHandler = async (req, res) => {
     });
 
     if (!user) {
-      res.status(404).json({ error: 'User not found' });
+      res.status(404).json({ error: "User not found" });
       return;
     }
 
@@ -223,13 +232,23 @@ export const handleSetPassword: RequestHandler = async (req, res) => {
     });
 
     if (!record) {
-      res.status(400).json({ error: 'Invalid or expired link. Please ask your manager to resend the invitation.' });
+      res
+        .status(400)
+        .json({
+          error:
+            "Invalid or expired link. Please ask your manager to resend the invitation.",
+        });
       return;
     }
 
     if (record.expiresAt < new Date()) {
       await prisma.setPasswordToken.delete({ where: { id: record.id } });
-      res.status(400).json({ error: 'This link has expired. Please ask your manager to resend the invitation.' });
+      res
+        .status(400)
+        .json({
+          error:
+            "This link has expired. Please ask your manager to resend the invitation.",
+        });
       return;
     }
 

@@ -1,10 +1,10 @@
-import { PrismaClient } from '@prisma/client';
-import bcryptjs from 'bcryptjs';
+import { PrismaClient } from "@prisma/client";
+import bcryptjs from "bcryptjs";
 
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('🌱 Starting seed...');
+  console.log("🌱 Starting seed...");
 
   // Reset demo data (allows re-running seed)
   await prisma.dailyTask.deleteMany();
@@ -13,37 +13,37 @@ async function main() {
   await prisma.team.deleteMany();
   await prisma.user.deleteMany();
   await prisma.workstation.deleteMany();
-  console.log('🧹 Cleared existing data');
+  console.log("🧹 Cleared existing data");
 
   // Create workstations
   const checkoutWorkstation = await prisma.workstation.create({
-    data: { name: 'Checkout' },
+    data: { name: "Checkout" },
   });
 
   const kitchenWorkstation = await prisma.workstation.create({
-    data: { name: 'Kitchen' },
+    data: { name: "Kitchen" },
   });
 
   const receptionWorkstation = await prisma.workstation.create({
-    data: { name: 'Reception' },
+    data: { name: "Reception" },
   });
 
-  console.log('✅ Created workstations');
+  console.log("✅ Created workstations");
 
   // Create a manager
   const managerUser = await prisma.user.create({
     data: {
-      name: 'Alice Manager',
-      email: 'mgr@test.com',
-      passwordHash: await bcryptjs.hash('password', 10),
-      role: 'MANAGER',
+      name: "Alice Manager",
+      email: "mgr@test.com",
+      passwordHash: await bcryptjs.hash("password", 10),
+      role: "MANAGER",
     },
   });
 
   // Create team for manager
   const team = await prisma.team.create({
     data: {
-      name: 'Daily Operations Team',
+      name: "Daily Operations Team",
       managerId: managerUser.id,
     },
   });
@@ -56,19 +56,27 @@ async function main() {
 
   // Attach workstations to the team (required for manager scope checks)
   await prisma.workstation.updateMany({
-    where: { id: { in: [checkoutWorkstation.id, kitchenWorkstation.id, receptionWorkstation.id] } },
+    where: {
+      id: {
+        in: [
+          checkoutWorkstation.id,
+          kitchenWorkstation.id,
+          receptionWorkstation.id,
+        ],
+      },
+    },
     data: { teamId: team.id },
   });
 
-  console.log('✅ Created team and manager');
+  console.log("✅ Created team and manager");
 
   // Create employees
   const employee1 = await prisma.user.create({
     data: {
-      name: 'Bob Employee',
-      email: 'emp@test.com',
-      passwordHash: await bcryptjs.hash('password', 10),
-      role: 'EMPLOYEE',
+      name: "Bob Employee",
+      email: "emp@test.com",
+      passwordHash: await bcryptjs.hash("password", 10),
+      role: "EMPLOYEE",
       teamId: team.id,
       workstations: {
         create: [{ workstationId: checkoutWorkstation.id }],
@@ -78,10 +86,10 @@ async function main() {
 
   const employee2 = await prisma.user.create({
     data: {
-      name: 'Carol Chef',
-      email: 'carol@test.com',
-      passwordHash: await bcryptjs.hash('password', 10),
-      role: 'EMPLOYEE',
+      name: "Carol Chef",
+      email: "carol@test.com",
+      passwordHash: await bcryptjs.hash("password", 10),
+      role: "EMPLOYEE",
       teamId: team.id,
       workstations: {
         create: [{ workstationId: kitchenWorkstation.id }],
@@ -91,10 +99,10 @@ async function main() {
 
   const employee3 = await prisma.user.create({
     data: {
-      name: 'David Receptionist',
-      email: 'david@test.com',
-      passwordHash: await bcryptjs.hash('password', 10),
-      role: 'EMPLOYEE',
+      name: "David Receptionist",
+      email: "david@test.com",
+      passwordHash: await bcryptjs.hash("password", 10),
+      role: "EMPLOYEE",
       teamId: team.id,
       workstations: {
         create: [{ workstationId: receptionWorkstation.id }],
@@ -102,13 +110,13 @@ async function main() {
     },
   });
 
-  console.log('✅ Created employees');
+  console.log("✅ Created employees");
 
   // Create task templates
   const taskTemplate1 = await prisma.taskTemplate.create({
     data: {
-      title: 'Count Cash Register',
-      description: 'Count and reconcile the cash register at the end of shift',
+      title: "Count Cash Register",
+      description: "Count and reconcile the cash register at the end of shift",
       workstationId: checkoutWorkstation.id,
       createdById: managerUser.id,
       isRecurring: true,
@@ -117,8 +125,8 @@ async function main() {
 
   const taskTemplate2 = await prisma.taskTemplate.create({
     data: {
-      title: 'Clean Workstation',
-      description: 'Clean and sanitize all surfaces',
+      title: "Clean Workstation",
+      description: "Clean and sanitize all surfaces",
       workstationId: checkoutWorkstation.id,
       createdById: managerUser.id,
       isRecurring: true,
@@ -127,8 +135,8 @@ async function main() {
 
   const taskTemplate3 = await prisma.taskTemplate.create({
     data: {
-      title: 'Prep Ingredients',
-      description: 'Prepare and measure all ingredients for the day',
+      title: "Prep Ingredients",
+      description: "Prepare and measure all ingredients for the day",
       workstationId: kitchenWorkstation.id,
       createdById: managerUser.id,
       isRecurring: true,
@@ -137,15 +145,15 @@ async function main() {
 
   const taskTemplate4 = await prisma.taskTemplate.create({
     data: {
-      title: 'Stock Shelves',
-      description: 'Ensure all items are properly stocked and organized',
+      title: "Stock Shelves",
+      description: "Ensure all items are properly stocked and organized",
       workstationId: receptionWorkstation.id,
       createdById: managerUser.id,
       isRecurring: true,
     },
   });
 
-  console.log('✅ Created task templates');
+  console.log("✅ Created task templates");
 
   // Create daily tasks for today
   const today = new Date();
@@ -189,17 +197,17 @@ async function main() {
     },
   });
 
-  console.log('✅ Created daily tasks');
+  console.log("✅ Created daily tasks");
 
-  console.log('✅ Seed completed successfully!');
-  console.log('\n📝 Demo Credentials:');
-  console.log('   Manager: mgr@test.com / password');
-  console.log('   Employee: emp@test.com / password');
+  console.log("✅ Seed completed successfully!");
+  console.log("\n📝 Demo Credentials:");
+  console.log("   Manager: mgr@test.com / password");
+  console.log("   Employee: emp@test.com / password");
 }
 
 main()
   .catch((e) => {
-    console.error('❌ Seed failed:', e);
+    console.error("❌ Seed failed:", e);
     process.exit(1);
   })
   .finally(async () => {

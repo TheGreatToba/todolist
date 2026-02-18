@@ -1,26 +1,31 @@
-import { RequestHandler } from 'express';
-import { z } from 'zod';
-import prisma from '../lib/db';
-import { getIO } from '../lib/socket';
-import { sendErrorResponse } from '../lib/errors';
-import { getAuthOrThrow } from '../middleware/requireAuth';
-import { assignDailyTasksForDate } from '../jobs/daily-task-assignment';
-import { logger } from '../lib/logger';
-import { getManagerTeamIds, getManagerTeams } from '../lib/manager-teams';
-import { paramString } from '../lib/params';
-import { parseDateQuery } from '../lib/parse-date-query';
+import { RequestHandler } from "express";
+import { z } from "zod";
+import prisma from "../lib/db";
+import { getIO } from "../lib/socket";
+import { sendErrorResponse } from "../lib/errors";
+import { getAuthOrThrow } from "../middleware/requireAuth";
+import { assignDailyTasksForDate } from "../jobs/daily-task-assignment";
+import { logger } from "../lib/logger";
+import { getManagerTeamIds, getManagerTeams } from "../lib/manager-teams";
+import { paramString } from "../lib/params";
+import {
+  parseDateQueryParam,
+  parseManagerDashboardQuery,
+} from "../lib/query-schemas";
 
-const CreateTaskTemplateSchema = z.object({
-  title: z.string().min(1),
-  description: z.string().optional(),
-  workstationId: z.string().optional(),
-  assignedToEmployeeId: z.string().optional(),
-  isRecurring: z.boolean().default(true),
-  notifyEmployee: z.boolean().default(true),
-}).refine(
-  (data) => data.workstationId || data.assignedToEmployeeId,
-  'Either workstationId or assignedToEmployeeId must be provided'
-);
+const CreateTaskTemplateSchema = z
+  .object({
+    title: z.string().min(1),
+    description: z.string().optional(),
+    workstationId: z.string().optional(),
+    assignedToEmployeeId: z.string().optional(),
+    isRecurring: z.boolean().default(true),
+    notifyEmployee: z.boolean().default(true),
+  })
+  .refine(
+    (data) => data.workstationId || data.assignedToEmployeeId,
+    "Either workstationId or assignedToEmployeeId must be provided",
+  );
 
 const UpdateDailyTaskSchema = z.object({
   isCompleted: z.boolean(),
@@ -31,11 +36,13 @@ export const handleGetEmployeeDailyTasks: RequestHandler = async (req, res) => {
   try {
     const payload = getAuthOrThrow(req, res);
     if (!payload) return;
-    const taskDate = parseDateQuery(req.query.date);
-    if (taskDate === null) {
-      res.status(400).json({ error: 'Invalid date. Use YYYY-MM-DD.' });
+    const query = req.query as Record<string, unknown>;
+    const parsedDate = parseDateQueryParam(query.date, query);
+    if (!parsedDate.success) {
+      res.status(400).json({ error: parsedDate.error });
       return;
     }
+    const taskDate = parsedDate.date;
 
     const tasks = await prisma.dailyTask.findMany({
       where: {
@@ -60,7 +67,7 @@ export const handleGetEmployeeDailyTasks: RequestHandler = async (req, res) => {
           },
         },
       },
-      orderBy: { createdAt: 'asc' },
+      orderBy: { createdAt: "asc" },
     });
 
     res.json(tasks);
@@ -76,7 +83,7 @@ export const handleUpdateDailyTask: RequestHandler = async (req, res) => {
     if (!payload) return;
     const taskId = paramString(req.params.taskId);
     if (!taskId) {
-      res.status(400).json({ error: 'Invalid task ID' });
+      res.status(400).json({ error: "Invalid task ID" });
       return;
     }
 
@@ -87,12 +94,12 @@ export const handleUpdateDailyTask: RequestHandler = async (req, res) => {
     });
 
     if (!task) {
-      res.status(404).json({ error: 'Task not found' });
+      res.status(404).json({ error: "Task not found" });
       return;
     }
 
     if (task.employeeId !== payload.userId) {
-      res.status(403).json({ error: 'Forbidden' });
+      res.status(403).json({ error: "Forbidden" });
       return;
     }
 
@@ -121,9 +128,11 @@ export const handleUpdateDailyTask: RequestHandler = async (req, res) => {
         select: { teamId: true },
       });
       if (employee?.teamId) {
-        const taskTemplate = (updatedTask as { taskTemplate?: { title: string } }).taskTemplate;
-        const taskTitle = taskTemplate?.title ?? 'Task';
-        io.to(`team:${employee.teamId}`).emit('task:updated', {
+        const taskTemplate = (
+          updatedTask as { taskTemplate?: { title: string } }
+        ).taskTemplate;
+        const taskTitle = taskTemplate?.title ?? "Task";
+        io.to(`team:${employee.teamId}`).emit("task:updated", {
           taskId: updatedTask.id,
           employeeId: updatedTask.employeeId,
           isCompleted: updatedTask.isCompleted,
@@ -154,8 +163,12 @@ export const handleCreateTaskTemplate: RequestHandler = async (req, res) => {
         where: { id: body.workstationId },
         select: { teamId: true },
       });
-      if (!workstation || !workstation.teamId || !managerTeamIds.has(workstation.teamId)) {
-        res.status(404).json({ error: 'Not found' });
+      if (
+        !workstation ||
+        !workstation.teamId ||
+        !managerTeamIds.has(workstation.teamId)
+      ) {
+        res.status(404).json({ error: "Not found" });
         return;
       }
       workstationTeamId = workstation.teamId;
@@ -169,20 +182,24 @@ export const handleCreateTaskTemplate: RequestHandler = async (req, res) => {
       });
       if (
         !user ||
-        user.role !== 'EMPLOYEE' ||
+        user.role !== "EMPLOYEE" ||
         !user.teamId ||
         !managerTeamIds.has(user.teamId)
       ) {
-        res.status(404).json({ error: 'Not found' });
+        res.status(404).json({ error: "Not found" });
         return;
       }
       employeeTeamId = user.teamId;
     }
 
     // When both are provided, they must belong to the same team (no cross-team mixed template)
-    if (workstationTeamId !== null && employeeTeamId !== null && workstationTeamId !== employeeTeamId) {
+    if (
+      workstationTeamId !== null &&
+      employeeTeamId !== null &&
+      workstationTeamId !== employeeTeamId
+    ) {
       res.status(400).json({
-        error: 'Workstation and employee must belong to the same team',
+        error: "Workstation and employee must belong to the same team",
       });
       return;
     }
@@ -258,7 +275,7 @@ export const handleCreateTaskTemplate: RequestHandler = async (req, res) => {
             // Emit socket event to the assigned employee only
             const io = getIO();
             if (io) {
-              io.to(`user:${employeeId}`).emit('task:assigned', {
+              io.to(`user:${employeeId}`).emit("task:assigned", {
                 taskId: taskTemplate.id,
                 employeeId,
                 employeeName: employee.name,
@@ -269,15 +286,17 @@ export const handleCreateTaskTemplate: RequestHandler = async (req, res) => {
 
             // Send email notification (optional, using nodemailer if available)
             try {
-              const { sendTaskAssignmentEmail } = await import('../lib/email');
+              const { sendTaskAssignmentEmail } = await import("../lib/email");
               await sendTaskAssignmentEmail(
                 employee.email,
                 employee.name,
                 body.title,
-                body.description
+                body.description,
               );
             } catch (emailError) {
-              logger.info('Email notification skipped (email service not available)');
+              logger.info(
+                "Email notification skipped (email service not available)",
+              );
             }
           }
         }
@@ -291,34 +310,24 @@ export const handleCreateTaskTemplate: RequestHandler = async (req, res) => {
 };
 
 // Cron: assign daily tasks for recurring templates (call each morning)
-// CRON_SECRET is required; the endpoint is disabled if not configured.
+// Note: Secret verification is handled by verifyCronSecret middleware in index.ts
+// This handler only processes requests that have already passed secret validation
 export const handleDailyTaskAssignment: RequestHandler = async (req, res) => {
   try {
-    const expectedSecret = process.env.CRON_SECRET;
-    if (!expectedSecret || expectedSecret.trim() === '') {
-      res.status(503).json({
-        error: 'Cron endpoint is disabled. Set CRON_SECRET in your environment to enable it.',
-      });
+    // Secret is already verified by middleware, proceed directly to date validation
+    const query = req.query as Record<string, unknown>;
+    const parsedDate = parseDateQueryParam(query.date, query);
+    if (!parsedDate.success) {
+      res.status(400).json({ error: parsedDate.error });
       return;
     }
-
-    const secret = req.headers['x-cron-secret'];
-    if (!secret || secret !== expectedSecret) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
-    }
-
-    const targetDate = parseDateQuery(req.query.date);
-    if (targetDate === null) {
-      res.status(400).json({ error: 'Invalid date. Use YYYY-MM-DD.' });
-      return;
-    }
+    const targetDate = parsedDate.date;
 
     const result = await assignDailyTasksForDate(targetDate);
 
     const y = targetDate.getFullYear();
-    const m = String(targetDate.getMonth() + 1).padStart(2, '0');
-    const d = String(targetDate.getDate()).padStart(2, '0');
+    const m = String(targetDate.getMonth() + 1).padStart(2, "0");
+    const d = String(targetDate.getDate()).padStart(2, "0");
 
     res.json({
       success: true,
@@ -335,16 +344,16 @@ export const handleGetManagerDashboard: RequestHandler = async (req, res) => {
   try {
     const payload = getAuthOrThrow(req, res);
     if (!payload) return;
-    const { date, employeeId, workstationId } = req.query;
-    const taskDate = parseDateQuery(date);
-    if (taskDate === null) {
-      res.status(400).json({ error: 'Invalid date. Use YYYY-MM-DD.' });
+    const parsedQuery = parseManagerDashboardQuery(req.query);
+    if (!parsedQuery.success) {
+      res.status(400).json({ error: parsedQuery.error });
       return;
     }
+    const { date: taskDate, employeeId, workstationId } = parsedQuery;
 
     const teamIds = await getManagerTeamIds(payload.userId);
     if (teamIds.length === 0) {
-      res.status(404).json({ error: 'Team not found' });
+      res.status(404).json({ error: "Team not found" });
       return;
     }
 
@@ -355,19 +364,19 @@ export const handleGetManagerDashboard: RequestHandler = async (req, res) => {
     const members = await prisma.user.findMany({
       where: {
         teamId: { in: teamIds },
-        role: 'EMPLOYEE',
+        role: "EMPLOYEE",
       },
       select: {
         id: true,
         name: true,
         email: true,
       },
-      orderBy: { name: 'asc' },
+      orderBy: { name: "asc" },
     });
 
     // Build filter: any managed team, optional employee filter
     const employeeFilter: Record<string, unknown> = { teamId: { in: teamIds } };
-    if (employeeId && typeof employeeId === 'string') {
+    if (employeeId) {
       const isTeamMember = members.some((m) => m.id === employeeId);
       if (isTeamMember) {
         employeeFilter.id = employeeId;
@@ -382,9 +391,11 @@ export const handleGetManagerDashboard: RequestHandler = async (req, res) => {
         lt: new Date(taskDate.getTime() + 24 * 60 * 60 * 1000),
       },
     };
-    if (workstationId && typeof workstationId === 'string') {
+    if (workstationId) {
       taskWhere.taskTemplate =
-        workstationId === '__direct__' ? { workstationId: null } : { workstationId };
+        workstationId === "__direct__"
+          ? { workstationId: null }
+          : { workstationId };
     }
 
     const dailyTasks = await prisma.dailyTask.findMany({
@@ -411,7 +422,7 @@ export const handleGetManagerDashboard: RequestHandler = async (req, res) => {
           },
         },
       },
-      orderBy: [{ employee: { name: 'asc' } }, { createdAt: 'asc' }],
+      orderBy: [{ employee: { name: "asc" } }, { createdAt: "asc" }],
     });
 
     // Workstations from all managed teams
@@ -421,7 +432,7 @@ export const handleGetManagerDashboard: RequestHandler = async (req, res) => {
         id: true,
         name: true,
       },
-      orderBy: { name: 'asc' },
+      orderBy: { name: "asc" },
     });
 
     // Backward compat: expose first team with aggregated members

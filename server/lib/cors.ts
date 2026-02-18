@@ -6,7 +6,10 @@
 function getAllowedOrigins(): string[] | true {
   const origins = process.env.ALLOWED_ORIGINS;
   if (origins) {
-    return origins.split(",").map((o) => o.trim()).filter(Boolean);
+    return origins
+      .split(",")
+      .map((o) => o.trim())
+      .filter(Boolean);
   }
   if (process.env.NODE_ENV === "production") {
     return []; // No origins = reject all in prod if not configured

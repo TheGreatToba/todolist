@@ -1,18 +1,22 @@
-import crypto from 'crypto';
-import { RequestHandler } from 'express';
-import { z } from 'zod';
-import prisma from '../lib/db';
-import { hashPassword } from '../lib/auth';
-import { sendErrorResponse } from '../lib/errors';
-import { logger } from '../lib/logger';
-import { getAuthOrThrow } from '../middleware/requireAuth';
-import { sendSetPasswordEmail } from '../lib/email';
-import { getSetPasswordTokenExpiryHours } from '../lib/set-password-expiry';
-import { getManagerTeamIds, getManagerFirstTeam, isTeamManagedBy } from '../lib/manager-teams';
-import { paramString } from '../lib/params';
+import crypto from "crypto";
+import { RequestHandler } from "express";
+import { z } from "zod";
+import prisma from "../lib/db";
+import { hashPassword } from "../lib/auth";
+import { sendErrorResponse } from "../lib/errors";
+import { logger } from "../lib/logger";
+import { getAuthOrThrow } from "../middleware/requireAuth";
+import { sendSetPasswordEmail } from "../lib/email";
+import { getSetPasswordTokenExpiryHours } from "../lib/set-password-expiry";
+import {
+  getManagerTeamIds,
+  getManagerFirstTeam,
+  isTeamManagedBy,
+} from "../lib/manager-teams";
+import { paramString } from "../lib/params";
 
 function generateSecureToken(): string {
-  return crypto.randomBytes(32).toString('hex');
+  return crypto.randomBytes(32).toString("hex");
 }
 
 const CreateWorkstationSchema = z.object({
@@ -26,13 +30,17 @@ const CreateEmployeeSchema = z.object({
   workstationIds: z
     .array(z.string())
     .min(1)
-    .refine((ids) => new Set(ids).size === ids.length, { message: 'workstationIds must not contain duplicates' }),
+    .refine((ids) => new Set(ids).size === ids.length, {
+      message: "workstationIds must not contain duplicates",
+    }),
 });
 
 const UpdateEmployeeWorkstationsSchema = z.object({
   workstationIds: z
     .array(z.string())
-    .refine((ids) => new Set(ids).size === ids.length, { message: 'workstationIds must not contain duplicates' }),
+    .refine((ids) => new Set(ids).size === ids.length, {
+      message: "workstationIds must not contain duplicates",
+    }),
 });
 
 // Get all workstations used by the manager's teams (all managed teams)
@@ -43,7 +51,7 @@ export const handleGetWorkstations: RequestHandler = async (req, res) => {
     const teamIds = await getManagerTeamIds(payload.userId);
 
     if (teamIds.length === 0) {
-      res.status(404).json({ error: 'Team not found' });
+      res.status(404).json({ error: "Team not found" });
       return;
     }
 
@@ -63,7 +71,7 @@ export const handleGetWorkstations: RequestHandler = async (req, res) => {
           },
         },
       },
-      orderBy: { name: 'asc' },
+      orderBy: { name: "asc" },
     });
 
     res.json(workstations);
@@ -84,7 +92,9 @@ export const handleCreateWorkstation: RequestHandler = async (req, res) => {
     if (body.teamId) {
       const allowed = await isTeamManagedBy(body.teamId, payload.userId);
       if (!allowed) {
-        res.status(403).json({ error: 'Team not found or you do not manage this team.' });
+        res
+          .status(403)
+          .json({ error: "Team not found or you do not manage this team." });
         return;
       }
       team = await prisma.team.findUnique({ where: { id: body.teamId } });
@@ -92,7 +102,7 @@ export const handleCreateWorkstation: RequestHandler = async (req, res) => {
       team = await getManagerFirstTeam(payload.userId);
     }
     if (!team) {
-      res.status(404).json({ error: 'Team not found' });
+      res.status(404).json({ error: "Team not found" });
       return;
     }
 
@@ -101,7 +111,11 @@ export const handleCreateWorkstation: RequestHandler = async (req, res) => {
       where: { teamId: team.id, name: body.name },
     });
     if (existing) {
-      res.status(400).json({ error: 'A workstation with this name already exists in your team' });
+      res
+        .status(400)
+        .json({
+          error: "A workstation with this name already exists in your team",
+        });
       return;
     }
 
@@ -128,13 +142,13 @@ export const handleCreateEmployee: RequestHandler = async (req, res) => {
     });
 
     if (existingUser) {
-      res.status(400).json({ error: 'Email already registered' });
+      res.status(400).json({ error: "Email already registered" });
       return;
     }
 
     const teamIds = await getManagerTeamIds(payload.userId);
     if (teamIds.length === 0) {
-      res.status(404).json({ error: 'Team not found' });
+      res.status(404).json({ error: "Team not found" });
       return;
     }
 
@@ -143,27 +157,37 @@ export const handleCreateEmployee: RequestHandler = async (req, res) => {
     });
 
     if (requestedWorkstations.length !== body.workstationIds.length) {
-      res.status(400).json({ error: 'One or more workstations not found' });
+      res.status(400).json({ error: "One or more workstations not found" });
       return;
     }
 
-    const allowed = requestedWorkstations.every((ws) => ws.teamId && teamIds.includes(ws.teamId));
+    const allowed = requestedWorkstations.every(
+      (ws) => ws.teamId && teamIds.includes(ws.teamId),
+    );
     if (!allowed) {
       res.status(403).json({
-        error: 'One or more workstations do not belong to your team(s).',
+        error: "One or more workstations do not belong to your team(s).",
       });
       return;
     }
 
     // Business rule: employee is assigned to one team; all workstations must belong to that same team.
-    const workstationTeamIds = [...new Set(requestedWorkstations.map((ws) => ws.teamId).filter(Boolean))] as string[];
+    const workstationTeamIds = [
+      ...new Set(requestedWorkstations.map((ws) => ws.teamId).filter(Boolean)),
+    ] as string[];
     if (workstationTeamIds.length === 0) {
-      res.status(400).json({ error: 'Selected workstations have no team. Please choose valid workstations.' });
+      res
+        .status(400)
+        .json({
+          error:
+            "Selected workstations have no team. Please choose valid workstations.",
+        });
       return;
     }
     if (workstationTeamIds.length > 1) {
       res.status(400).json({
-        error: 'All workstations must belong to the same team. Please select workstations from a single team.',
+        error:
+          "All workstations must belong to the same team. Please select workstations from a single team.",
       });
       return;
     }
@@ -172,7 +196,7 @@ export const handleCreateEmployee: RequestHandler = async (req, res) => {
     const workstations = requestedWorkstations;
 
     // Placeholder password - user will set real password via email link
-    const placeholderPassword = crypto.randomBytes(24).toString('hex');
+    const placeholderPassword = crypto.randomBytes(24).toString("hex");
     const passwordHash = await hashPassword(placeholderPassword);
 
     const setPasswordToken = generateSecureToken();
@@ -188,7 +212,7 @@ export const handleCreateEmployee: RequestHandler = async (req, res) => {
           name: body.name,
           email: body.email,
           passwordHash,
-          role: 'EMPLOYEE',
+          role: "EMPLOYEE",
           teamId: employeeTeamId,
           workstations: {
             create: body.workstationIds.map((wsId) => ({
@@ -238,19 +262,22 @@ export const handleCreateEmployee: RequestHandler = async (req, res) => {
     });
 
     // Send email with set-password link (no password in email)
-    const baseUrl = process.env.APP_URL || 'http://localhost:8080';
-    const setPasswordLink = `${baseUrl.replace(/\/$/, '')}/set-password?token=${encodeURIComponent(setPasswordToken)}`;
+    const baseUrl = process.env.APP_URL || "http://localhost:8080";
+    const setPasswordLink = `${baseUrl.replace(/\/$/, "")}/set-password?token=${encodeURIComponent(setPasswordToken)}`;
     const workstationNames = workstations.map((ws) => ws.name);
     const emailResult = await sendSetPasswordEmail(
       body.email,
       body.name,
       setPasswordLink,
       workstationNames,
-      expiryHours
+      expiryHours,
     );
 
     if (!emailResult.success) {
-      logger.warn('Failed to send email, but employee was created:', emailResult.error);
+      logger.warn(
+        "Failed to send email, but employee was created:",
+        emailResult.error,
+      );
     }
 
     res.status(201).json({
@@ -276,21 +303,25 @@ export const handleDeleteWorkstation: RequestHandler = async (req, res) => {
     if (!payload) return;
     const workstationId = paramString(req.params.workstationId);
     if (!workstationId) {
-      res.status(400).json({ error: 'Invalid workstation ID' });
+      res.status(400).json({ error: "Invalid workstation ID" });
       return;
     }
 
     const teamIds = await getManagerTeamIds(payload.userId);
     if (teamIds.length === 0) {
-      res.status(404).json({ error: 'Team not found' });
+      res.status(404).json({ error: "Team not found" });
       return;
     }
 
     const workstation = await prisma.workstation.findUnique({
       where: { id: workstationId },
     });
-    if (!workstation || !workstation.teamId || !teamIds.includes(workstation.teamId)) {
-      res.status(404).json({ error: 'Workstation not found' });
+    if (
+      !workstation ||
+      !workstation.teamId ||
+      !teamIds.includes(workstation.teamId)
+    ) {
+      res.status(404).json({ error: "Workstation not found" });
       return;
     }
 
@@ -298,7 +329,9 @@ export const handleDeleteWorkstation: RequestHandler = async (req, res) => {
       where: { workstationId },
     });
     if (employeeCount > 0) {
-      res.status(400).json({ error: 'Cannot delete workstation with employees' });
+      res
+        .status(400)
+        .json({ error: "Cannot delete workstation with employees" });
       return;
     }
 
@@ -320,14 +353,14 @@ export const handleGetTeamMembers: RequestHandler = async (req, res) => {
     const teamIds = await getManagerTeamIds(payload.userId);
 
     if (teamIds.length === 0) {
-      res.status(404).json({ error: 'Team not found' });
+      res.status(404).json({ error: "Team not found" });
       return;
     }
 
     const membersData = await prisma.user.findMany({
       where: {
         teamId: { in: teamIds },
-        role: 'EMPLOYEE',
+        role: "EMPLOYEE",
       },
       include: {
         workstations: {
@@ -341,7 +374,7 @@ export const handleGetTeamMembers: RequestHandler = async (req, res) => {
           },
         },
       },
-      orderBy: { name: 'asc' },
+      orderBy: { name: "asc" },
     });
 
     const members = membersData.map((member) => ({
@@ -361,13 +394,16 @@ export const handleGetTeamMembers: RequestHandler = async (req, res) => {
 };
 
 // Update employee workstation assignments
-export const handleUpdateEmployeeWorkstations: RequestHandler = async (req, res) => {
+export const handleUpdateEmployeeWorkstations: RequestHandler = async (
+  req,
+  res,
+) => {
   try {
     const payload = getAuthOrThrow(req, res);
     if (!payload) return;
     const employeeId = paramString(req.params.employeeId);
     if (!employeeId) {
-      res.status(400).json({ error: 'Invalid employee ID' });
+      res.status(400).json({ error: "Invalid employee ID" });
       return;
     }
 
@@ -380,18 +416,22 @@ export const handleUpdateEmployeeWorkstations: RequestHandler = async (req, res)
     });
 
     if (!employee) {
-      res.status(404).json({ error: 'Employee not found' });
+      res.status(404).json({ error: "Employee not found" });
       return;
     }
 
     if (!employee.teamId) {
-      res.status(403).json({ error: 'You do not have permission to update this employee' });
+      res
+        .status(403)
+        .json({ error: "You do not have permission to update this employee" });
       return;
     }
 
     const isManaged = await isTeamManagedBy(employee.teamId, payload.userId);
     if (!isManaged) {
-      res.status(403).json({ error: 'You do not have permission to update this employee' });
+      res
+        .status(403)
+        .json({ error: "You do not have permission to update this employee" });
       return;
     }
 
@@ -400,17 +440,17 @@ export const handleUpdateEmployeeWorkstations: RequestHandler = async (req, res)
     });
 
     if (requestedWorkstations.length !== body.workstationIds.length) {
-      res.status(400).json({ error: 'One or more workstations not found' });
+      res.status(400).json({ error: "One or more workstations not found" });
       return;
     }
 
     const managerTeamIds = await getManagerTeamIds(payload.userId);
     const allowed = requestedWorkstations.every(
-      (ws) => ws.teamId && managerTeamIds.includes(ws.teamId)
+      (ws) => ws.teamId && managerTeamIds.includes(ws.teamId),
     );
     if (!allowed) {
       res.status(403).json({
-        error: 'One or more workstations do not belong to your team.',
+        error: "One or more workstations do not belong to your team.",
       });
       return;
     }
@@ -452,16 +492,19 @@ export const handleUpdateEmployeeWorkstations: RequestHandler = async (req, res)
 
     // Guard: employee may have been deleted between initial check and end of transaction (concurrent request).
     if (!updatedEmployee) {
-      res.status(404).json({ error: 'Employee not found' });
+      res.status(404).json({ error: "Employee not found" });
       return;
     }
 
     const workstations =
-      'workstations' in updatedEmployee && Array.isArray(updatedEmployee.workstations)
-        ? updatedEmployee.workstations.map((ew: { workstationId: string; workstation: { name: string } }) => ({
-            id: ew.workstationId,
-            name: ew.workstation.name,
-          }))
+      "workstations" in updatedEmployee &&
+      Array.isArray(updatedEmployee.workstations)
+        ? updatedEmployee.workstations.map(
+            (ew: { workstationId: string; workstation: { name: string } }) => ({
+              id: ew.workstationId,
+              name: ew.workstation.name,
+            }),
+          )
         : [];
 
     res.json({

@@ -1,5 +1,5 @@
-import prisma from './db';
-import type { Team } from '@prisma/client';
+import prisma from "./db";
+import type { Team } from "@prisma/client";
 
 /**
  * Returns all team IDs that the given manager (userId) manages.
@@ -20,7 +20,7 @@ export async function getManagerTeamIds(managerId: string): Promise<string[]> {
 export async function getManagerTeams(managerId: string): Promise<Team[]> {
   return prisma.team.findMany({
     where: { managerId },
-    orderBy: { name: 'asc' },
+    orderBy: { name: "asc" },
   });
 }
 
@@ -29,17 +29,22 @@ export async function getManagerTeams(managerId: string): Promise<Team[]> {
  * (e.g. create employee, create workstation when no teamId is provided).
  * Returns null if the manager has no team.
  */
-export async function getManagerFirstTeam(managerId: string): Promise<Team | null> {
+export async function getManagerFirstTeam(
+  managerId: string,
+): Promise<Team | null> {
   return prisma.team.findFirst({
     where: { managerId },
-    orderBy: { name: 'asc' },
+    orderBy: { name: "asc" },
   });
 }
 
 /**
  * Returns true if the given teamId is one of the teams managed by managerId.
  */
-export async function isTeamManagedBy(teamId: string, managerId: string): Promise<boolean> {
+export async function isTeamManagedBy(
+  teamId: string,
+  managerId: string,
+): Promise<boolean> {
   const team = await prisma.team.findFirst({
     where: { id: teamId, managerId },
     select: { id: true },

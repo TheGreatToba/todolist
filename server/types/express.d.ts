@@ -3,7 +3,7 @@ declare global {
     interface Request {
       requestId?: string;
       /** Set by requireAuth middleware */
-      auth?: { userId: string; email: string; role: 'MANAGER' | 'EMPLOYEE' };
+      auth?: { userId: string; email: string; role: "MANAGER" | "EMPLOYEE" };
     }
   }
 }

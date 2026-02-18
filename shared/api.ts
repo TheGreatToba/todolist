@@ -16,7 +16,7 @@ export interface User {
   id: string;
   name: string;
   email: string;
-  role: 'EMPLOYEE' | 'MANAGER';
+  role: "EMPLOYEE" | "MANAGER";
   teamId?: string | null;
 }
 
@@ -54,7 +54,7 @@ export interface SignupRequest {
   name: string;
   email: string;
   password: string;
-  role: 'MANAGER';
+  role: "MANAGER";
 }
 
 // Task types
@@ -111,13 +111,15 @@ export interface ManagerDashboard {
     }>;
   };
   date: string;
-  dailyTasks: Array<DailyTask & {
-    employee: {
-      id: string;
-      name: string;
-      email: string;
-    };
-  }>;
+  dailyTasks: Array<
+    DailyTask & {
+      employee: {
+        id: string;
+        name: string;
+        email: string;
+      };
+    }
+  >;
   workstations: Array<{
     id: string;
     name: string;

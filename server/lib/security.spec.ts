@@ -26,7 +26,8 @@ describe("getSetPasswordTokenExpiryHours", () => {
 
   afterEach(() => {
     delete process.env.SET_PASSWORD_TOKEN_EXPIRY_HOURS;
-    if (envBackup !== undefined) process.env.SET_PASSWORD_TOKEN_EXPIRY_HOURS = envBackup;
+    if (envBackup !== undefined)
+      process.env.SET_PASSWORD_TOKEN_EXPIRY_HOURS = envBackup;
   });
 
   it("returns 24 when env is empty", () => {
@@ -63,7 +64,10 @@ describe("getSetPasswordTokenExpiryHours", () => {
 });
 
 describe("ensureCsrfConfig", () => {
-  const envBackup = { nodeEnv: process.env.NODE_ENV, disableCsrf: process.env.DISABLE_CSRF };
+  const envBackup = {
+    nodeEnv: process.env.NODE_ENV,
+    disableCsrf: process.env.DISABLE_CSRF,
+  };
 
   afterEach(() => {
     process.env.NODE_ENV = envBackup.nodeEnv;
@@ -73,12 +77,17 @@ describe("ensureCsrfConfig", () => {
   it("throws when DISABLE_CSRF=true in production", () => {
     process.env.NODE_ENV = "production";
     process.env.DISABLE_CSRF = "true";
-    expect(() => ensureCsrfConfig()).toThrow("DISABLE_CSRF=true is not allowed in production");
+    expect(() => ensureCsrfConfig()).toThrow(
+      "DISABLE_CSRF=true is not allowed in production",
+    );
   });
 });
 
 describe("CSRF rejection logs", () => {
-  const envBackup = { nodeEnv: process.env.NODE_ENV, disableCsrf: process.env.DISABLE_CSRF };
+  const envBackup = {
+    nodeEnv: process.env.NODE_ENV,
+    disableCsrf: process.env.DISABLE_CSRF,
+  };
   let warnSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {

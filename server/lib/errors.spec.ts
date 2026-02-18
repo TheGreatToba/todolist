@@ -6,7 +6,10 @@ import { ZodError } from "zod";
 import { sendErrorResponse, AppError } from "./errors";
 import type { Response } from "express";
 
-function mockRes(): { status: ReturnType<typeof vi.fn>; json: ReturnType<typeof vi.fn> } {
+function mockRes(): {
+  status: ReturnType<typeof vi.fn>;
+  json: ReturnType<typeof vi.fn>;
+} {
   return {
     status: vi.fn().mockReturnThis(),
     json: vi.fn(),
@@ -37,7 +40,10 @@ describe("sendErrorResponse", () => {
 
     it("P2025 returns 404 and NOT_FOUND", () => {
       const res = mockRes() as unknown as Response;
-      sendErrorResponse(res, { code: "P2025", meta: { cause: "Record to update not found." } });
+      sendErrorResponse(res, {
+        code: "P2025",
+        meta: { cause: "Record to update not found." },
+      });
       expect(res.status).toHaveBeenCalledWith(404);
       expect(res.json).toHaveBeenCalledWith({
         error: "Record not found.",
@@ -61,7 +67,10 @@ describe("sendErrorResponse", () => {
 
     it("P2025 with name but without meta is still mapped (relaxed Prisma shape)", () => {
       const res = mockRes() as unknown as Response;
-      sendErrorResponse(res, { code: "P2025", name: "PrismaClientKnownRequestError" });
+      sendErrorResponse(res, {
+        code: "P2025",
+        name: "PrismaClientKnownRequestError",
+      });
       expect(res.status).toHaveBeenCalledWith(404);
       expect(res.json).toHaveBeenCalledWith({
         error: "Record not found.",

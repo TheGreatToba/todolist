@@ -27,7 +27,7 @@ describe("verifyToken", () => {
     const token = jwt.sign(
       { userId: "u", email: "a@b.com", role: "ADMIN" },
       secret,
-      { expiresIn: "1h" }
+      { expiresIn: "1h" },
     );
     expect(verifyToken(token)).toBeNull();
   });
@@ -37,7 +37,7 @@ describe("verifyToken", () => {
     const token = jwt.sign(
       { userId: "u", email: "a@b.com", role: "MANAGER", admin: true },
       secret,
-      { expiresIn: "1h" }
+      { expiresIn: "1h" },
     );
     expect(verifyToken(token)).toBeNull();
   });
@@ -47,7 +47,7 @@ describe("verifyToken", () => {
     const token = jwt.sign(
       { userId: "u", email: "not-an-email", role: "MANAGER" },
       secret,
-      { expiresIn: "1h" }
+      { expiresIn: "1h" },
     );
     expect(verifyToken(token)).toBeNull();
   });
@@ -57,7 +57,7 @@ describe("verifyToken", () => {
     const token = jwt.sign(
       { userId: "u", email: "a@b.com", role: "MANAGER" },
       secret,
-      { expiresIn: "-1h" }
+      { expiresIn: "-1h" },
     );
     expect(verifyToken(token)).toBeNull();
   });

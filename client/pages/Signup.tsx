@@ -1,31 +1,33 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@/contexts/AuthContext';
-import { Loader2 } from 'lucide-react';
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+import { Loader2 } from "lucide-react";
 
 export default function Signup() {
   const navigate = useNavigate();
   const { signup, user, isLoading, error } = useAuth();
   const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    password: '',
-    confirmPassword: '',
+    name: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
   });
   const [localError, setLocalError] = useState<string | null>(null);
 
   // Redirect after successful signup
   React.useEffect(() => {
     if (user) {
-      if (user.role === 'MANAGER') {
-        navigate('/manager', { replace: true });
-      } else if (user.role === 'EMPLOYEE') {
-        navigate('/employee', { replace: true });
+      if (user.role === "MANAGER") {
+        navigate("/manager", { replace: true });
+      } else if (user.role === "EMPLOYEE") {
+        navigate("/employee", { replace: true });
       }
     }
   }, [user, navigate]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>,
+  ) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
@@ -34,25 +36,30 @@ export default function Signup() {
     e.preventDefault();
     setLocalError(null);
 
-    if (!formData.name || !formData.email || !formData.password || !formData.confirmPassword) {
-      setLocalError('Please fill in all fields');
+    if (
+      !formData.name ||
+      !formData.email ||
+      !formData.password ||
+      !formData.confirmPassword
+    ) {
+      setLocalError("Please fill in all fields");
       return;
     }
 
     if (formData.password !== formData.confirmPassword) {
-      setLocalError('Passwords do not match');
+      setLocalError("Passwords do not match");
       return;
     }
 
     if (formData.password.length < 6) {
-      setLocalError('Password must be at least 6 characters');
+      setLocalError("Password must be at least 6 characters");
       return;
     }
 
     try {
       await signup(formData.name, formData.email, formData.password);
     } catch (err) {
-      setLocalError(err instanceof Error ? err.message : 'Signup failed');
+      setLocalError(err instanceof Error ? err.message : "Signup failed");
     }
   };
 
@@ -62,16 +69,33 @@ export default function Signup() {
         {/* Header */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/15 mb-4">
-            <svg className="w-8 h-8 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+            <svg
+              className="w-8 h-8 text-primary"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"
+              />
             </svg>
           </div>
-          <h1 className="text-3xl font-bold text-foreground mb-2">Create Account</h1>
-          <p className="text-muted-foreground">Join TaskFlow and manage your tasks</p>
+          <h1 className="text-3xl font-bold text-foreground mb-2">
+            Create Account
+          </h1>
+          <p className="text-muted-foreground">
+            Join TaskFlow and manage your tasks
+          </p>
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="space-y-4 bg-card rounded-2xl shadow-sm border border-border p-8">
+        <form
+          onSubmit={handleSubmit}
+          className="space-y-4 bg-card rounded-2xl shadow-sm border border-border p-8"
+        >
           {(error || localError) && (
             <div className="bg-destructive/10 border border-destructive/20 rounded-lg px-4 py-3 text-sm text-destructive">
               {error || localError}
@@ -79,7 +103,10 @@ export default function Signup() {
           )}
 
           <div>
-            <label htmlFor="name" className="block text-sm font-medium text-foreground mb-2">
+            <label
+              htmlFor="name"
+              className="block text-sm font-medium text-foreground mb-2"
+            >
               Full Name
             </label>
             <input
@@ -94,7 +121,10 @@ export default function Signup() {
           </div>
 
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-foreground mb-2">
+            <label
+              htmlFor="email"
+              className="block text-sm font-medium text-foreground mb-2"
+            >
               Email
             </label>
             <input
@@ -109,7 +139,10 @@ export default function Signup() {
           </div>
 
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-foreground mb-2">
+            <label
+              htmlFor="password"
+              className="block text-sm font-medium text-foreground mb-2"
+            >
               Password
             </label>
             <input
@@ -124,7 +157,10 @@ export default function Signup() {
           </div>
 
           <div>
-            <label htmlFor="confirmPassword" className="block text-sm font-medium text-foreground mb-2">
+            <label
+              htmlFor="confirmPassword"
+              className="block text-sm font-medium text-foreground mb-2"
+            >
               Confirm Password
             </label>
             <input
@@ -141,7 +177,8 @@ export default function Signup() {
           <div className="bg-secondary/50 border border-border rounded-lg p-3">
             <p className="text-foreground font-medium">Manager account</p>
             <p className="text-xs text-muted-foreground mt-1">
-              Only managers can sign up directly. Employees are created by their manager from the dashboard.
+              Only managers can sign up directly. Employees are created by their
+              manager from the dashboard.
             </p>
           </div>
 
@@ -156,15 +193,15 @@ export default function Signup() {
                 Creating account...
               </>
             ) : (
-              'Create Account'
+              "Create Account"
             )}
           </button>
 
           <div className="text-center text-sm text-muted-foreground">
-            Already have an account?{' '}
+            Already have an account?{" "}
             <button
               type="button"
-              onClick={() => navigate('/login')}
+              onClick={() => navigate("/login")}
               className="text-primary hover:text-primary/90 font-medium transition"
             >
               Sign in

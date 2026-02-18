@@ -11,8 +11,8 @@
  *   pnpm backfill:workstation-team           # apply updates
  *   pnpm backfill:workstation-team --dry-run # log what would be done, no writes
  */
-import 'dotenv/config';
-import prisma from '../lib/db';
+import "dotenv/config";
+import prisma from "../lib/db";
 
 export interface BackfillResult {
   idsByCategory: {
@@ -25,13 +25,15 @@ export interface BackfillResult {
   legacyCount: number;
 }
 
-export async function runBackfill(dryRun: boolean): Promise<BackfillResult | null> {
+export async function runBackfill(
+  dryRun: boolean,
+): Promise<BackfillResult | null> {
   const legacy = await prisma.workstation.findMany({
     where: { teamId: null },
-    orderBy: [{ name: 'asc' }, { id: 'asc' }],
+    orderBy: [{ name: "asc" }, { id: "asc" }],
     include: {
       employees: {
-        orderBy: { employeeId: 'asc' },
+        orderBy: { employeeId: "asc" },
         include: {
           employee: { select: { teamId: true } },
         },
@@ -44,11 +46,13 @@ export async function runBackfill(dryRun: boolean): Promise<BackfillResult | nul
   }
 
   const firstTeam = await prisma.team.findFirst({
-    orderBy: { id: 'asc' },
+    orderBy: { id: "asc" },
     select: { id: true },
   });
   if (!firstTeam) {
-    console.warn('No team in DB; cannot assign workstations with no employees.');
+    console.warn(
+      "No team in DB; cannot assign workstations with no employees.",
+    );
   }
 
   const idsByCategory = {
@@ -62,7 +66,9 @@ export async function runBackfill(dryRun: boolean): Promise<BackfillResult | nul
   for (const ws of legacy) {
     let teamId: string | null;
     if (ws.employees.length > 0) {
-      const firstWithTeam = ws.employees.find((ew) => ew.employee.teamId != null);
+      const firstWithTeam = ws.employees.find(
+        (ew) => ew.employee.teamId != null,
+      );
       teamId = firstWithTeam?.employee.teamId ?? null;
       if (teamId) idsByCategory.withEmployees.push(ws.id);
       else idsByCategory.employeesButNoTeam.push(ws.id);
@@ -83,42 +89,50 @@ export async function runBackfill(dryRun: boolean): Promise<BackfillResult | nul
       console.log(
         dryRun
           ? `[dry-run] Would set Workstation "${ws.name}" (${ws.id}) -> teamId=${teamId}`
-          : `Workstation "${ws.name}" (${ws.id}) -> teamId=${teamId}`
+          : `Workstation "${ws.name}" (${ws.id}) -> teamId=${teamId}`,
       );
     } else {
       const reason =
         ws.employees.length > 0
-          ? 'employees have no team; left teamId=null'
-          : 'no employees and no team; left teamId=null';
+          ? "employees have no team; left teamId=null"
+          : "no employees and no team; left teamId=null";
       console.log(`Workstation "${ws.name}" (${ws.id}) ${reason}.`);
     }
   }
 
   console.log(
-    `\nBackfill ${dryRun ? '(dry-run) ' : ''}done: ${updated}/${legacy.length} workstations ${dryRun ? 'would be updated' : 'updated'}.`
+    `\nBackfill ${dryRun ? "(dry-run) " : ""}done: ${updated}/${legacy.length} workstations ${dryRun ? "would be updated" : "updated"}.`,
   );
-  console.log('Summary (legacy workstations):');
-  const fmt = (ids: string[]) => `${ids.length} — ids: ${ids.join(', ')}`;
-  console.log(`  - With employees (assigned from first employee’s team): ${fmt(idsByCategory.withEmployees)}`);
-  console.log(`  - With employees but no employee has team (left teamId=null): ${fmt(idsByCategory.employeesButNoTeam)}`);
-  console.log(`  - Without employees (assigned to first team): ${fmt(idsByCategory.withoutEmployees)}`);
-  console.log(`  - Not assignable (no employees, no team): ${fmt(idsByCategory.notAssignable)}`);
+  console.log("Summary (legacy workstations):");
+  const fmt = (ids: string[]) => `${ids.length} — ids: ${ids.join(", ")}`;
+  console.log(
+    `  - With employees (assigned from first employee’s team): ${fmt(idsByCategory.withEmployees)}`,
+  );
+  console.log(
+    `  - With employees but no employee has team (left teamId=null): ${fmt(idsByCategory.employeesButNoTeam)}`,
+  );
+  console.log(
+    `  - Without employees (assigned to first team): ${fmt(idsByCategory.withoutEmployees)}`,
+  );
+  console.log(
+    `  - Not assignable (no employees, no team): ${fmt(idsByCategory.notAssignable)}`,
+  );
   if (dryRun && updated > 0) {
-    console.log('\nRun without --dry-run to apply changes.');
+    console.log("\nRun without --dry-run to apply changes.");
   }
 
   return { idsByCategory, updated, legacyCount: legacy.length };
 }
 
-const dryRun = process.argv.includes('--dry-run');
+const dryRun = process.argv.includes("--dry-run");
 
 async function main() {
   if (dryRun) {
-    console.log(' dry-run: no changes will be written.\n');
+    console.log(" dry-run: no changes will be written.\n");
   }
   const result = await runBackfill(dryRun);
   if (result === null) {
-    console.log('No workstations with teamId=null. Nothing to do.');
+    console.log("No workstations with teamId=null. Nothing to do.");
   }
   await prisma.$disconnect();
 }

@@ -1,11 +1,24 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@/contexts/AuthContext';
-import { fetchWithCsrf } from '@/lib/api';
-import { useSocket } from '@/hooks/useSocket';
-import { ManagerDashboard as ManagerDashboardType } from '@shared/api';
-import { Loader2, LogOut, Plus, Filter, Settings, Trash2, Users, X, Edit2, Calendar, Download } from 'lucide-react';
-import { logger } from '@/lib/logger';
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+import { fetchWithCsrf } from "@/lib/api";
+import { useSocket } from "@/hooks/useSocket";
+import { ManagerDashboard as ManagerDashboardType } from "@shared/api";
+import {
+  Loader2,
+  LogOut,
+  Plus,
+  Filter,
+  Settings,
+  Trash2,
+  Users,
+  X,
+  Edit2,
+  Calendar,
+  Download,
+} from "lucide-react";
+import { logger } from "@/lib/logger";
+import { todayLocalISO } from "@/lib/date-utils";
 
 interface TeamMember {
   id: string;
@@ -28,10 +41,10 @@ interface WorkstationWithEmployees {
   employees?: WorkstationEmployeeSummary[];
 }
 
-type DashboardTask = ManagerDashboardType['dailyTasks'][number];
+type DashboardTask = ManagerDashboardType["dailyTasks"][number];
 
 interface TasksByEmployeeGroup {
-  employee: DashboardTask['employee'];
+  employee: DashboardTask["employee"];
   tasks: DashboardTask[];
 }
 
@@ -52,32 +65,40 @@ export default function ManagerDashboard() {
 
   const handleLogout = () => {
     logout();
-    navigate('/', { replace: true });
+    navigate("/", { replace: true });
   };
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedDate, setSelectedDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState<string>(() =>
+    todayLocalISO(),
+  );
   const [selectedEmployee, setSelectedEmployee] = useState<string | null>(null);
-  const [selectedWorkstation, setSelectedWorkstation] = useState<string | null>(null);
+  const [selectedWorkstation, setSelectedWorkstation] = useState<string | null>(
+    null,
+  );
   const [showNewTaskModal, setShowNewTaskModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
-  const [activeTab, setActiveTab] = useState<'tasks' | 'workstations' | 'employees'>('tasks');
-  const [workstations, setWorkstations] = useState<WorkstationWithEmployees[]>([]);
+  const [activeTab, setActiveTab] = useState<
+    "tasks" | "workstations" | "employees"
+  >("tasks");
+  const [workstations, setWorkstations] = useState<WorkstationWithEmployees[]>(
+    [],
+  );
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [editingEmployee, setEditingEmployee] = useState<string | null>(null);
   const [editingWorkstations, setEditingWorkstations] = useState<string[]>([]);
 
   const [newTask, setNewTask] = useState({
-    title: '',
-    description: '',
-    workstationId: '',
-    assignedToEmployeeId: '',
-    assignmentType: 'workstation' as 'workstation' | 'employee',
+    title: "",
+    description: "",
+    workstationId: "",
+    assignedToEmployeeId: "",
+    assignmentType: "workstation" as "workstation" | "employee",
     notifyEmployee: true,
   });
-  const [newWorkstation, setNewWorkstation] = useState('');
+  const [newWorkstation, setNewWorkstation] = useState("");
   const [newEmployee, setNewEmployee] = useState({
-    name: '',
-    email: '',
+    name: "",
+    email: "",
     workstationIds: [] as string[],
   });
   const [operationError, setOperationError] = useState<string | null>(null);
@@ -87,12 +108,12 @@ export default function ManagerDashboard() {
     try {
       setIsLoading(true);
       const params = new URLSearchParams();
-      if (selectedDate) params.set('date', selectedDate);
-      if (selectedEmployee) params.set('employeeId', selectedEmployee);
-      if (selectedWorkstation) params.set('workstationId', selectedWorkstation);
-      const url = `/api/manager/dashboard${params.toString() ? `?${params.toString()}` : ''}`;
+      if (selectedDate) params.set("date", selectedDate);
+      if (selectedEmployee) params.set("employeeId", selectedEmployee);
+      if (selectedWorkstation) params.set("workstationId", selectedWorkstation);
+      const url = `/api/manager/dashboard${params.toString() ? `?${params.toString()}` : ""}`;
       const response = await fetch(url, {
-        credentials: 'include',
+        credentials: "include",
       });
 
       if (response.ok) {
@@ -100,13 +121,16 @@ export default function ManagerDashboard() {
         setDashboard(data);
       }
     } catch (error) {
-      logger.error('Failed to fetch dashboard:', error);
+      logger.error("Failed to fetch dashboard:", error);
     } finally {
       setIsLoading(false);
     }
   }, [selectedDate, selectedEmployee, selectedWorkstation]);
 
   const fetchDashboardRef = useRef(fetchDashboard);
+  const settingsModalRef = useRef<HTMLDivElement | null>(null);
+  const lastFocusedElementRef = useRef<HTMLElement | null>(null);
+  const previousBodyOverflowRef = useRef<string | null>(null);
   fetchDashboardRef.current = fetchDashboard;
 
   useEffect(() => {
@@ -119,12 +143,14 @@ export default function ManagerDashboard() {
   }, [fetchDashboard]);
 
   useEffect(() => {
-    const unsubscribeUpdate = on('task:updated', () => {
+    const unsubscribeUpdate = on("task:updated", () => {
       fetchDashboardRef.current?.();
     });
 
-    const unsubscribeAssigned = on('task:assigned', (data) => {
-      setOperationSuccess(`Task "${data.taskTitle}" assigned to ${data.employeeName}`);
+    const unsubscribeAssigned = on("task:assigned", (data) => {
+      setOperationSuccess(
+        `Task "${data.taskTitle}" assigned to ${data.employeeName}`,
+      );
       setTimeout(() => setOperationSuccess(null), 5000);
     });
 
@@ -136,8 +162,8 @@ export default function ManagerDashboard() {
 
   const fetchWorkstations = async () => {
     try {
-      const response = await fetch('/api/workstations', {
-        credentials: 'include',
+      const response = await fetch("/api/workstations", {
+        credentials: "include",
       });
 
       if (response.ok) {
@@ -145,14 +171,14 @@ export default function ManagerDashboard() {
         setWorkstations(data);
       }
     } catch (error) {
-      logger.error('Failed to fetch workstations:', error);
+      logger.error("Failed to fetch workstations:", error);
     }
   };
 
   const fetchTeamMembers = async () => {
     try {
-      const response = await fetch('/api/team/members', {
-        credentials: 'include',
+      const response = await fetch("/api/team/members", {
+        credentials: "include",
       });
 
       if (response.ok) {
@@ -160,7 +186,7 @@ export default function ManagerDashboard() {
         setTeamMembers(data);
       }
     } catch (error) {
-      logger.error('Failed to fetch team members:', error);
+      logger.error("Failed to fetch team members:", error);
     }
   };
 
@@ -170,50 +196,53 @@ export default function ManagerDashboard() {
     setOperationSuccess(null);
 
     if (!newWorkstation.trim()) {
-      setOperationError('Please enter a workstation name');
+      setOperationError("Please enter a workstation name");
       return;
     }
 
     try {
-      const response = await fetchWithCsrf('/api/workstations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetchWithCsrf("/api/workstations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: newWorkstation }),
       });
 
       const data = await response.json();
 
       if (response.ok) {
-        setNewWorkstation('');
-        setOperationSuccess('Workstation created successfully!');
+        setNewWorkstation("");
+        setOperationSuccess("Workstation created successfully!");
         await fetchWorkstations();
       } else {
-        setOperationError(data.error || 'Failed to create workstation');
+        setOperationError(data.error || "Failed to create workstation");
       }
     } catch (error) {
-      setOperationError('An error occurred');
-      logger.error('Failed to create workstation:', error);
+      setOperationError("An error occurred");
+      logger.error("Failed to create workstation:", error);
     }
   };
 
   const handleDeleteWorkstation = async (workstationId: string) => {
-    if (!confirm('Are you sure you want to delete this workstation?')) return;
+    if (!confirm("Are you sure you want to delete this workstation?")) return;
 
     try {
-      const response = await fetchWithCsrf(`/api/workstations/${workstationId}`, {
-        method: 'DELETE',
-      });
+      const response = await fetchWithCsrf(
+        `/api/workstations/${workstationId}`,
+        {
+          method: "DELETE",
+        },
+      );
 
       if (response.ok) {
-        setOperationSuccess('Workstation deleted successfully!');
+        setOperationSuccess("Workstation deleted successfully!");
         await fetchWorkstations();
       } else {
         const data = await response.json();
-        setOperationError(data.error || 'Failed to delete workstation');
+        setOperationError(data.error || "Failed to delete workstation");
       }
     } catch (error) {
-      setOperationError('An error occurred');
-      logger.error('Failed to delete workstation:', error);
+      setOperationError("An error occurred");
+      logger.error("Failed to delete workstation:", error);
     }
   };
 
@@ -222,59 +251,70 @@ export default function ManagerDashboard() {
     setOperationError(null);
     setOperationSuccess(null);
 
-    if (!newEmployee.name || !newEmployee.email || newEmployee.workstationIds.length === 0) {
-      setOperationError('Please fill in name, email and select at least one workstation');
+    if (
+      !newEmployee.name ||
+      !newEmployee.email ||
+      newEmployee.workstationIds.length === 0
+    ) {
+      setOperationError(
+        "Please fill in name, email and select at least one workstation",
+      );
       return;
     }
 
     try {
-      const response = await fetchWithCsrf('/api/employees', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetchWithCsrf("/api/employees", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newEmployee),
       });
 
       const data = await response.json();
 
       if (response.ok) {
-        setNewEmployee({ name: '', email: '', workstationIds: [] });
-        setOperationSuccess(`Employee created successfully!${data.emailSent ? ' Email sent.' : ' (Email delivery skipped)'}`);
+        setNewEmployee({ name: "", email: "", workstationIds: [] });
+        setOperationSuccess(
+          `Employee created successfully!${data.emailSent ? " Email sent." : " (Email delivery skipped)"}`,
+        );
         await fetchTeamMembers();
       } else {
-        setOperationError(data.error || 'Failed to create employee');
+        setOperationError(data.error || "Failed to create employee");
       }
     } catch (error) {
-      setOperationError('An error occurred');
-      logger.error('Failed to create employee:', error);
+      setOperationError("An error occurred");
+      logger.error("Failed to create employee:", error);
     }
   };
 
   const handleUpdateEmployeeWorkstations = async (employeeId: string) => {
     if (editingWorkstations.length === 0) {
-      setOperationError('Please select at least one workstation');
+      setOperationError("Please select at least one workstation");
       return;
     }
 
     try {
-      const response = await fetchWithCsrf(`/api/employees/${employeeId}/workstations`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ workstationIds: editingWorkstations }),
-      });
+      const response = await fetchWithCsrf(
+        `/api/employees/${employeeId}/workstations`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ workstationIds: editingWorkstations }),
+        },
+      );
 
       const data = await response.json();
 
       if (response.ok) {
         setEditingEmployee(null);
         setEditingWorkstations([]);
-        setOperationSuccess('Employee workstations updated successfully!');
+        setOperationSuccess("Employee workstations updated successfully!");
         await fetchTeamMembers();
       } else {
-        setOperationError(data.error || 'Failed to update employee');
+        setOperationError(data.error || "Failed to update employee");
       }
     } catch (error) {
-      setOperationError('An error occurred');
-      logger.error('Failed to update employee:', error);
+      setOperationError("An error occurred");
+      logger.error("Failed to update employee:", error);
     }
   };
 
@@ -282,17 +322,20 @@ export default function ManagerDashboard() {
     e.preventDefault();
 
     if (!newTask.title) {
-      alert('Please fill in the task title');
+      alert("Please fill in the task title");
       return;
     }
 
-    if (newTask.assignmentType === 'workstation' && !newTask.workstationId) {
-      alert('Please select a workstation');
+    if (newTask.assignmentType === "workstation" && !newTask.workstationId) {
+      alert("Please select a workstation");
       return;
     }
 
-    if (newTask.assignmentType === 'employee' && !newTask.assignedToEmployeeId) {
-      alert('Please select an employee');
+    if (
+      newTask.assignmentType === "employee" &&
+      !newTask.assignedToEmployeeId
+    ) {
+      alert("Please select an employee");
       return;
     }
 
@@ -301,29 +344,124 @@ export default function ManagerDashboard() {
         title: newTask.title,
         description: newTask.description,
         notifyEmployee: newTask.notifyEmployee,
-        ...(newTask.assignmentType === 'workstation' && { workstationId: newTask.workstationId }),
-        ...(newTask.assignmentType === 'employee' && { assignedToEmployeeId: newTask.assignedToEmployeeId }),
+        ...(newTask.assignmentType === "workstation" && {
+          workstationId: newTask.workstationId,
+        }),
+        ...(newTask.assignmentType === "employee" && {
+          assignedToEmployeeId: newTask.assignedToEmployeeId,
+        }),
       };
 
-      const response = await fetchWithCsrf('/api/tasks/templates', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetchWithCsrf("/api/tasks/templates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
 
       if (response.ok) {
-        setNewTask({ title: '', description: '', workstationId: '', assignedToEmployeeId: '', assignmentType: 'workstation', notifyEmployee: true });
+        setNewTask({
+          title: "",
+          description: "",
+          workstationId: "",
+          assignedToEmployeeId: "",
+          assignmentType: "workstation",
+          notifyEmployee: true,
+        });
         setShowNewTaskModal(false);
         await fetchDashboard();
       } else {
         const data = await response.json();
-        alert(data.error || 'Failed to create task');
+        alert(data.error || "Failed to create task");
       }
     } catch (error) {
-      logger.error('Failed to create task:', error);
-      alert('An error occurred while creating the task');
+      logger.error("Failed to create task:", error);
+      alert("An error occurred while creating the task");
     }
   };
+
+  useEffect(() => {
+    const modalElement = settingsModalRef.current;
+
+    if (!showSettingsModal) {
+      if (
+        typeof document !== "undefined" &&
+        previousBodyOverflowRef.current !== null
+      ) {
+        document.body.style.overflow = previousBodyOverflowRef.current;
+        previousBodyOverflowRef.current = null;
+      }
+      if (lastFocusedElementRef.current) {
+        lastFocusedElementRef.current.focus();
+      }
+      return;
+    }
+
+    if (typeof document !== "undefined") {
+      if (previousBodyOverflowRef.current === null) {
+        previousBodyOverflowRef.current = document.body.style.overflow;
+      }
+      document.body.style.overflow = "hidden";
+    }
+
+    if (modalElement) {
+      modalElement.focus();
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setShowSettingsModal(false);
+        return;
+      }
+
+      if (event.key === "Tab" && modalElement) {
+        const focusableSelectors = [
+          "a[href]",
+          "button:not([disabled])",
+          "textarea:not([disabled])",
+          "input:not([disabled])",
+          "select:not([disabled])",
+          '[tabindex]:not([tabindex="-1"])',
+        ];
+
+        const focusableElements = Array.from(
+          modalElement.querySelectorAll<HTMLElement>(
+            focusableSelectors.join(","),
+          ),
+        ).filter((el) => !el.hasAttribute("aria-hidden"));
+
+        if (focusableElements.length === 0) {
+          event.preventDefault();
+          return;
+        }
+
+        const firstElement = focusableElements[0];
+        const lastElement = focusableElements[focusableElements.length - 1];
+        const isShift = event.shiftKey;
+
+        if (!isShift && document.activeElement === lastElement) {
+          event.preventDefault();
+          firstElement.focus();
+        } else if (isShift && document.activeElement === firstElement) {
+          event.preventDefault();
+          lastElement.focus();
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      if (
+        typeof document !== "undefined" &&
+        previousBodyOverflowRef.current !== null
+      ) {
+        document.body.style.overflow = previousBodyOverflowRef.current;
+        previousBodyOverflowRef.current = null;
+      }
+    };
+  }, [showSettingsModal]);
 
   if (isLoading) {
     return (
@@ -337,8 +475,12 @@ export default function ManagerDashboard() {
     return (
       <div className="min-h-screen bg-gradient-to-b from-primary/5 to-background flex items-center justify-center">
         <div className="text-center">
-          <h2 className="text-2xl font-bold text-foreground mb-2">Team not found</h2>
-          <p className="text-muted-foreground mb-6">Please contact your administrator</p>
+          <h2 className="text-2xl font-bold text-foreground mb-2">
+            Team not found
+          </h2>
+          <p className="text-muted-foreground mb-6">
+            Please contact your administrator
+          </p>
           <button
             onClick={handleLogout}
             className="inline-flex items-center gap-2 px-6 py-3 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-medium transition"
@@ -356,14 +498,16 @@ export default function ManagerDashboard() {
 
   const completedCount = filteredTasks.filter((t) => t.isCompleted).length;
   const totalCount = filteredTasks.length;
-  const progressPercent = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+  const progressPercent =
+    totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
   // Group tasks by workstation (or "Direct assignments" for tasks without workstation), then by employee
-  const DIRECT_ASSIGNMENTS_ID = '__direct__';
-  const tasksByWorkstation: TasksByWorkstationMap = filteredTasks.reduce<TasksByWorkstationMap>(
-    (acc, task) => {
+  const DIRECT_ASSIGNMENTS_ID = "__direct__";
+  const tasksByWorkstation: TasksByWorkstationMap =
+    filteredTasks.reduce<TasksByWorkstationMap>((acc, task) => {
       const wsId = task.taskTemplate.workstation?.id ?? DIRECT_ASSIGNMENTS_ID;
-      const wsName = task.taskTemplate.workstation?.name ?? 'Direct assignments';
+      const wsName =
+        task.taskTemplate.workstation?.name ?? "Direct assignments";
 
       if (!acc[wsId]) {
         acc[wsId] = {
@@ -382,9 +526,7 @@ export default function ManagerDashboard() {
       }
       acc[wsId].tasksByEmployee[empId].tasks.push(task);
       return acc;
-    },
-    {} as TasksByWorkstationMap
-  );
+    }, {} as TasksByWorkstationMap);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-primary/5 to-background">
@@ -393,14 +535,24 @@ export default function ManagerDashboard() {
         <div className="max-w-6xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h1 className="text-2xl font-bold text-foreground">{dashboard.team.name}</h1>
+              <h1 className="text-2xl font-bold text-foreground">
+                {dashboard.team.name}
+              </h1>
               <p className="text-sm text-muted-foreground">Manager Dashboard</p>
             </div>
             <div className="flex items-center gap-2">
               <button
-                onClick={() => setShowSettingsModal(true)}
+                onClick={() => {
+                  if (typeof document !== "undefined") {
+                    lastFocusedElementRef.current =
+                      document.activeElement as HTMLElement | null;
+                  }
+                  setShowSettingsModal(true);
+                }}
                 className="inline-flex items-center gap-2 px-4 py-2 border border-input hover:bg-secondary text-foreground rounded-lg font-medium transition"
                 title="Settings"
+                aria-label="Open team settings"
+                type="button"
               >
                 <Settings className="w-4 h-4" />
               </button>
@@ -408,6 +560,8 @@ export default function ManagerDashboard() {
                 onClick={handleLogout}
                 className="inline-flex items-center gap-2 px-3 py-2 text-muted-foreground hover:text-foreground hover:bg-secondary rounded-lg transition"
                 title="Sign out"
+                aria-label="Sign out"
+                type="button"
               >
                 <LogOut className="w-4 h-4" />
               </button>
@@ -417,31 +571,31 @@ export default function ManagerDashboard() {
           {/* Tabs */}
           <div className="flex gap-4 border-t border-border pt-4">
             <button
-              onClick={() => setActiveTab('tasks')}
+              onClick={() => setActiveTab("tasks")}
               className={`px-4 py-2 font-medium transition border-b-2 ${
-                activeTab === 'tasks'
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-muted-foreground hover:text-foreground'
+                activeTab === "tasks"
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
               }`}
             >
               Tasks
             </button>
             <button
-              onClick={() => setActiveTab('workstations')}
+              onClick={() => setActiveTab("workstations")}
               className={`px-4 py-2 font-medium transition border-b-2 ${
-                activeTab === 'workstations'
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-muted-foreground hover:text-foreground'
+                activeTab === "workstations"
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
               }`}
             >
               Workstations
             </button>
             <button
-              onClick={() => setActiveTab('employees')}
+              onClick={() => setActiveTab("employees")}
               className={`px-4 py-2 font-medium transition border-b-2 ${
-                activeTab === 'employees'
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-muted-foreground hover:text-foreground'
+                activeTab === "employees"
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
               }`}
             >
               <Users className="w-4 h-4 inline mr-2" />
@@ -454,7 +608,7 @@ export default function ManagerDashboard() {
       {/* Main Content */}
       <div className="max-w-6xl mx-auto px-4 py-8">
         {/* Tasks Tab */}
-        {activeTab === 'tasks' && (
+        {activeTab === "tasks" && (
           <>
             {/* Notifications */}
             {operationError && (
@@ -483,23 +637,37 @@ export default function ManagerDashboard() {
             {/* Summary Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
               <div className="bg-card rounded-xl border border-border p-6 shadow-sm">
-                <p className="text-sm text-muted-foreground font-medium">Team Members</p>
-                <p className="text-3xl font-bold text-foreground mt-2">{teamMembers.length}</p>
+                <p className="text-sm text-muted-foreground font-medium">
+                  Team Members
+                </p>
+                <p className="text-3xl font-bold text-foreground mt-2">
+                  {teamMembers.length}
+                </p>
               </div>
               <div className="bg-card rounded-xl border border-border p-6 shadow-sm">
-                <p className="text-sm text-muted-foreground font-medium">Today's Tasks</p>
-                <p className="text-3xl font-bold text-foreground mt-2">{totalCount}</p>
+                <p className="text-sm text-muted-foreground font-medium">
+                  Today's Tasks
+                </p>
+                <p className="text-3xl font-bold text-foreground mt-2">
+                  {totalCount}
+                </p>
               </div>
               <div className="bg-card rounded-xl border border-border p-6 shadow-sm">
-                <p className="text-sm text-muted-foreground font-medium">Completion Rate</p>
-                <p className="text-3xl font-bold text-primary mt-2">{progressPercent}%</p>
+                <p className="text-sm text-muted-foreground font-medium">
+                  Completion Rate
+                </p>
+                <p className="text-3xl font-bold text-primary mt-2">
+                  {progressPercent}%
+                </p>
               </div>
             </div>
 
             {/* Progress Bar */}
             <div className="bg-card rounded-xl border border-border p-6 shadow-sm mb-8">
               <div className="flex items-center justify-between mb-3">
-                <h2 className="font-semibold text-foreground">Overall Progress</h2>
+                <h2 className="font-semibold text-foreground">
+                  Overall Progress
+                </h2>
                 <span className="text-sm text-muted-foreground">
                   {completedCount} of {totalCount} tasks completed
                 </span>
@@ -514,20 +682,23 @@ export default function ManagerDashboard() {
 
             {/* Quick date shortcuts (history) */}
             <div className="flex flex-wrap gap-2 mb-4">
-              <span className="text-sm text-muted-foreground self-center">History:</span>
+              <span className="text-sm text-muted-foreground self-center">
+                History:
+              </span>
               {[...Array(8)].map((_, i) => {
                 const d = new Date();
                 d.setDate(d.getDate() - i);
-                const dateStr = d.toISOString().split('T')[0];
-                const label = i === 0 ? 'Today' : i === 1 ? 'Yesterday' : `-${i} days`;
+                const dateStr = d.toISOString().split("T")[0];
+                const label =
+                  i === 0 ? "Today" : i === 1 ? "Yesterday" : `-${i} days`;
                 return (
                   <button
                     key={dateStr}
                     onClick={() => setSelectedDate(dateStr)}
                     className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
                       selectedDate === dateStr
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-secondary/50 text-foreground hover:bg-secondary'
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-secondary/50 text-foreground hover:bg-secondary"
                     }`}
                   >
                     {label}
@@ -550,7 +721,7 @@ export default function ManagerDashboard() {
                   />
                 </div>
                 <select
-                  value={selectedEmployee || ''}
+                  value={selectedEmployee || ""}
                   onChange={(e) => setSelectedEmployee(e.target.value || null)}
                   className="px-4 py-2 rounded-lg border border-input bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                 >
@@ -562,8 +733,10 @@ export default function ManagerDashboard() {
                   ))}
                 </select>
                 <select
-                  value={selectedWorkstation || ''}
-                  onChange={(e) => setSelectedWorkstation(e.target.value || null)}
+                  value={selectedWorkstation || ""}
+                  onChange={(e) =>
+                    setSelectedWorkstation(e.target.value || null)
+                  }
                   className="px-4 py-2 rounded-lg border border-input bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                 >
                   <option value="">All Workstations</option>
@@ -578,19 +751,37 @@ export default function ManagerDashboard() {
               <div className="flex gap-2">
                 <button
                   onClick={() => {
-                    const headers = ['Date', 'Employee', 'Workstation', 'Task', 'Status', 'Completed At'];
+                    const headers = [
+                      "Date",
+                      "Employee",
+                      "Workstation",
+                      "Task",
+                      "Status",
+                      "Completed At",
+                    ];
                     const rows = filteredTasks.map((t) => [
                       selectedDate,
                       t.employee.name,
-                      t.taskTemplate.workstation?.name ?? 'Direct',
+                      t.taskTemplate.workstation?.name ?? "Direct",
                       t.taskTemplate.title,
-                      t.isCompleted ? 'Completed' : 'Pending',
-                      t.completedAt ? new Date(t.completedAt).toLocaleString() : '',
+                      t.isCompleted ? "Completed" : "Pending",
+                      t.completedAt
+                        ? new Date(t.completedAt).toLocaleString()
+                        : "",
                     ]);
-                    const csv = [headers.join(','), ...rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(','))].join('\n');
-                    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                    const csv = [
+                      headers.join(","),
+                      ...rows.map((r) =>
+                        r
+                          .map((c) => `"${String(c).replace(/"/g, '""')}"`)
+                          .join(","),
+                      ),
+                    ].join("\n");
+                    const blob = new Blob([csv], {
+                      type: "text/csv;charset=utf-8;",
+                    });
                     const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
+                    const a = document.createElement("a");
                     a.href = url;
                     a.download = `tasks-${selectedDate}.csv`;
                     a.click();
@@ -619,75 +810,107 @@ export default function ManagerDashboard() {
                 </div>
               ) : (
                 Object.values(tasksByWorkstation).map((workstation) => (
-                  <div key={workstation.id} className="border-t border-border pt-8 first:border-t-0 first:pt-0">
-                    <h3 className="text-lg font-semibold text-foreground mb-4">{workstation.name}</h3>
+                  <div
+                    key={workstation.id}
+                    className="border-t border-border pt-8 first:border-t-0 first:pt-0"
+                  >
+                    <h3 className="text-lg font-semibold text-foreground mb-4">
+                      {workstation.name}
+                    </h3>
                     <div className="space-y-4">
-                      {Object.values(workstation.tasksByEmployee).map(({ employee, tasks }) => {
-                        const empCompletedCount = tasks.filter((t) => t.isCompleted).length;
-                        const empProgressPercent = tasks.length > 0 ? Math.round((empCompletedCount / tasks.length) * 100) : 0;
+                      {Object.values(workstation.tasksByEmployee).map(
+                        ({ employee, tasks }) => {
+                          const empCompletedCount = tasks.filter(
+                            (t) => t.isCompleted,
+                          ).length;
+                          const empProgressPercent =
+                            tasks.length > 0
+                              ? Math.round(
+                                  (empCompletedCount / tasks.length) * 100,
+                                )
+                              : 0;
 
-                        return (
-                          <div key={employee.id} className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
-                            <div className="px-6 py-4 border-b border-border bg-secondary/30">
-                              <div className="flex items-center justify-between">
-                                <div>
-                                  <h4 className="font-semibold text-foreground">{employee.name}</h4>
-                                  <p className="text-sm text-muted-foreground">{employee.email}</p>
-                                </div>
-                                <div className="text-right">
-                                  <p className="text-2xl font-bold text-primary">{empProgressPercent}%</p>
-                                  <p className="text-xs text-muted-foreground">
-                                    {empCompletedCount}/{tasks.length}
-                                  </p>
+                          return (
+                            <div
+                              key={employee.id}
+                              className="bg-card rounded-xl border border-border shadow-sm overflow-hidden"
+                            >
+                              <div className="px-6 py-4 border-b border-border bg-secondary/30">
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <h4 className="font-semibold text-foreground">
+                                      {employee.name}
+                                    </h4>
+                                    <p className="text-sm text-muted-foreground">
+                                      {employee.email}
+                                    </p>
+                                  </div>
+                                  <div className="text-right">
+                                    <p className="text-2xl font-bold text-primary">
+                                      {empProgressPercent}%
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">
+                                      {empCompletedCount}/{tasks.length}
+                                    </p>
+                                  </div>
                                 </div>
                               </div>
-                            </div>
 
-                            <div className="px-6 py-4 space-y-2">
-                              {tasks.map((task) => (
-                                <div key={task.id} className="flex items-center gap-3">
+                              <div className="px-6 py-4 space-y-2">
+                                {tasks.map((task) => (
                                   <div
-                                    className={`flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
-                                      task.isCompleted
-                                        ? 'bg-primary border-primary'
-                                        : 'border-border bg-background'
-                                    }`}
+                                    key={task.id}
+                                    className="flex items-center gap-3"
                                   >
-                                    {task.isCompleted && (
-                                      <svg className="w-3 h-3 text-primary-foreground" fill="currentColor" viewBox="0 0 20 20">
-                                        <path
-                                          fillRule="evenodd"
-                                          d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                                          clipRule="evenodd"
-                                        />
-                                      </svg>
-                                    )}
-                                  </div>
-                                  <div className="flex-1">
-                                    <p
-                                      className={`text-sm font-medium transition-all ${
+                                    <div
+                                      className={`flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
                                         task.isCompleted
-                                          ? 'text-muted-foreground line-through'
-                                          : 'text-foreground'
+                                          ? "bg-primary border-primary"
+                                          : "border-border bg-background"
                                       }`}
                                     >
-                                      {task.taskTemplate.title}
-                                    </p>
-                                    {task.taskTemplate.description && (
-                                      <p className="text-xs text-muted-foreground mt-0.5">
-                                        {task.taskTemplate.description}
+                                      {task.isCompleted && (
+                                        <svg
+                                          className="w-3 h-3 text-primary-foreground"
+                                          fill="currentColor"
+                                          viewBox="0 0 20 20"
+                                        >
+                                          <path
+                                            fillRule="evenodd"
+                                            d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                                            clipRule="evenodd"
+                                          />
+                                        </svg>
+                                      )}
+                                    </div>
+                                    <div className="flex-1">
+                                      <p
+                                        className={`text-sm font-medium transition-all ${
+                                          task.isCompleted
+                                            ? "text-muted-foreground line-through"
+                                            : "text-foreground"
+                                        }`}
+                                      >
+                                        {task.taskTemplate.title}
                                       </p>
+                                      {task.taskTemplate.description && (
+                                        <p className="text-xs text-muted-foreground mt-0.5">
+                                          {task.taskTemplate.description}
+                                        </p>
+                                      )}
+                                    </div>
+                                    {task.isCompleted && (
+                                      <span className="text-xs font-medium text-primary">
+                                        ✓ Done
+                                      </span>
                                     )}
                                   </div>
-                                  {task.isCompleted && (
-                                    <span className="text-xs font-medium text-primary">✓ Done</span>
-                                  )}
-                                </div>
-                              ))}
+                                ))}
+                              </div>
                             </div>
-                          </div>
-                        );
-                      })}
+                          );
+                        },
+                      )}
                     </div>
                   </div>
                 ))
@@ -697,10 +920,12 @@ export default function ManagerDashboard() {
         )}
 
         {/* Workstations Tab */}
-        {activeTab === 'workstations' && (
+        {activeTab === "workstations" && (
           <div>
             <div className="mb-6">
-              <h2 className="text-xl font-bold text-foreground mb-4">Manage Workstations</h2>
+              <h2 className="text-xl font-bold text-foreground mb-4">
+                Manage Workstations
+              </h2>
 
               {operationError && (
                 <div className="bg-destructive/10 border border-destructive/20 rounded-lg px-4 py-3 text-sm text-destructive mb-4">
@@ -714,7 +939,10 @@ export default function ManagerDashboard() {
                 </div>
               )}
 
-              <form onSubmit={handleCreateWorkstation} className="flex gap-2 mb-6">
+              <form
+                onSubmit={handleCreateWorkstation}
+                className="flex gap-2 mb-6"
+              >
                 <input
                   type="text"
                   value={newWorkstation}
@@ -733,9 +961,14 @@ export default function ManagerDashboard() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {workstations.map((ws) => (
-                <div key={ws.id} className="bg-card rounded-xl border border-border p-6 shadow-sm">
+                <div
+                  key={ws.id}
+                  className="bg-card rounded-xl border border-border p-6 shadow-sm"
+                >
                   <div className="flex items-center justify-between mb-3">
-                    <h3 className="font-semibold text-foreground text-lg">{ws.name}</h3>
+                    <h3 className="font-semibold text-foreground text-lg">
+                      {ws.name}
+                    </h3>
                     <button
                       onClick={() => handleDeleteWorkstation(ws.id)}
                       className="p-2 text-destructive hover:bg-destructive/10 rounded-lg transition"
@@ -745,14 +978,20 @@ export default function ManagerDashboard() {
                     </button>
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    {ws.employees?.length || 0} employee{ws.employees?.length !== 1 ? 's' : ''}
+                    {ws.employees?.length || 0} employee
+                    {ws.employees?.length !== 1 ? "s" : ""}
                   </p>
-                      {ws.employees && ws.employees.length > 0 && (
+                  {ws.employees && ws.employees.length > 0 && (
                     <div className="mt-3 pt-3 border-t border-border">
-                      <p className="text-xs text-muted-foreground mb-2">Assigned to:</p>
+                      <p className="text-xs text-muted-foreground mb-2">
+                        Assigned to:
+                      </p>
                       <div className="space-y-1">
                         {ws.employees.map((ew) => (
-                          <p key={ew.employee.id} className="text-sm text-foreground">
+                          <p
+                            key={ew.employee.id}
+                            className="text-sm text-foreground"
+                          >
                             • {ew.employee.name}
                           </p>
                         ))}
@@ -766,10 +1005,12 @@ export default function ManagerDashboard() {
         )}
 
         {/* Employees Tab */}
-        {activeTab === 'employees' && (
+        {activeTab === "employees" && (
           <div>
             <div className="mb-6">
-              <h2 className="text-xl font-bold text-foreground mb-4">Create New Employee</h2>
+              <h2 className="text-xl font-bold text-foreground mb-4">
+                Create New Employee
+              </h2>
 
               {operationError && (
                 <div className="bg-destructive/10 border border-destructive/20 rounded-lg px-4 py-3 text-sm text-destructive mb-4">
@@ -783,62 +1024,95 @@ export default function ManagerDashboard() {
                 </div>
               )}
 
-              <form onSubmit={handleCreateEmployee} className="bg-card rounded-xl border border-border p-6 shadow-sm mb-8 space-y-4">
+              <form
+                onSubmit={handleCreateEmployee}
+                className="bg-card rounded-xl border border-border p-6 shadow-sm mb-8 space-y-4"
+              >
                 <p className="text-sm text-muted-foreground -mt-2">
-                  The employee will receive an email with a secure link to set their password (no password sent by email).
+                  The employee will receive an email with a secure link to set
+                  their password (no password sent by email).
                 </p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-foreground mb-2">Full Name</label>
+                    <label className="block text-sm font-medium text-foreground mb-2">
+                      Full Name
+                    </label>
                     <input
                       type="text"
                       required
                       value={newEmployee.name}
-                      onChange={(e) => setNewEmployee({ ...newEmployee, name: e.target.value })}
+                      onChange={(e) =>
+                        setNewEmployee({ ...newEmployee, name: e.target.value })
+                      }
                       placeholder="John Doe"
                       className="w-full px-4 py-2 rounded-lg border border-input bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-foreground mb-2">Email</label>
+                    <label className="block text-sm font-medium text-foreground mb-2">
+                      Email
+                    </label>
                     <input
                       type="email"
                       required
                       value={newEmployee.email}
-                      onChange={(e) => setNewEmployee({ ...newEmployee, email: e.target.value })}
+                      onChange={(e) =>
+                        setNewEmployee({
+                          ...newEmployee,
+                          email: e.target.value,
+                        })
+                      }
                       placeholder="john@example.com"
                       className="w-full px-4 py-2 rounded-lg border border-input bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-foreground mb-2">Workstations (Select one or more)</label>
+                    <label className="block text-sm font-medium text-foreground mb-2">
+                      Workstations (Select one or more)
+                    </label>
                     <div className="space-y-2 max-h-40 overflow-y-auto border border-input rounded-lg p-3 bg-background">
                       {workstations.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">No workstations available. Create one in the Workstations tab first.</p>
+                        <p className="text-sm text-muted-foreground">
+                          No workstations available. Create one in the
+                          Workstations tab first.
+                        </p>
                       ) : (
                         workstations.map((ws) => (
-                          <label key={ws.id} className="flex items-center gap-2 cursor-pointer">
+                          <label
+                            key={ws.id}
+                            className="flex items-center gap-2 cursor-pointer"
+                          >
                             <input
                               type="checkbox"
-                              checked={newEmployee.workstationIds.includes(ws.id)}
+                              checked={newEmployee.workstationIds.includes(
+                                ws.id,
+                              )}
                               onChange={(e) => {
                                 if (e.target.checked) {
                                   setNewEmployee({
                                     ...newEmployee,
-                                    workstationIds: [...newEmployee.workstationIds, ws.id],
+                                    workstationIds: [
+                                      ...newEmployee.workstationIds,
+                                      ws.id,
+                                    ],
                                   });
                                 } else {
                                   setNewEmployee({
                                     ...newEmployee,
-                                    workstationIds: newEmployee.workstationIds.filter((id) => id !== ws.id),
+                                    workstationIds:
+                                      newEmployee.workstationIds.filter(
+                                        (id) => id !== ws.id,
+                                      ),
                                   });
                                 }
                               }}
                               className="w-4 h-4 rounded border-input"
                             />
-                            <span className="text-sm text-foreground">{ws.name}</span>
+                            <span className="text-sm text-foreground">
+                              {ws.name}
+                            </span>
                           </label>
                         ))
                       )}
@@ -855,48 +1129,72 @@ export default function ManagerDashboard() {
               </form>
             </div>
 
-            <h3 className="text-lg font-semibold text-foreground mb-4">Team Members ({teamMembers.length})</h3>
+            <h3 className="text-lg font-semibold text-foreground mb-4">
+              Team Members ({teamMembers.length})
+            </h3>
             <div className="space-y-3">
               {teamMembers.length === 0 ? (
                 <div className="text-center py-8 bg-card rounded-xl border border-border">
-                  <p className="text-muted-foreground">No employees yet. Create one above!</p>
+                  <p className="text-muted-foreground">
+                    No employees yet. Create one above!
+                  </p>
                 </div>
               ) : (
                 teamMembers.map((member) => (
                   <div
                     key={member.id}
                     className={`bg-card rounded-lg border transition ${
-                      editingEmployee === member.id ? 'border-primary' : 'border-border'
+                      editingEmployee === member.id
+                        ? "border-primary"
+                        : "border-border"
                     } p-4`}
                   >
                     {editingEmployee === member.id ? (
                       <div className="space-y-3">
                         <div className="flex items-center justify-between mb-2">
-                          <p className="font-medium text-foreground">{member.name}</p>
-                          <p className="text-sm text-muted-foreground">{member.email}</p>
+                          <p className="font-medium text-foreground">
+                            {member.name}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            {member.email}
+                          </p>
                         </div>
                         <div className="space-y-2 max-h-48 overflow-y-auto border border-input rounded-lg p-3 bg-background">
                           {workstations.map((ws) => (
-                            <label key={ws.id} className="flex items-center gap-2 cursor-pointer">
+                            <label
+                              key={ws.id}
+                              className="flex items-center gap-2 cursor-pointer"
+                            >
                               <input
                                 type="checkbox"
                                 checked={editingWorkstations.includes(ws.id)}
                                 onChange={(e) => {
                                   if (e.target.checked) {
-                                    setEditingWorkstations([...editingWorkstations, ws.id]);
+                                    setEditingWorkstations([
+                                      ...editingWorkstations,
+                                      ws.id,
+                                    ]);
                                   } else {
-                                    setEditingWorkstations(editingWorkstations.filter((id) => id !== ws.id));
+                                    setEditingWorkstations(
+                                      editingWorkstations.filter(
+                                        (id) => id !== ws.id,
+                                      ),
+                                    );
                                   }
                                 }}
                                 className="w-4 h-4 rounded border-input"
                               />
-                              <span className="text-sm text-foreground">{ws.name}</span>
+                              <span className="text-sm text-foreground">
+                                {ws.name}
+                              </span>
                             </label>
                           ))}
                         </div>
                         <div className="flex gap-2">
                           <button
-                            onClick={() => handleUpdateEmployeeWorkstations(member.id)}
+                            onClick={() =>
+                              handleUpdateEmployeeWorkstations(member.id)
+                            }
                             className="flex-1 px-3 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-medium transition text-sm"
                           >
                             Save
@@ -915,8 +1213,12 @@ export default function ManagerDashboard() {
                     ) : (
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="font-medium text-foreground">{member.name}</p>
-                          <p className="text-sm text-muted-foreground">{member.email}</p>
+                          <p className="font-medium text-foreground">
+                            {member.name}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            {member.email}
+                          </p>
                           {member.workstations.length > 0 && (
                             <div className="flex gap-1 flex-wrap mt-2">
                               {member.workstations.map((ws) => (
@@ -933,7 +1235,9 @@ export default function ManagerDashboard() {
                         <button
                           onClick={() => {
                             setEditingEmployee(member.id);
-                            setEditingWorkstations(member.workstations.map((ws) => ws.id));
+                            setEditingWorkstations(
+                              member.workstations.map((ws) => ws.id),
+                            );
                           }}
                           className="p-2 text-primary hover:bg-primary/10 rounded-lg transition"
                           title="Edit workstations"
@@ -952,13 +1256,30 @@ export default function ManagerDashboard() {
 
       {/* New Task Modal */}
       {showNewTaskModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-card rounded-xl shadow-lg max-w-md w-full p-6 border border-border max-h-[90vh] overflow-y-auto">
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={() => setShowNewTaskModal(false)}
+        >
+          <div
+            className="bg-card rounded-xl shadow-lg max-w-md w-full p-6 border border-border max-h-[90vh] overflow-y-auto"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="new-task-modal-title"
+            tabIndex={-1}
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-foreground">Create New Task</h2>
+              <h2
+                id="new-task-modal-title"
+                className="text-xl font-bold text-foreground"
+              >
+                Create New Task
+              </h2>
               <button
                 onClick={() => setShowNewTaskModal(false)}
                 className="p-1 hover:bg-secondary rounded-lg transition"
+                aria-label="Close new task modal"
+                type="button"
               >
                 <X className="w-5 h-5 text-muted-foreground" />
               </button>
@@ -966,52 +1287,90 @@ export default function ManagerDashboard() {
 
             <form onSubmit={handleCreateTask} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-foreground mb-2">Task Title</label>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  Task Title
+                </label>
                 <input
                   type="text"
                   required
                   value={newTask.title}
-                  onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
+                  onChange={(e) =>
+                    setNewTask({ ...newTask, title: e.target.value })
+                  }
                   placeholder="e.g., Clean the workstation"
                   className="w-full px-4 py-2 rounded-lg border border-input bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-foreground mb-2">Assign To</label>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  Assign To
+                </label>
                 <div className="flex gap-3">
-                  <label className="flex items-center gap-2 cursor-pointer flex-1 p-3 rounded-lg border-2 transition" style={{ borderColor: newTask.assignmentType === 'workstation' ? 'var(--primary)' : 'var(--border)' }}>
+                  <label
+                    className="flex items-center gap-2 cursor-pointer flex-1 p-3 rounded-lg border-2 transition"
+                    style={{
+                      borderColor:
+                        newTask.assignmentType === "workstation"
+                          ? "var(--primary)"
+                          : "var(--border)",
+                    }}
+                  >
                     <input
                       type="radio"
-                      checked={newTask.assignmentType === 'workstation'}
+                      checked={newTask.assignmentType === "workstation"}
                       onChange={() => {
-                        setNewTask({ ...newTask, assignmentType: 'workstation', assignedToEmployeeId: '' });
+                        setNewTask({
+                          ...newTask,
+                          assignmentType: "workstation",
+                          assignedToEmployeeId: "",
+                        });
                       }}
                       className="w-4 h-4"
                     />
-                    <span className="text-sm font-medium text-foreground">Workstation</span>
+                    <span className="text-sm font-medium text-foreground">
+                      Workstation
+                    </span>
                   </label>
-                  <label className="flex items-center gap-2 cursor-pointer flex-1 p-3 rounded-lg border-2 transition" style={{ borderColor: newTask.assignmentType === 'employee' ? 'var(--primary)' : 'var(--border)' }}>
+                  <label
+                    className="flex items-center gap-2 cursor-pointer flex-1 p-3 rounded-lg border-2 transition"
+                    style={{
+                      borderColor:
+                        newTask.assignmentType === "employee"
+                          ? "var(--primary)"
+                          : "var(--border)",
+                    }}
+                  >
                     <input
                       type="radio"
-                      checked={newTask.assignmentType === 'employee'}
+                      checked={newTask.assignmentType === "employee"}
                       onChange={() => {
-                        setNewTask({ ...newTask, assignmentType: 'employee', workstationId: '' });
+                        setNewTask({
+                          ...newTask,
+                          assignmentType: "employee",
+                          workstationId: "",
+                        });
                       }}
                       className="w-4 h-4"
                     />
-                    <span className="text-sm font-medium text-foreground">Employee</span>
+                    <span className="text-sm font-medium text-foreground">
+                      Employee
+                    </span>
                   </label>
                 </div>
               </div>
 
-              {newTask.assignmentType === 'workstation' && (
+              {newTask.assignmentType === "workstation" && (
                 <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">Workstation</label>
+                  <label className="block text-sm font-medium text-foreground mb-2">
+                    Workstation
+                  </label>
                   <select
                     required
                     value={newTask.workstationId}
-                    onChange={(e) => setNewTask({ ...newTask, workstationId: e.target.value })}
+                    onChange={(e) =>
+                      setNewTask({ ...newTask, workstationId: e.target.value })
+                    }
                     className="w-full px-4 py-2 rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                   >
                     <option value="">Select a workstation</option>
@@ -1024,13 +1383,20 @@ export default function ManagerDashboard() {
                 </div>
               )}
 
-              {newTask.assignmentType === 'employee' && (
+              {newTask.assignmentType === "employee" && (
                 <div>
-                  <label className="block text-sm font-medium text-foreground mb-2">Employee</label>
+                  <label className="block text-sm font-medium text-foreground mb-2">
+                    Employee
+                  </label>
                   <select
                     required
                     value={newTask.assignedToEmployeeId}
-                    onChange={(e) => setNewTask({ ...newTask, assignedToEmployeeId: e.target.value })}
+                    onChange={(e) =>
+                      setNewTask({
+                        ...newTask,
+                        assignedToEmployeeId: e.target.value,
+                      })
+                    }
                     className="w-full px-4 py-2 rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
                   >
                     <option value="">Select an employee</option>
@@ -1044,10 +1410,14 @@ export default function ManagerDashboard() {
               )}
 
               <div>
-                <label className="block text-sm font-medium text-foreground mb-2">Description (optional)</label>
+                <label className="block text-sm font-medium text-foreground mb-2">
+                  Description (optional)
+                </label>
                 <textarea
                   value={newTask.description}
-                  onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
+                  onChange={(e) =>
+                    setNewTask({ ...newTask, description: e.target.value })
+                  }
                   placeholder="Add any additional details..."
                   className="w-full px-4 py-2 rounded-lg border border-input bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary resize-none"
                   rows={3}
@@ -1059,10 +1429,15 @@ export default function ManagerDashboard() {
                   type="checkbox"
                   id="notifyEmployee"
                   checked={newTask.notifyEmployee}
-                  onChange={(e) => setNewTask({ ...newTask, notifyEmployee: e.target.checked })}
+                  onChange={(e) =>
+                    setNewTask({ ...newTask, notifyEmployee: e.target.checked })
+                  }
                   className="w-4 h-4 rounded"
                 />
-                <label htmlFor="notifyEmployee" className="text-sm text-foreground cursor-pointer flex-1">
+                <label
+                  htmlFor="notifyEmployee"
+                  className="text-sm text-foreground cursor-pointer flex-1"
+                >
                   Notify employee when task is assigned
                 </label>
               </div>
@@ -1083,6 +1458,71 @@ export default function ManagerDashboard() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Settings Modal */}
+      {showSettingsModal && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={() => setShowSettingsModal(false)}
+        >
+          <div
+            ref={settingsModalRef}
+            className="bg-card rounded-xl shadow-lg max-w-md w-full p-6 border border-border max-h-[90vh] overflow-y-auto"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="settings-modal-title"
+            tabIndex={-1}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h2
+                id="settings-modal-title"
+                className="text-xl font-bold text-foreground"
+              >
+                Team Settings
+              </h2>
+              <button
+                onClick={() => setShowSettingsModal(false)}
+                className="p-1 hover:bg-secondary rounded-lg transition"
+                aria-label="Close settings modal"
+                type="button"
+              >
+                <X className="w-5 h-5 text-muted-foreground" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="bg-secondary/30 border border-border rounded-lg p-4">
+                <p className="text-sm font-medium text-foreground mb-1">Team</p>
+                <p className="text-sm text-muted-foreground">
+                  {dashboard.team.name}
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-foreground">
+                  Display options
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Basic settings are available today. More advanced
+                  configuration (notifications, templates, reports) will be
+                  added here in a future version.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-6">
+              <button
+                type="button"
+                onClick={() => setShowSettingsModal(false)}
+                className="px-4 py-2 border border-input text-foreground rounded-lg hover:bg-secondary transition text-sm font-medium"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

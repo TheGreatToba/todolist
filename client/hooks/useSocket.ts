@@ -1,16 +1,16 @@
-import { useEffect, useRef, useCallback } from 'react';
-import { io, Socket } from 'socket.io-client';
-import { useAuth } from '@/contexts/AuthContext';
-import { logger } from '@/lib/logger';
+import { useEffect, useRef, useCallback } from "react";
+import { io, Socket } from "socket.io-client";
+import { useAuth } from "@/contexts/AuthContext";
+import { logger } from "@/lib/logger";
 
 type SocketEventMap = {
-  'task:updated': {
+  "task:updated": {
     taskId: string;
     employeeId: string;
     isCompleted: boolean;
     taskTitle: string;
   };
-  'task:assigned': {
+  "task:assigned": {
     taskId: string;
     employeeId: string;
     employeeName: string;
@@ -36,16 +36,16 @@ export function useSocket() {
       reconnectionAttempts: 5,
     });
 
-    socket.on('connect', () => {
-      logger.debug('Socket connected:', socket.id);
+    socket.on("connect", () => {
+      logger.debug("Socket connected:", socket.id);
     });
 
-    socket.on('disconnect', (reason) => {
-      logger.debug('Socket disconnected:', reason);
+    socket.on("disconnect", (reason) => {
+      logger.debug("Socket disconnected:", reason);
     });
 
-    socket.on('connect_error', (err) => {
-      logger.warn('Socket connect error:', err.message);
+    socket.on("connect_error", (err) => {
+      logger.warn("Socket connect error:", err.message);
     });
 
     socketRef.current = socket;
@@ -57,12 +57,20 @@ export function useSocket() {
   }, [isAuthenticated]);
 
   const on = useCallback(
-    <E extends SocketEvent>(event: E, callback: (payload: SocketEventMap[E]) => void) => {
+    <E extends SocketEvent>(
+      event: E,
+      callback: (payload: SocketEventMap[E]) => void,
+    ) => {
       const socket = socketRef.current;
       if (!socket) return () => {};
 
       const wrapped = (...args: any[]) => {
-        if (!socketRef.current || socketRef.current !== socket || !socket.connected) return;
+        if (
+          !socketRef.current ||
+          socketRef.current !== socket ||
+          !socket.connected
+        )
+          return;
         const [payload] = args as [SocketEventMap[E]];
         callback(payload);
       };
@@ -73,7 +81,7 @@ export function useSocket() {
         (socket as any).off(event, wrapped);
       };
     },
-    []
+    [],
   );
 
   const emit = useCallback(
@@ -82,7 +90,7 @@ export function useSocket() {
         socketRef.current.emit(event, data);
       }
     },
-    []
+    [],
   );
 
   return { socket: socketRef.current, on, emit };

@@ -1,16 +1,16 @@
-import jwt from 'jsonwebtoken';
-import bcryptjs from 'bcryptjs';
-import { z } from 'zod';
-import { parse as parseCookie } from 'cookie';
+import jwt from "jsonwebtoken";
+import bcryptjs from "bcryptjs";
+import { z } from "zod";
+import { parse as parseCookie } from "cookie";
 
 let _jwtSecret: string | null = null;
 
 function getJwtSecret(): string {
   if (_jwtSecret) return _jwtSecret;
   const secret = process.env.JWT_SECRET;
-  if (!secret || secret.trim() === '') {
+  if (!secret || secret.trim() === "") {
     throw new Error(
-      'JWT_SECRET is required. Set it in your environment (e.g. .env file) before starting the server.'
+      "JWT_SECRET is required. Set it in your environment (e.g. .env file) before starting the server.",
     );
   }
   _jwtSecret = secret;
@@ -22,21 +22,21 @@ export function ensureAuthConfig(): void {
   getJwtSecret();
 }
 
-const JWT_EXPIRY = '7d';
+const JWT_EXPIRY = "7d";
 
 /** Role union for type-safe checks (avoids typos in requireRole). */
-export type Role = 'MANAGER' | 'EMPLOYEE';
+export type Role = "MANAGER" | "EMPLOYEE";
 
 /** Runtime guard: ensures DB string is a valid role before emitting a JWT. */
 export function isRole(value: unknown): value is Role {
-  return value === 'MANAGER' || value === 'EMPLOYEE';
+  return value === "MANAGER" || value === "EMPLOYEE";
 }
 
 const JwtPayloadSchema = z
   .object({
     userId: z.string(),
     email: z.string().email(),
-    role: z.enum(['MANAGER', 'EMPLOYEE']),
+    role: z.enum(["MANAGER", "EMPLOYEE"]),
     iat: z.number().optional(),
     exp: z.number().optional(),
   })
@@ -54,7 +54,10 @@ export async function hashPassword(password: string): Promise<string> {
   return bcryptjs.hash(password, salt);
 }
 
-export async function verifyPassword(password: string, hash: string): Promise<boolean> {
+export async function verifyPassword(
+  password: string,
+  hash: string,
+): Promise<boolean> {
   return bcryptjs.compare(password, hash);
 }
 
@@ -76,7 +79,7 @@ export function verifyToken(token: string): JwtPayload | null {
 
 /** __Host- prefix in prod: requires Secure, no Domain, Path=/ (limits cookie scope) */
 export const AUTH_COOKIE_NAME =
-  process.env.NODE_ENV === 'production' ? '__Host-token' : 'token';
+  process.env.NODE_ENV === "production" ? "__Host-token" : "token";
 
 const COOKIE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
@@ -84,21 +87,26 @@ const COOKIE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 export function getAuthCookieOptions(): {
   httpOnly: boolean;
   secure: boolean;
-  sameSite: 'lax';
+  sameSite: "lax";
   maxAge: number;
   path: string;
 } {
   return {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
     maxAge: COOKIE_MAX_AGE_MS,
-    path: '/',
+    path: "/",
   };
 }
 
 /** Options for clearCookie - must mirror getAuthCookieOptions (excluding maxAge) */
-export function getAuthCookieClearOptions(): { httpOnly: boolean; secure: boolean; sameSite: 'lax'; path: string } {
+export function getAuthCookieClearOptions(): {
+  httpOnly: boolean;
+  secure: boolean;
+  sameSite: "lax";
+  path: string;
+} {
   const opts = getAuthCookieOptions();
   return {
     httpOnly: opts.httpOnly,
@@ -110,13 +118,16 @@ export function getAuthCookieClearOptions(): { httpOnly: boolean; secure: boolea
 
 export function extractTokenFromHeader(authHeader?: string): string | null {
   if (!authHeader) return null;
-  const parts = authHeader.split(' ');
-  if (parts.length !== 2 || parts[0] !== 'Bearer') return null;
+  const parts = authHeader.split(" ");
+  if (parts.length !== 2 || parts[0] !== "Bearer") return null;
   return parts[1];
 }
 
 /** Extract JWT from Authorization header (Bearer) or from httpOnly cookie */
-export function extractToken(req: { headers?: { authorization?: string; cookie?: string }; cookies?: Record<string, string> }): string | null {
+export function extractToken(req: {
+  headers?: { authorization?: string; cookie?: string };
+  cookies?: Record<string, string>;
+}): string | null {
   const fromHeader = extractTokenFromHeader(req.headers?.authorization);
   if (fromHeader) return fromHeader;
 

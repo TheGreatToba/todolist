@@ -18,7 +18,13 @@ import NotFound from "./pages/NotFound";
 const queryClient = new QueryClient();
 
 // Protected route component
-function ProtectedRoute({ children, requiredRole }: { children: React.ReactNode; requiredRole?: string }) {
+function ProtectedRoute({
+  children,
+  requiredRole,
+}: {
+  children: React.ReactNode;
+  requiredRole?: string;
+}) {
   const { user, isLoading } = useAuth();
 
   if (isLoading) {
@@ -36,7 +42,12 @@ function ProtectedRoute({ children, requiredRole }: { children: React.ReactNode;
   }
 
   if (requiredRole && user.role !== requiredRole) {
-    return <Navigate to={user.role === "MANAGER" ? "/manager" : "/employee"} replace />;
+    return (
+      <Navigate
+        to={user.role === "MANAGER" ? "/manager" : "/employee"}
+        replace
+      />
+    );
   }
 
   return children;

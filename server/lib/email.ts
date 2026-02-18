@@ -1,14 +1,14 @@
-import nodemailer from 'nodemailer';
-import { logger } from './logger';
+import nodemailer from "nodemailer";
+import { logger } from "./logger";
 
 /** Escape user-provided content to prevent XSS in HTML emails */
 function escapeHtml(unsafe: string): string {
   return unsafe
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
 // For development, we'll use Ethereal Email (fake SMTP service)
@@ -18,11 +18,16 @@ let transporter: nodemailer.Transporter | null = null;
 async function getTransporter() {
   if (!transporter) {
     // Check if we have email configuration from environment
-    if (process.env.SMTP_HOST && process.env.SMTP_PORT && process.env.SMTP_USER && process.env.SMTP_PASS) {
+    if (
+      process.env.SMTP_HOST &&
+      process.env.SMTP_PORT &&
+      process.env.SMTP_USER &&
+      process.env.SMTP_PASS
+    ) {
       transporter = nodemailer.createTransport({
         host: process.env.SMTP_HOST,
         port: parseInt(process.env.SMTP_PORT),
-        secure: process.env.SMTP_SECURE === 'true', // true for 465, false for other ports
+        secure: process.env.SMTP_SECURE === "true", // true for 465, false for other ports
         auth: {
           user: process.env.SMTP_USER,
           pass: process.env.SMTP_PASS,
@@ -32,7 +37,7 @@ async function getTransporter() {
       // For development, create an Ethereal test account
       const testAccount = await nodemailer.createTestAccount();
       transporter = nodemailer.createTransport({
-        host: 'smtp.ethereal.email',
+        host: "smtp.ethereal.email",
         port: 587,
         secure: false,
         auth: {
@@ -52,15 +57,15 @@ export async function sendSetPasswordEmail(
   employeeName: string,
   setPasswordLink: string,
   workstationNames: string[],
-  expiryHours: number = 24
+  expiryHours: number = 24,
 ) {
   try {
     const transporter = await getTransporter();
 
     const mailOptions = {
-      from: process.env.EMAIL_FROM || 'noreply@taskflow.local',
+      from: process.env.EMAIL_FROM || "noreply@taskflow.local",
       to: employeeEmail,
-      subject: 'Welcome to TaskFlow - Set Your Password',
+      subject: "Welcome to TaskFlow - Set Your Password",
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <div style="background-color: #0066cc; color: white; padding: 20px; border-radius: 8px 8px 0 0;">
@@ -79,11 +84,11 @@ export async function sendSetPasswordEmail(
 
             <p><strong>Assigned Workstations:</strong></p>
             <ul>
-              ${workstationNames.map((ws) => `<li>${escapeHtml(ws)}</li>`).join('')}
+              ${workstationNames.map((ws) => `<li>${escapeHtml(ws)}</li>`).join("")}
             </ul>
 
             <div style="background-color: #e8f5e9; border: 1px solid #4caf50; padding: 12px; border-radius: 4px; margin: 16px 0; font-size: 13px;">
-              <strong>Security:</strong> This link expires in ${expiryHours} hour${expiryHours === 1 ? '' : 's'} and can only be used once. Do not share it with anyone.
+              <strong>Security:</strong> This link expires in ${expiryHours} hour${expiryHours === 1 ? "" : "s"} and can only be used once. Do not share it with anyone.
             </div>
 
             <p style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 12px; color: #666;">
@@ -95,16 +100,19 @@ export async function sendSetPasswordEmail(
     };
 
     const info = await transporter.sendMail(mailOptions);
-    logger.info('Set password email sent:', info.messageId);
+    logger.info("Set password email sent:", info.messageId);
 
-    if (process.env.NODE_ENV !== 'production' && !process.env.SMTP_HOST) {
-      logger.debug('Preview URL:', nodemailer.getTestMessageUrl(info));
+    if (process.env.NODE_ENV !== "production" && !process.env.SMTP_HOST) {
+      logger.debug("Preview URL:", nodemailer.getTestMessageUrl(info));
     }
 
     return { success: true, messageId: info.messageId };
   } catch (error) {
-    logger.error('Failed to send set password email:', error);
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    logger.error("Failed to send set password email:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
   }
 }
 
@@ -112,15 +120,15 @@ export async function sendTaskAssignmentEmail(
   employeeEmail: string,
   employeeName: string,
   taskTitle: string,
-  taskDescription?: string
+  taskDescription?: string,
 ) {
   try {
     const transporter = await getTransporter();
 
     const mailOptions = {
-      from: process.env.EMAIL_FROM || 'noreply@taskflow.local',
+      from: process.env.EMAIL_FROM || "noreply@taskflow.local",
       to: employeeEmail,
-      subject: 'New Task Assigned in TaskFlow',
+      subject: "New Task Assigned in TaskFlow",
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
           <div style="background-color: #0066cc; color: white; padding: 20px; border-radius: 8px 8px 0 0;">
@@ -132,7 +140,7 @@ export async function sendTaskAssignmentEmail(
 
             <div style="background-color: #f5f5f5; padding: 15px; border-radius: 4px; margin: 20px 0;">
               <h3 style="margin: 0 0 10px 0; color: #0066cc;">${escapeHtml(taskTitle)}</h3>
-              ${taskDescription ? `<p style="margin: 0; color: #666;">${escapeHtml(taskDescription)}</p>` : ''}
+              ${taskDescription ? `<p style="margin: 0; color: #666;">${escapeHtml(taskDescription)}</p>` : ""}
             </div>
 
             <p>Please log in to your TaskFlow dashboard to view and complete this task.</p>
@@ -146,43 +154,49 @@ export async function sendTaskAssignmentEmail(
     };
 
     const info = await transporter.sendMail(mailOptions);
-    logger.info('Task assignment email sent:', info.messageId);
+    logger.info("Task assignment email sent:", info.messageId);
 
     // For test accounts, log the preview URL
-    if (process.env.NODE_ENV !== 'production' && !process.env.SMTP_HOST) {
-      logger.debug('Preview URL:', nodemailer.getTestMessageUrl(info));
+    if (process.env.NODE_ENV !== "production" && !process.env.SMTP_HOST) {
+      logger.debug("Preview URL:", nodemailer.getTestMessageUrl(info));
     }
 
     return { success: true, messageId: info.messageId };
   } catch (error) {
-    logger.error('Failed to send task assignment email:', error);
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    logger.error("Failed to send task assignment email:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
   }
 }
 
 export default async function sendEmail(
   to: string,
   subject: string,
-  text: string
+  text: string,
 ) {
   try {
     const transporter = await getTransporter();
     const info = await transporter.sendMail({
-      from: process.env.EMAIL_FROM || 'noreply@taskflow.local',
+      from: process.env.EMAIL_FROM || "noreply@taskflow.local",
       to,
       subject,
       text,
     });
 
-    logger.info('Email sent:', info.messageId);
+    logger.info("Email sent:", info.messageId);
 
-    if (process.env.NODE_ENV !== 'production' && !process.env.SMTP_HOST) {
-      logger.debug('Preview URL:', nodemailer.getTestMessageUrl(info));
+    if (process.env.NODE_ENV !== "production" && !process.env.SMTP_HOST) {
+      logger.debug("Preview URL:", nodemailer.getTestMessageUrl(info));
     }
 
     return { success: true, messageId: info.messageId };
   } catch (error) {
-    logger.error('Failed to send email:', error);
-    return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    logger.error("Failed to send email:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
   }
 }

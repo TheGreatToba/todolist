@@ -1,5 +1,5 @@
-import { RequestHandler, Request, Response } from 'express';
-import { extractToken, verifyToken, JwtPayload, Role } from '../lib/auth';
+import { RequestHandler, Request, Response } from "express";
+import { extractToken, verifyToken, JwtPayload, Role } from "../lib/auth";
 
 /**
  * Middleware: require valid JWT (from Authorization header or cookie).
@@ -8,12 +8,12 @@ import { extractToken, verifyToken, JwtPayload, Role } from '../lib/auth';
 export const requireAuth: RequestHandler = (req, res, next) => {
   const token = extractToken(req);
   if (!token) {
-    res.status(401).json({ error: 'Unauthorized' });
+    res.status(401).json({ error: "Unauthorized" });
     return;
   }
   const payload = verifyToken(token);
   if (!payload) {
-    res.status(401).json({ error: 'Invalid token' });
+    res.status(401).json({ error: "Invalid token" });
     return;
   }
   req.auth = payload;
@@ -29,11 +29,11 @@ export function requireRole(...roles: Role[]): RequestHandler {
   return (req, res, next) => {
     const payload = req.auth;
     if (!payload) {
-      res.status(401).json({ error: 'Unauthorized' });
+      res.status(401).json({ error: "Unauthorized" });
       return;
     }
     if (!set.has(payload.role)) {
-      res.status(403).json({ error: 'Forbidden' });
+      res.status(403).json({ error: "Forbidden" });
       return;
     }
     next();
@@ -46,7 +46,7 @@ export function requireRole(...roles: Role[]): RequestHandler {
  */
 export function getAuthOrThrow(req: Request, res: Response): JwtPayload | null {
   if (!req.auth) {
-    res.status(401).json({ error: 'Unauthorized' });
+    res.status(401).json({ error: "Unauthorized" });
     return null;
   }
   return req.auth;

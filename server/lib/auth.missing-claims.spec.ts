@@ -11,25 +11,20 @@ describe("verifyToken – missing required claims", () => {
     const tokenNoUserId = jwt.sign(
       { email: "a@b.com", role: "MANAGER" },
       secret,
-      { expiresIn: "1h" }
+      { expiresIn: "1h" },
     );
     expect(verifyToken(tokenNoUserId)).toBeNull();
 
     // Missing email
-    const tokenNoEmail = jwt.sign(
-      { userId: "u", role: "MANAGER" },
-      secret,
-      { expiresIn: "1h" }
-    );
+    const tokenNoEmail = jwt.sign({ userId: "u", role: "MANAGER" }, secret, {
+      expiresIn: "1h",
+    });
     expect(verifyToken(tokenNoEmail)).toBeNull();
 
     // Missing role
-    const tokenNoRole = jwt.sign(
-      { userId: "u", email: "a@b.com" },
-      secret,
-      { expiresIn: "1h" }
-    );
+    const tokenNoRole = jwt.sign({ userId: "u", email: "a@b.com" }, secret, {
+      expiresIn: "1h",
+    });
     expect(verifyToken(tokenNoRole)).toBeNull();
   });
 });
-
