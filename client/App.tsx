@@ -6,17 +6,28 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
-import Index from "./pages/Index";
-import Login from "./pages/Login";
-import Signup from "./pages/Signup";
-import SetPassword from "./pages/SetPassword";
-import ForgotPassword from "./pages/ForgotPassword";
-import ResetPassword from "./pages/ResetPassword";
-import EmployeeDashboard from "./pages/EmployeeDashboard";
-import ManagerDashboard from "./pages/ManagerDashboard";
-import NotFound from "./pages/NotFound";
+
+const Index = React.lazy(() => import("./pages/Index"));
+const Login = React.lazy(() => import("./pages/Login"));
+const Signup = React.lazy(() => import("./pages/Signup"));
+const SetPassword = React.lazy(() => import("./pages/SetPassword"));
+const ForgotPassword = React.lazy(() => import("./pages/ForgotPassword"));
+const ResetPassword = React.lazy(() => import("./pages/ResetPassword"));
+const EmployeeDashboard = React.lazy(() => import("./pages/EmployeeDashboard"));
+const ManagerDashboard = React.lazy(() => import("./pages/ManagerDashboard"));
+const NotFound = React.lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient();
+
+function RouteLoadingFallback() {
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="animate-spin">
+        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full" />
+      </div>
+    </div>
+  );
+}
 
 class AppErrorBoundary extends React.Component<
   { children: React.ReactNode },
@@ -97,32 +108,34 @@ const App = () => (
         <TooltipProvider>
           <Toaster />
           <BrowserRouter>
-            <Routes>
-              <Route path="/" element={<Index />} />
-              <Route path="/login" element={<Login />} />
-              <Route path="/signup" element={<Signup />} />
-              <Route path="/set-password" element={<SetPassword />} />
-              <Route path="/forgot-password" element={<ForgotPassword />} />
-              <Route path="/reset-password" element={<ResetPassword />} />
-              <Route
-                path="/employee"
-                element={
-                  <ProtectedRoute requiredRole="EMPLOYEE">
-                    <EmployeeDashboard />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/manager"
-                element={
-                  <ProtectedRoute requiredRole="MANAGER">
-                    <ManagerDashboard />
-                  </ProtectedRoute>
-                }
-              />
-              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-              <Route path="*" element={<NotFound />} />
-            </Routes>
+            <React.Suspense fallback={<RouteLoadingFallback />}>
+              <Routes>
+                <Route path="/" element={<Index />} />
+                <Route path="/login" element={<Login />} />
+                <Route path="/signup" element={<Signup />} />
+                <Route path="/set-password" element={<SetPassword />} />
+                <Route path="/forgot-password" element={<ForgotPassword />} />
+                <Route path="/reset-password" element={<ResetPassword />} />
+                <Route
+                  path="/employee"
+                  element={
+                    <ProtectedRoute requiredRole="EMPLOYEE">
+                      <EmployeeDashboard />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/manager"
+                  element={
+                    <ProtectedRoute requiredRole="MANAGER">
+                      <ManagerDashboard />
+                    </ProtectedRoute>
+                  }
+                />
+                {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </React.Suspense>
           </BrowserRouter>
         </TooltipProvider>
       </AuthProvider>

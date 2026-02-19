@@ -24,6 +24,35 @@ export default defineConfig(() => ({
   build: {
     outDir: "dist/spa",
     base: "/", // assets loaded from same origin (no absolute URL)
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return;
+
+          if (
+            id.includes("react") ||
+            id.includes("react-dom") ||
+            id.includes("react-router-dom")
+          ) {
+            return "react-vendor";
+          }
+
+          if (id.includes("@tanstack/react-query")) {
+            return "query-vendor";
+          }
+
+          if (id.includes("@radix-ui") || id.includes("lucide-react")) {
+            return "ui-vendor";
+          }
+
+          if (id.includes("recharts")) {
+            return "charts-vendor";
+          }
+
+          return "vendor";
+        },
+      },
+    },
   },
   plugins: [react(), expressPlugin()],
   resolve: {
