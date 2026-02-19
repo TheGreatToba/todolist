@@ -105,7 +105,7 @@ Le serveur écoute sur le port 3000 (ou `PORT` si défini).
 | ------------ | ----------------------------------------------------------------------------------------------- | ------------------------- |
 | DATABASE_URL | URL de connexion à la base                                                                      | `file:./dev.db` (SQLite)  |
 | JWT_SECRET   | Clé secrète pour les tokens JWT                                                                 | (à changer en production) |
-| CRON_SECRET  | Secret pour l'endpoint cron (optionnel)                                                         | -                         |
+| CRON_SECRET  | Secret requis pour activer et appeler l'endpoint cron (`X-Cron-Secret`)                         | -                         |
 | NODE_ENV     | Environnement (development/production)                                                          | development               |
 | TRUST_PROXY  | `true` si derrière reverse proxy (nginx, load balancer) — requis pour un rate-limit IP correct  | -                         |
 | DISABLE_CSRF | `true` pour désactiver la validation CSRF (dev/staging uniquement — **interdit en production**) | -                         |
@@ -174,10 +174,7 @@ En cas de rejet CSRF, un log structuré est émis :
 Les tâches récurrentes doivent être assignées chaque jour. Un endpoint cron est disponible :
 
 ```bash
-# Appel manuel (sans CRON_SECRET configuré)
-curl -X POST http://localhost:8080/api/cron/daily-tasks
-
-# Avec authentification (recommandé en production) - POST uniquement
+# Appel manuel (CRON_SECRET doit être configuré) - POST uniquement
 curl -X POST http://localhost:8080/api/cron/daily-tasks \
   -H "X-Cron-Secret: votre-secret"
 
@@ -187,6 +184,8 @@ curl -X POST "http://localhost:8080/api/cron/daily-tasks?date=2025-02-15" \
 ```
 
 Configurez un cron (cron-job.org, GitHub Actions, ou crontab) pour appeler cet endpoint chaque matin (ex. 6h00).
+
+Sans `CRON_SECRET` configuré, l'endpoint retourne `503` (désactivé). Avec un secret invalide ou absent, il retourne `401`.
 
 ## Tests
 
