@@ -241,4 +241,34 @@ describe("ManagerDashboard Settings modal", () => {
       portalRoot.remove();
     }
   });
+
+  it("pulls focus back into modal when focus leaves to element without data-focus-trap-allow", async () => {
+    renderWithProviders(<ManagerDashboard />);
+
+    const settingsButton = (
+      await screen.findAllByRole("button", { name: /open team settings/i })
+    )[0];
+    await userEvent.click(settingsButton);
+
+    const dialog = await screen.findByRole("dialog", {
+      name: /team settings/i,
+    });
+    const firstFocusableInModal = within(dialog).getByRole("button", {
+      name: /close settings modal/i,
+    });
+
+    const externalRoot = document.createElement("div");
+    const externalButton = document.createElement("button");
+    externalButton.type = "button";
+    externalButton.textContent = "Outside";
+    externalRoot.appendChild(externalButton);
+    document.body.appendChild(externalRoot);
+
+    try {
+      externalButton.focus();
+      expect(document.activeElement).toBe(firstFocusableInModal);
+    } finally {
+      externalRoot.remove();
+    }
+  });
 });

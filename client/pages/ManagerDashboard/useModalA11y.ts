@@ -24,6 +24,9 @@ function getFocusableElements(modalElement: HTMLDivElement): HTMLElement[] {
  * Focus containment skips pulling focus back when the new target is inside an
  * element with [data-focus-trap-allow], so portaled content (e.g. dropdowns,
  * popovers) can receive focus without being forced back into the modal.
+ *
+ * If you later support stacked modals, consider a "top-most modal only" strategy
+ * for the focusin handler (e.g. only the topmost modal's trap runs).
  */
 export function useModalA11y(
   modalRef: React.RefObject<HTMLDivElement | null>,
