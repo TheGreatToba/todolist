@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSocket } from "@/hooks/useSocket";
 import {
@@ -9,6 +9,15 @@ import {
   useCreateTaskTemplateMutation,
   queryKeys,
 } from "@/hooks/queries";
+import { toastSuccess, toastError } from "@/lib/toast";
+
+const FALLBACK = {
+  createWorkstation: "Failed to create workstation.",
+  deleteWorkstation: "Failed to delete workstation.",
+  createEmployee: "Failed to create employee.",
+  updateWorkstations: "Failed to update employee workstations.",
+  createTask: "Failed to create task.",
+} as const;
 
 export const initialNewTask = {
   title: "",
@@ -41,67 +50,56 @@ export function useManagerDashboardMutations(
   const [newEmployee, setNewEmployee] = useState(initialNewEmployee);
   const [editingEmployee, setEditingEmployee] = useState<string | null>(null);
   const [editingWorkstations, setEditingWorkstations] = useState<string[]>([]);
-  const [operationError, setOperationError] = useState<string | null>(null);
-  const [operationSuccess, setOperationSuccess] = useState<string | null>(null);
 
   const createWorkstation = useCreateWorkstationMutation({
     onSuccess: () => {
       setNewWorkstation("");
-      setOperationSuccess("Workstation created successfully!");
-      setOperationError(null);
+      toastSuccess("Workstation created successfully!");
     },
     onError: (err) => {
-      setOperationError(err.message);
-      setOperationSuccess(null);
+      toastError(err?.message ?? FALLBACK.createWorkstation);
     },
   });
   const deleteWorkstation = useDeleteWorkstationMutation({
     onSuccess: () => {
-      setOperationSuccess("Workstation deleted successfully!");
-      setOperationError(null);
+      toastSuccess("Workstation deleted successfully!");
     },
     onError: (err) => {
-      setOperationError(err.message);
-      setOperationSuccess(null);
+      toastError(err?.message ?? FALLBACK.deleteWorkstation);
     },
   });
   const createEmployee = useCreateEmployeeMutation({
     onSuccess: (data) => {
       setNewEmployee(initialNewEmployee);
-      setOperationSuccess(
+      toastSuccess(
         `Employee created successfully!${data.emailSent ? " Email sent." : " (Email delivery skipped)"}`,
       );
-      setOperationError(null);
     },
     onError: (err) => {
-      setOperationError(err.message);
-      setOperationSuccess(null);
+      toastError(err?.message ?? FALLBACK.createEmployee);
     },
   });
   const updateEmployeeWorkstations = useUpdateEmployeeWorkstationsMutation({
     onSuccess: () => {
       setEditingEmployee(null);
       setEditingWorkstations([]);
-      setOperationSuccess("Employee workstations updated successfully!");
-      setOperationError(null);
+      toastSuccess("Employee workstations updated successfully!");
     },
     onError: (err) => {
-      setOperationError(err.message);
-      setOperationSuccess(null);
+      toastError(err?.message ?? FALLBACK.updateWorkstations);
     },
   });
   const createTaskTemplate = useCreateTaskTemplateMutation({
     onSuccess: () => {
       setNewTask(initialNewTask);
-      setOperationSuccess(null);
       onTaskTemplateCreated?.();
     },
     onError: (err) => {
-      setOperationError(err.message ?? "Failed to create task");
+      toastError(err?.message ?? FALLBACK.createTask);
     },
   });
 
-  useSocketTaskEvents(queryClient, on, setOperationSuccess);
+  useSocketTaskEvents(queryClient, on);
 
   return {
     newTask,
@@ -114,10 +112,6 @@ export function useManagerDashboardMutations(
     setEditingEmployee,
     editingWorkstations,
     setEditingWorkstations,
-    operationError,
-    setOperationError,
-    operationSuccess,
-    setOperationSuccess,
     createWorkstation,
     deleteWorkstation,
     createEmployee,
@@ -129,10 +123,7 @@ export function useManagerDashboardMutations(
 function useSocketTaskEvents(
   queryClient: ReturnType<typeof useQueryClient>,
   on: (event: string, handler: (...args: unknown[]) => void) => () => void,
-  setOperationSuccess: (msg: string | null) => void,
 ) {
-  const successClearTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
-
   useEffect(() => {
     const unsubscribeUpdate = on("task:updated", () => {
       queryClient.invalidateQueries({
@@ -143,21 +134,23 @@ function useSocketTaskEvents(
     const unsubscribeAssigned = on(
       "task:assigned",
       (data: { taskTitle?: string; employeeName?: string }) => {
-        successClearTimersRef.current.forEach((id) => clearTimeout(id));
-        successClearTimersRef.current = [];
-        setOperationSuccess(
-          `Task "${data.taskTitle ?? ""}" assigned to ${data.employeeName ?? ""}`,
-        );
-        const timerId = setTimeout(() => setOperationSuccess(null), 5000);
-        successClearTimersRef.current.push(timerId);
+        const title = (data.taskTitle ?? "").trim();
+        const name = (data.employeeName ?? "").trim();
+        const message =
+          title && name
+            ? `Task "${title}" assigned to ${name}`
+            : title
+              ? `Task "${title}" assigned`
+              : name
+                ? `Task assigned to ${name}`
+                : "Task assigned";
+        toastSuccess(message);
       },
     );
 
     return () => {
-      successClearTimersRef.current.forEach((id) => clearTimeout(id));
-      successClearTimersRef.current = [];
       unsubscribeUpdate();
       unsubscribeAssigned();
     };
-  }, [on, queryClient, setOperationSuccess]);
+  }, [on, queryClient]);
 }

@@ -1,7 +1,6 @@
 import React from "react";
 import { Trash2 } from "lucide-react";
 import type { WorkstationWithEmployees } from "@/hooks/queries";
-import { OperationAlerts } from "./OperationAlerts";
 
 interface WorkstationsTabProps {
   workstations: WorkstationWithEmployees[];
@@ -9,10 +8,6 @@ interface WorkstationsTabProps {
   onNewWorkstationChange: (value: string) => void;
   onSubmitCreate: (e: React.FormEvent) => void;
   onDelete: (workstationId: string) => void;
-  operationError: string | null;
-  operationSuccess: string | null;
-  setOperationError: (msg: string | null) => void;
-  setOperationSuccess: (msg: string | null) => void;
 }
 
 export function WorkstationsTab({
@@ -21,10 +16,6 @@ export function WorkstationsTab({
   onNewWorkstationChange,
   onSubmitCreate,
   onDelete,
-  operationError,
-  operationSuccess,
-  setOperationError,
-  setOperationSuccess,
 }: WorkstationsTabProps) {
   return (
     <div>
@@ -32,13 +23,6 @@ export function WorkstationsTab({
         <h2 className="text-xl font-bold text-foreground mb-4">
           Manage Workstations
         </h2>
-
-        <OperationAlerts
-          error={operationError}
-          success={operationSuccess}
-          onDismissError={() => setOperationError(null)}
-          onDismissSuccess={() => setOperationSuccess(null)}
-        />
 
         <form onSubmit={onSubmitCreate} className="flex gap-2 mb-6">
           <input

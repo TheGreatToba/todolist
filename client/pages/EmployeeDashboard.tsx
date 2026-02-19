@@ -9,6 +9,7 @@ import {
 } from "@/hooks/queries";
 import { Check, Loader2, LogOut, X, AlertCircle, Calendar } from "lucide-react";
 import { logger } from "@/lib/logger";
+import { toastError } from "@/lib/toast";
 import { todayLocalISO, isToday, formatTaskDateLabel } from "@/lib/date-utils";
 
 export default function EmployeeDashboard() {
@@ -65,6 +66,8 @@ export default function EmployeeDashboard() {
       await updateTask.mutateAsync({ taskId, isCompleted: !isCompleted });
     } catch (error) {
       logger.error("Failed to update task:", error);
+      const message = error instanceof Error ? error.message : undefined;
+      toastError(message ?? "Failed to update task. Please try again.");
     }
   };
 

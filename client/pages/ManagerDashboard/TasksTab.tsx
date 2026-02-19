@@ -1,6 +1,5 @@
 import React from "react";
 import type { ManagerDashboard as ManagerDashboardType } from "@shared/api";
-import { OperationAlerts } from "./OperationAlerts";
 import { TasksSummaryCards } from "./TasksSummaryCards";
 import { TasksProgressBar } from "./TasksProgressBar";
 import { TasksDateFilters } from "./TasksDateFilters";
@@ -16,10 +15,6 @@ interface TasksTabProps {
   setSelectedEmployee: (id: string | null) => void;
   selectedWorkstation: string | null;
   setSelectedWorkstation: (id: string | null) => void;
-  operationError: string | null;
-  operationSuccess: string | null;
-  setOperationError: (msg: string | null) => void;
-  setOperationSuccess: (msg: string | null) => void;
   onExportCsv: () => void;
   onNewTask: () => void;
 }
@@ -33,10 +28,6 @@ export function TasksTab({
   setSelectedEmployee,
   selectedWorkstation,
   setSelectedWorkstation,
-  operationError,
-  operationSuccess,
-  setOperationError,
-  setOperationSuccess,
   onExportCsv,
   onNewTask,
 }: TasksTabProps) {
@@ -49,13 +40,6 @@ export function TasksTab({
 
   return (
     <>
-      <OperationAlerts
-        error={operationError}
-        success={operationSuccess}
-        onDismissError={() => setOperationError(null)}
-        onDismissSuccess={() => setOperationSuccess(null)}
-      />
-
       <TasksSummaryCards
         teamMembersCount={teamMembers.length}
         totalTasks={totalCount}

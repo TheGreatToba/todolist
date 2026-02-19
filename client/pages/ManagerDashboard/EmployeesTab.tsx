@@ -1,7 +1,6 @@
 import React from "react";
 import { Edit2 } from "lucide-react";
 import type { WorkstationWithEmployees } from "@/hooks/queries";
-import { OperationAlerts } from "./OperationAlerts";
 import type { TeamMember } from "./types";
 
 interface EmployeesTabProps {
@@ -23,10 +22,6 @@ interface EmployeesTabProps {
   setEditingEmployee: (id: string | null) => void;
   setEditingWorkstations: (ids: string[]) => void;
   onSaveWorkstations: (employeeId: string) => void;
-  operationError: string | null;
-  operationSuccess: string | null;
-  setOperationError: (msg: string | null) => void;
-  setOperationSuccess: (msg: string | null) => void;
 }
 
 export function EmployeesTab({
@@ -40,10 +35,6 @@ export function EmployeesTab({
   setEditingEmployee,
   setEditingWorkstations,
   onSaveWorkstations,
-  operationError,
-  operationSuccess,
-  setOperationError,
-  setOperationSuccess,
 }: EmployeesTabProps) {
   return (
     <div>
@@ -51,13 +42,6 @@ export function EmployeesTab({
         <h2 className="text-xl font-bold text-foreground mb-4">
           Create New Employee
         </h2>
-
-        <OperationAlerts
-          error={operationError}
-          success={operationSuccess}
-          onDismissError={() => setOperationError(null)}
-          onDismissSuccess={() => setOperationSuccess(null)}
-        />
 
         <form
           onSubmit={onSubmitCreate}

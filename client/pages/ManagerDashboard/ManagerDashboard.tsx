@@ -7,6 +7,7 @@ import {
   useTeamMembersQuery,
 } from "@/hooks/queries";
 import { Loader2, LogOut } from "lucide-react";
+import { toastError, toastInfo } from "@/lib/toast";
 import { useManagerDashboardFilters } from "./useManagerDashboardFilters";
 import { useManagerDashboardModals } from "./useManagerDashboardModals";
 import { useManagerDashboardMutations } from "./useManagerDashboardMutations";
@@ -42,10 +43,8 @@ export default function ManagerDashboard() {
 
   const handleCreateWorkstation = (e: React.FormEvent) => {
     e.preventDefault();
-    mutations.setOperationError(null);
-    mutations.setOperationSuccess(null);
     if (!mutations.newWorkstation.trim()) {
-      mutations.setOperationError("Please enter a workstation name");
+      toastError("Please enter a workstation name");
       return;
     }
     mutations.createWorkstation.mutate({
@@ -60,14 +59,12 @@ export default function ManagerDashboard() {
 
   const handleCreateEmployee = (e: React.FormEvent) => {
     e.preventDefault();
-    mutations.setOperationError(null);
-    mutations.setOperationSuccess(null);
     if (
       !mutations.newEmployee.name ||
       !mutations.newEmployee.email ||
       mutations.newEmployee.workstationIds.length === 0
     ) {
-      mutations.setOperationError(
+      toastError(
         "Please fill in name, email and select at least one workstation",
       );
       return;
@@ -77,7 +74,7 @@ export default function ManagerDashboard() {
 
   const handleUpdateEmployeeWorkstations = (employeeId: string) => {
     if (mutations.editingWorkstations.length === 0) {
-      mutations.setOperationError("Please select at least one workstation");
+      toastError("Please select at least one workstation");
       return;
     }
     mutations.updateEmployeeWorkstations.mutate({
@@ -89,21 +86,21 @@ export default function ManagerDashboard() {
   const handleCreateTask = (e: React.FormEvent) => {
     e.preventDefault();
     if (!mutations.newTask.title) {
-      mutations.setOperationError("Please fill in the task title");
+      toastError("Please fill in the task title");
       return;
     }
     if (
       mutations.newTask.assignmentType === "workstation" &&
       !mutations.newTask.workstationId
     ) {
-      mutations.setOperationError("Please select a workstation");
+      toastError("Please select a workstation");
       return;
     }
     if (
       mutations.newTask.assignmentType === "employee" &&
       !mutations.newTask.assignedToEmployeeId
     ) {
-      mutations.setOperationError("Please select an employee");
+      toastError("Please select an employee");
       return;
     }
     mutations.createTaskTemplate.mutate({
@@ -119,7 +116,7 @@ export default function ManagerDashboard() {
   const handleExportCsv = () => {
     if (!dashboard) return;
     if (dashboard.dailyTasks.length === 0) {
-      mutations.setOperationSuccess("No tasks to export for this date.");
+      toastInfo("No tasks to export for this date.");
       return;
     }
     const headers = [
@@ -207,10 +204,6 @@ export default function ManagerDashboard() {
             setSelectedEmployee={filters.setSelectedEmployee}
             selectedWorkstation={filters.selectedWorkstation}
             setSelectedWorkstation={filters.setSelectedWorkstation}
-            operationError={mutations.operationError}
-            operationSuccess={mutations.operationSuccess}
-            setOperationError={mutations.setOperationError}
-            setOperationSuccess={mutations.setOperationSuccess}
             onExportCsv={handleExportCsv}
             onNewTask={() => modals.setShowNewTaskModal(true)}
           />
@@ -223,10 +216,6 @@ export default function ManagerDashboard() {
             onNewWorkstationChange={mutations.setNewWorkstation}
             onSubmitCreate={handleCreateWorkstation}
             onDelete={handleDeleteWorkstation}
-            operationError={mutations.operationError}
-            operationSuccess={mutations.operationSuccess}
-            setOperationError={mutations.setOperationError}
-            setOperationSuccess={mutations.setOperationSuccess}
           />
         )}
 
@@ -242,10 +231,6 @@ export default function ManagerDashboard() {
             setEditingEmployee={mutations.setEditingEmployee}
             setEditingWorkstations={mutations.setEditingWorkstations}
             onSaveWorkstations={handleUpdateEmployeeWorkstations}
-            operationError={mutations.operationError}
-            operationSuccess={mutations.operationSuccess}
-            setOperationError={mutations.setOperationError}
-            setOperationSuccess={mutations.setOperationSuccess}
           />
         )}
       </div>
