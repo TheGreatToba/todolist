@@ -20,6 +20,10 @@ function getFocusableElements(modalElement: HTMLDivElement): HTMLElement[] {
  * Escape to close, body scroll lock, and focus save/restore when opening/closing.
  * Uses refs for onClose so the effect does not re-run on parent re-renders and
  * overwrite lastFocusedRef with an element inside the modal.
+ *
+ * Focus containment skips pulling focus back when the new target is inside an
+ * element with [data-focus-trap-allow], so portaled content (e.g. dropdowns,
+ * popovers) can receive focus without being forced back into the modal.
  */
 export function useModalA11y(
   modalRef: React.RefObject<HTMLDivElement | null>,
@@ -28,7 +32,7 @@ export function useModalA11y(
 ) {
   const lastFocusedRef = useRef<HTMLElement | null>(null);
   const previousBodyOverflowRef = useRef<string | null>(null);
-  const prevIsOpenRef = useRef(isOpen);
+  const prevIsOpenRef = useRef(false);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
 
@@ -101,10 +105,13 @@ export function useModalA11y(
       }
     };
 
-    // Strict focus trap: if focus leaves the modal, bring it back to the first focusable element
+    // Strict focus trap: if focus leaves the modal, bring it back to the first focusable element.
+    // Skip when focus moved into portaled content (menu/popover) so it stays usable with keyboard.
     const handleFocusIn = (event: FocusEvent) => {
       if (!modalElement || !(event.target instanceof Node)) return;
       if (modalElement.contains(event.target)) return;
+      const target = event.target as HTMLElement;
+      if (target.closest?.("[data-focus-trap-allow]")) return;
       const focusable = getFocusableElements(modalElement);
       if (focusable.length > 0) {
         focusable[0].focus();

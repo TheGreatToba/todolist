@@ -176,16 +176,19 @@ describe("ManagerDashboard Settings modal", () => {
     const dialog = await screen.findByRole("dialog", {
       name: /team settings/i,
     });
-    const closeButton = within(dialog).getByRole("button", {
+    const firstFocusable = within(dialog).getByRole("button", {
       name: /close settings modal/i,
     });
+    const lastFocusable = within(dialog).getByRole("button", {
+      name: /^Close$/,
+    });
 
-    closeButton.focus();
-    expect(document.activeElement).toBe(closeButton);
+    lastFocusable.focus();
+    expect(document.activeElement).toBe(lastFocusable);
 
     await userEvent.tab();
-    // Focus should wrap to first focusable (dialog container or Close)
-    expect(dialog.contains(document.activeElement)).toBe(true);
+    // Focus must wrap to the first focusable (X button; dialog has tabIndex=-1 so it's not in tab order)
+    expect(document.activeElement).toBe(firstFocusable);
   });
 
   it("traps Tab focus in Settings modal (Shift+Tab from first goes to last)", async () => {
