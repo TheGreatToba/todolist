@@ -48,7 +48,7 @@ async function fetchJson<T>(url: string): Promise<T> {
 
 export type ProfileResult = ProfileResponse | { user: null };
 
-/** 401/403 → { user: null }; other errors (network, 5xx) propagate for UX/debug. */
+/** 401/403 -> { user: null }; other errors (network, 5xx) propagate for UX/debug. */
 export async function fetchProfile(): Promise<ProfileResult> {
   const res = await fetch("/api/auth/profile", { credentials: "include" });
   if (res.status === 401 || res.status === 403) return { user: null };

@@ -1,3 +1,6 @@
+/**
+ * @vitest-environment jsdom
+ */
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -45,7 +48,7 @@ describe("useUpdateDailyTaskMutation", () => {
     );
   });
 
-  it("invalidates tasks daily prefix on success", async () => {
+  it("calls PATCH /api/tasks/daily/:id with isCompleted and invalidates tasks daily prefix on success", async () => {
     const { invalidateSpy, wrapper } = createWrapper();
 
     function ToggleTaskTest() {
@@ -63,9 +66,19 @@ describe("useUpdateDailyTaskMutation", () => {
     await userEvent.click(screen.getByRole("button", { name: /toggle/i }));
 
     await waitFor(() => {
-      expect(invalidateSpy).toHaveBeenCalledWith({
-        queryKey: queryKeys.tasks.dailyPrefix,
-      });
+      expect(mockFetchWithCsrf).toHaveBeenCalledWith(
+        "/api/tasks/daily/dt1",
+        expect.objectContaining({
+          method: "PATCH",
+          headers: expect.objectContaining({
+            "Content-Type": "application/json",
+          }),
+          body: JSON.stringify({ isCompleted: true }),
+        }),
+      );
+    });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: queryKeys.tasks.dailyPrefix,
     });
   });
 });
@@ -81,7 +94,7 @@ describe("useCreateWorkstationMutation", () => {
     );
   });
 
-  it("invalidates workstations and manager dashboard prefix on success", async () => {
+  it("calls POST /api/workstations with name and invalidates workstations and dashboard on success", async () => {
     const { invalidateSpy, wrapper } = createWrapper();
 
     function CreateWorkstationTest() {
@@ -97,12 +110,22 @@ describe("useCreateWorkstationMutation", () => {
     await userEvent.click(screen.getByRole("button", { name: /create/i }));
 
     await waitFor(() => {
-      expect(invalidateSpy).toHaveBeenCalledWith({
-        queryKey: queryKeys.manager.workstations,
-      });
-      expect(invalidateSpy).toHaveBeenCalledWith({
-        queryKey: queryKeys.manager.dashboardPrefix,
-      });
+      expect(mockFetchWithCsrf).toHaveBeenCalledWith(
+        "/api/workstations",
+        expect.objectContaining({
+          method: "POST",
+          headers: expect.objectContaining({
+            "Content-Type": "application/json",
+          }),
+          body: JSON.stringify({ name: "New WS" }),
+        }),
+      );
+    });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: queryKeys.manager.workstations,
+    });
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: queryKeys.manager.dashboardPrefix,
     });
   });
 });
