@@ -1,5 +1,6 @@
 import React from "react";
 import { X } from "lucide-react";
+import { useModalA11y } from "./useModalA11y";
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -14,6 +15,8 @@ export function SettingsModal({
   teamName,
   modalRef,
 }: SettingsModalProps) {
+  useModalA11y(modalRef, isOpen, onClose);
+
   if (!isOpen) return null;
 
   return (

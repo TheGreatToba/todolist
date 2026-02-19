@@ -118,6 +118,10 @@ export default function ManagerDashboard() {
 
   const handleExportCsv = () => {
     if (!dashboard) return;
+    if (dashboard.dailyTasks.length === 0) {
+      mutations.setOperationSuccess("No tasks to export for this date.");
+      return;
+    }
     const headers = [
       "Date",
       "Employee",

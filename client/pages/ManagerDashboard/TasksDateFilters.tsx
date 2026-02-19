@@ -1,13 +1,7 @@
 import React from "react";
 import { Filter, Calendar, Download, Plus } from "lucide-react";
 import type { ManagerDashboard as ManagerDashboardType } from "@shared/api";
-
-interface TeamMember {
-  id: string;
-  name: string;
-  email: string;
-  workstations: Array<{ id: string; name: string }>;
-}
+import type { TeamMember } from "./types";
 
 interface TasksDateFiltersProps {
   selectedDate: string;

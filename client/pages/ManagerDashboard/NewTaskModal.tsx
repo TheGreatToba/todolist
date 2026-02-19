@@ -1,13 +1,8 @@
-import React from "react";
+import React, { useRef } from "react";
 import { X } from "lucide-react";
 import type { ManagerDashboard as ManagerDashboardType } from "@shared/api";
-
-interface TeamMember {
-  id: string;
-  name: string;
-  email: string;
-  workstations: Array<{ id: string; name: string }>;
-}
+import type { TeamMember } from "./types";
+import { useModalA11y } from "./useModalA11y";
 
 export interface NewTaskFormState {
   title: string;
@@ -39,6 +34,9 @@ export function NewTaskModal({
   teamMembers,
   isSubmitting = false,
 }: NewTaskModalProps) {
+  const modalRef = useRef<HTMLDivElement>(null);
+  useModalA11y(modalRef, isOpen, onClose);
+
   if (!isOpen) return null;
 
   return (
@@ -48,6 +46,7 @@ export function NewTaskModal({
       role="presentation"
     >
       <div
+        ref={modalRef}
         className="bg-card rounded-xl shadow-lg max-w-md w-full p-6 border border-border max-h-[90vh] overflow-y-auto"
         role="dialog"
         aria-modal="true"

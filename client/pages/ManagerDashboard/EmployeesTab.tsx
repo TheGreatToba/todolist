@@ -2,13 +2,7 @@ import React from "react";
 import { Edit2 } from "lucide-react";
 import type { WorkstationWithEmployees } from "@/hooks/queries";
 import { OperationAlerts } from "./OperationAlerts";
-
-interface TeamMember {
-  id: string;
-  name: string;
-  email: string;
-  workstations: Array<{ id: string; name: string }>;
-}
+import type { TeamMember } from "./types";
 
 interface EmployeesTabProps {
   teamMembers: TeamMember[];

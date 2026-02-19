@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSocket } from "@/hooks/useSocket";
 import {
@@ -131,6 +131,8 @@ function useSocketTaskEvents(
   on: (event: string, handler: (...args: unknown[]) => void) => () => void,
   setOperationSuccess: (msg: string | null) => void,
 ) {
+  const successClearTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
   useEffect(() => {
     const unsubscribeUpdate = on("task:updated", () => {
       queryClient.invalidateQueries({
@@ -144,11 +146,14 @@ function useSocketTaskEvents(
         setOperationSuccess(
           `Task "${data.taskTitle ?? ""}" assigned to ${data.employeeName ?? ""}`,
         );
-        setTimeout(() => setOperationSuccess(null), 5000);
+        const timerId = setTimeout(() => setOperationSuccess(null), 5000);
+        successClearTimersRef.current.push(timerId);
       },
     );
 
     return () => {
+      successClearTimersRef.current.forEach((id) => clearTimeout(id));
+      successClearTimersRef.current = [];
       unsubscribeUpdate();
       unsubscribeAssigned();
     };

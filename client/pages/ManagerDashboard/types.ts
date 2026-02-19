@@ -1,5 +1,13 @@
 import type { ManagerDashboard as ManagerDashboardType } from "@shared/api";
 
+/** Team member shape returned by GET /api/team/members (used in tabs and modals). */
+export interface TeamMember {
+  id: string;
+  name: string;
+  email: string;
+  workstations: Array<{ id: string; name: string }>;
+}
+
 export type DashboardTask = ManagerDashboardType["dailyTasks"][number];
 
 export interface TasksByEmployeeGroup {

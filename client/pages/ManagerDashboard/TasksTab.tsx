@@ -5,14 +5,7 @@ import { TasksSummaryCards } from "./TasksSummaryCards";
 import { TasksProgressBar } from "./TasksProgressBar";
 import { TasksDateFilters } from "./TasksDateFilters";
 import { TasksByWorkstationList } from "./TasksByWorkstationList";
-import { buildTasksByWorkstation } from "./types";
-
-interface TeamMember {
-  id: string;
-  name: string;
-  email: string;
-  workstations: Array<{ id: string; name: string }>;
-}
+import { buildTasksByWorkstation, type TeamMember } from "./types";
 
 interface TasksTabProps {
   dashboard: ManagerDashboardType;
