@@ -8,6 +8,7 @@ import { assignDailyTasksForDate } from "../jobs/daily-task-assignment";
 import { logger } from "../lib/logger";
 import { getManagerTeamIds, getManagerTeams } from "../lib/manager-teams";
 import { paramString } from "../lib/params";
+import { sendTaskAssignmentEmail } from "../lib/email";
 import {
   parseDateQueryParam,
   parseManagerDashboardQuery,
@@ -415,7 +416,6 @@ export const handleCreateTaskTemplate: RequestHandler = async (req, res) => {
 
           // Send email notification (optional, using nodemailer if available)
           try {
-            const { sendTaskAssignmentEmail } = await import("../lib/email");
             await sendTaskAssignmentEmail(
               employee.email,
               employee.name,
