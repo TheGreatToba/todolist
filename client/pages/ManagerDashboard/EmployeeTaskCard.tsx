@@ -131,7 +131,6 @@ export function EmployeeTaskCard({
                 <button
                   type="button"
                   disabled={
-                    pendingTaskId === task.id ||
                     (isTaskUpdating && pendingTaskId === task.id) ||
                     !targetEmployeeId ||
                     targetEmployeeId === task.employee.id
