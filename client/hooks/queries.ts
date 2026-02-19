@@ -6,6 +6,7 @@ import {
   useQuery,
   useMutation,
   useQueryClient,
+  type QueryKey,
   type UseQueryOptions,
   type UseMutationOptions,
 } from "@tanstack/react-query";
@@ -200,7 +201,11 @@ export function useUpdateDailyTaskMutation(
   options?: UseMutationOptions<
     DailyTask,
     Error,
-    { taskId: string } & UpdateDailyTaskRequest
+    { taskId: string } & UpdateDailyTaskRequest,
+    {
+      previousDaily: [QueryKey, DailyTask[] | undefined][];
+      previousManager: [QueryKey, ManagerDashboardType | null | undefined][];
+    }
   >,
 ) {
   const queryClient = useQueryClient();

@@ -130,8 +130,11 @@ export function parseManagerDashboardQuery(
       employeeId,
       "employeeId",
     );
-    if (!employeeIdResult.success) {
-      return employeeIdResult;
+    if (employeeIdResult.success === false) {
+      return {
+        success: false as const,
+        error: employeeIdResult.error,
+      };
     }
     validatedEmployeeId = employeeIdResult.value;
   }
@@ -142,8 +145,11 @@ export function parseManagerDashboardQuery(
       workstationId,
       "workstationId",
     );
-    if (!workstationIdResult.success) {
-      return workstationIdResult;
+    if (workstationIdResult.success === false) {
+      return {
+        success: false as const,
+        error: workstationIdResult.error,
+      };
     }
     validatedWorkstationId = workstationIdResult.value;
   }

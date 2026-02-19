@@ -6,7 +6,7 @@
  */
 import React from "react";
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, within } from "@testing-library/react";
+import { render, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { TestMemoryRouter } from "@/test/router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -15,9 +15,11 @@ import Login from "./Login";
 
 const mockNavigate = vi.fn();
 
-vi.mock("react-router-dom", async (importOriginal) => {
+vi.mock("react-router-dom", async () => {
   const actual =
-    await importOriginal<typeof import("react-router-dom")>("react-router-dom");
+    await vi.importActual<typeof import("react-router-dom")>(
+      "react-router-dom",
+    );
   return {
     ...actual,
     useNavigate: () => mockNavigate,
@@ -59,7 +61,7 @@ describe("Login (semi-integrated with MSW)", () => {
     await userEvent.type(view.getByLabelText(/password/i), "password");
     await userEvent.click(view.getByRole("button", { name: /sign in/i }));
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(mockNavigate).toHaveBeenCalledWith("/manager", { replace: true });
     });
   });
@@ -75,7 +77,7 @@ describe("Login (semi-integrated with MSW)", () => {
     await userEvent.click(view.getByRole("button", { name: /sign in/i }));
 
     // Assert on the user-visible error via accessible role (UX + a11y)
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(
         view.getByRole("alert", { name: /invalid credentials/i }),
       ).toBeInTheDocument();

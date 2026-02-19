@@ -99,7 +99,7 @@ describe("parseDateQueryParam", () => {
   it("rejects malformed nested date keys when query object provided", () => {
     const result = parseDateQueryParam(undefined, { "date[foo]": "bar" });
     expect(result.success).toBe(false);
-    if (!result.success) {
+    if (result.success === false) {
       expect(result.error).toBe("Invalid date. Use YYYY-MM-DD.");
     }
   });
@@ -118,7 +118,7 @@ describe("parseDateQueryParam", () => {
       "date[foo]": "bar",
     });
     expect(result.success).toBe(false);
-    if (!result.success) {
+    if (result.success === false) {
       expect(result.error).toBe("Invalid date. Use YYYY-MM-DD.");
     }
   });
@@ -164,7 +164,7 @@ describe("parseManagerDashboardQuery", () => {
       employeeId: "emp-123",
     });
     expect(result.success).toBe(false);
-    if (!result.success) {
+    if (result.success === false) {
       expect(result.error).toBe("Invalid date. Use YYYY-MM-DD.");
     }
   });
@@ -175,7 +175,7 @@ describe("parseManagerDashboardQuery", () => {
       "date[foo]": "bar",
     });
     expect(result.success).toBe(false);
-    if (!result.success) {
+    if (result.success === false) {
       expect(result.error).toContain("YYYY-MM-DD");
     }
     // Behavioral lock: manager path guards date[...] only at entry and calls parseDateQueryParam(date)
@@ -189,7 +189,7 @@ describe("parseManagerDashboardQuery", () => {
       employeeId: ["emp-123", "emp-456"],
     });
     expect(result.success).toBe(false);
-    if (!result.success) {
+    if (result.success === false) {
       expect(result.error).toContain(
         'Repeated query parameters are not allowed for "employeeId"',
       );
@@ -202,7 +202,7 @@ describe("parseManagerDashboardQuery", () => {
       workstationId: ["ws-123", "ws-456"],
     });
     expect(result.success).toBe(false);
-    if (!result.success) {
+    if (result.success === false) {
       expect(result.error).toContain(
         'Repeated query parameters are not allowed for "workstationId"',
       );
@@ -215,7 +215,7 @@ describe("parseManagerDashboardQuery", () => {
       employeeId: "   ",
     });
     expect(result.success).toBe(false);
-    if (!result.success) {
+    if (result.success === false) {
       expect(result.error).toContain("cannot be empty");
     }
   });
@@ -226,7 +226,7 @@ describe("parseManagerDashboardQuery", () => {
       workstationId: "",
     });
     expect(result.success).toBe(false);
-    if (!result.success) {
+    if (result.success === false) {
       expect(result.error).toContain("cannot be empty");
     }
   });
@@ -250,7 +250,7 @@ describe("parseManagerDashboardQuery", () => {
       employeeId: "emp-123",
     });
     expect(result.success).toBe(false);
-    if (!result.success) {
+    if (result.success === false) {
       expect(result.error).toBe("Invalid date. Use YYYY-MM-DD.");
     }
   });
@@ -261,7 +261,7 @@ describe("parseManagerDashboardQuery", () => {
       employeeId: "emp-123",
     });
     expect(result.success).toBe(false);
-    if (!result.success) {
+    if (result.success === false) {
       expect(result.error).toBe("Invalid date. Use YYYY-MM-DD.");
     }
   });
@@ -294,7 +294,7 @@ describe("parseManagerDashboardQuery", () => {
       employeeId: 123 as unknown as string,
     });
     expect(result.success).toBe(false);
-    if (!result.success) {
+    if (result.success === false) {
       expect(result.error).toBe(
         'Invalid query parameter "employeeId". Expected a string.',
       );
@@ -307,7 +307,7 @@ describe("parseManagerDashboardQuery", () => {
       workstationId: { foo: "bar" } as unknown as string,
     });
     expect(result.success).toBe(false);
-    if (!result.success) {
+    if (result.success === false) {
       expect(result.error).toBe(
         'Invalid query parameter "workstationId". Expected a string.',
       );

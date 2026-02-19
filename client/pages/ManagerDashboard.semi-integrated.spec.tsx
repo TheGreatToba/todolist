@@ -6,13 +6,15 @@
  */
 import React from "react";
 import { describe, it, expect, vi } from "vitest";
-import { render, within } from "@testing-library/react";
+import { render, within, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import ManagerDashboard from "./ManagerDashboard";
 
-vi.mock("react-router-dom", async (importOriginal) => {
+vi.mock("react-router-dom", async () => {
   const actual =
-    await importOriginal<typeof import("react-router-dom")>("react-router-dom");
+    await vi.importActual<typeof import("react-router-dom")>(
+      "react-router-dom",
+    );
   return {
     ...actual,
     useNavigate: () => vi.fn(),
@@ -50,7 +52,7 @@ describe("ManagerDashboard (semi-integrated with MSW)", () => {
   it("displays team name from GET /api/manager/dashboard (MSW response)", async () => {
     const { view } = renderDashboardWithProviders();
 
-    await vi.waitFor(() => {
+    await waitFor(() => {
       expect(view.getByText("MSW Team")).toBeInTheDocument();
     });
   });
