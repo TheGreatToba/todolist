@@ -117,7 +117,7 @@ describe("useUpdateDailyTaskMutation", () => {
     });
     await waitFor(() => {
       expect(capturedError).toBeInstanceOf(Error);
-      expect(capturedError?.message).toBeTruthy();
+      expect(capturedError?.message).toContain("Forbidden");
     });
     expect(invalidateSpy).not.toHaveBeenCalled();
   });
@@ -206,7 +206,7 @@ describe("useCreateWorkstationMutation", () => {
     });
     await waitFor(() => {
       expect(capturedError).toBeInstanceOf(Error);
-      expect(capturedError?.message).toBeTruthy();
+      expect(capturedError?.message).toBe("Duplicate name");
     });
     expect(invalidateSpy).not.toHaveBeenCalled();
   });
