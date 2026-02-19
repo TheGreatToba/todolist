@@ -1,8 +1,12 @@
-import React, { useState, useEffect, useCallback } from "react";
-import { fetchWithCsrf } from "@/lib/api";
+import React, { useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSocket } from "@/hooks/useSocket";
-import { DailyTask } from "@shared/api";
+import {
+  useDailyTasksQuery,
+  useUpdateDailyTaskMutation,
+  queryKeys,
+} from "@/hooks/queries";
 import { Check, Loader2, LogOut, X, AlertCircle, Calendar } from "lucide-react";
 import { logger } from "@/lib/logger";
 import { todayLocalISO, isToday, formatTaskDateLabel } from "@/lib/date-utils";
@@ -10,50 +14,28 @@ import { todayLocalISO, isToday, formatTaskDateLabel } from "@/lib/date-utils";
 export default function EmployeeDashboard() {
   const { user, logout } = useAuth();
   const { on } = useSocket();
+  const queryClient = useQueryClient();
   const [selectedDate, setSelectedDate] = useState<string>(() =>
     todayLocalISO(),
   );
-  const [tasks, setTasks] = useState<DailyTask[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [updatingTaskId, setUpdatingTaskId] = useState<string | null>(null);
   const [notification, setNotification] = useState<{
     title: string;
     description?: string;
   } | null>(null);
 
-  const fetchDailyTasks = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      const url = selectedDate
-        ? `/api/tasks/daily?date=${encodeURIComponent(selectedDate)}`
-        : "/api/tasks/daily";
-      const response = await fetch(url, {
-        credentials: "include",
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setTasks(data);
-      }
-    } catch (error) {
-      logger.error("Failed to fetch tasks:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [selectedDate]);
+  const { data: tasks = [], isLoading } = useDailyTasksQuery(selectedDate);
+  const updateTask = useUpdateDailyTaskMutation();
 
   useEffect(() => {
-    fetchDailyTasks();
-  }, [fetchDailyTasks]);
-
-  useEffect(() => {
-    // Listen for real-time task updates (only refetch if viewing today)
     const unsubscribeUpdate = on("task:updated", (data) => {
       logger.debug("Task updated:", data);
-      if (isToday(selectedDate)) fetchDailyTasks();
+      if (isToday(selectedDate)) {
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.tasks.daily(selectedDate),
+        });
+      }
     });
 
-    // Listen for new task assignments
     const unsubscribeAssigned = on("task:assigned", (data) => {
       if (data.employeeId === user?.id) {
         logger.debug("New task assigned:", data);
@@ -62,7 +44,11 @@ export default function EmployeeDashboard() {
           description: data.taskDescription,
         });
         if (isToday(selectedDate)) {
-          setTimeout(() => fetchDailyTasks(), 500);
+          setTimeout(() => {
+            queryClient.invalidateQueries({
+              queryKey: queryKeys.tasks.daily(selectedDate),
+            });
+          }, 500);
         }
         setTimeout(() => setNotification(null), 6000);
       }
@@ -72,27 +58,13 @@ export default function EmployeeDashboard() {
       unsubscribeUpdate();
       unsubscribeAssigned();
     };
-  }, [on, user?.id, selectedDate, fetchDailyTasks]);
+  }, [on, user?.id, selectedDate, queryClient]);
 
   const handleToggleTask = async (taskId: string, isCompleted: boolean) => {
     try {
-      setUpdatingTaskId(taskId);
-      const response = await fetchWithCsrf(`/api/tasks/daily/${taskId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isCompleted: !isCompleted }),
-      });
-
-      if (response.ok) {
-        const updatedTask = await response.json();
-        setTasks((prev) =>
-          prev.map((t) => (t.id === taskId ? updatedTask : t)),
-        );
-      }
+      await updateTask.mutateAsync({ taskId, isCompleted: !isCompleted });
     } catch (error) {
       logger.error("Failed to update task:", error);
-    } finally {
-      setUpdatingTaskId(null);
     }
   };
 
@@ -233,14 +205,18 @@ export default function EmployeeDashboard() {
                 <div className="flex items-start gap-4">
                   <button
                     onClick={() => handleToggleTask(task.id, task.isCompleted)}
-                    disabled={updatingTaskId === task.id}
+                    disabled={
+                      updateTask.isPending &&
+                      updateTask.variables?.taskId === task.id
+                    }
                     className={`flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all mt-1 ${
                       task.isCompleted
                         ? "bg-primary border-primary"
                         : "border-border hover:border-primary bg-background"
                     } disabled:opacity-50`}
                   >
-                    {updatingTaskId === task.id ? (
+                    {updateTask.isPending &&
+                    updateTask.variables?.taskId === task.id ? (
                       <Loader2 className="w-4 h-4 text-primary animate-spin" />
                     ) : task.isCompleted ? (
                       <Check className="w-4 h-4 text-primary-foreground" />

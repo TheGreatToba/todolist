@@ -1,43 +1,28 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { useAuth } from "@/contexts/AuthContext";
+import { useSetPasswordMutation, queryKeys } from "@/hooks/queries";
+import { useQueryClient } from "@tanstack/react-query";
 import { Loader2, Lock } from "lucide-react";
-import { z } from "zod";
-
-const SetPasswordResponseSchema = z.object({
-  success: z.boolean(),
-  user: z.object({
-    id: z.string(),
-    name: z.string(),
-    email: z.string().email(),
-    role: z.enum(["EMPLOYEE", "MANAGER"]),
-    teamId: z.string().nullable().optional(),
-  }),
-});
-
-const ErrorResponseSchema = z.object({
-  error: z.string().optional(),
-});
 
 export default function SetPassword() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const token = searchParams.get("token");
-  const { user } = useAuth();
-
+  const queryClient = useQueryClient();
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [success, setSuccess] = useState(false);
 
-  useEffect(() => {
-    if (user && success) {
-      navigate(user.role === "MANAGER" ? "/manager" : "/employee", {
-        replace: true,
-      });
-    }
-  }, [user, success, navigate]);
+  const setPasswordMutation = useSetPasswordMutation({
+    onSuccess: (data) => {
+      queryClient.setQueryData(queryKeys.auth.profile, { user: data.user });
+      window.location.href =
+        data.user.role === "MANAGER" ? "/manager" : "/employee";
+    },
+    onError: (err) => {
+      setError(err.message ?? "Failed to set password");
+    },
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,40 +43,7 @@ export default function SetPassword() {
       return;
     }
 
-    setIsLoading(true);
-    try {
-      const response = await fetch("/api/auth/set-password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ token, password }),
-      });
-
-      const raw = await response.json();
-
-      if (response.ok) {
-        const data = SetPasswordResponseSchema.parse(raw);
-        setSuccess(true);
-        // AuthContext will get user from /api/auth/profile on next request,
-        // but we need to trigger a refresh. The cookie is set, so we can
-        // call login with a dummy to trigger profile fetch, or we could
-        // add a refresh method. Simpler: just navigate and let the app
-        // re-fetch profile. Actually the set-password response returns user,
-        // but AuthContext doesn't have a way to set user from outside.
-        // We need to either: 1) add setUser to AuthContext, or 2) force
-        // window.location.href to /employee to trigger full reload and
-        // profile fetch. Option 2 is simpler for now.
-        window.location.href =
-          data.user.role === "MANAGER" ? "/manager" : "/employee";
-      } else {
-        const data = ErrorResponseSchema.parse(raw);
-        setError(data.error ?? "Failed to set password");
-      }
-    } catch {
-      setError("An error occurred. Please try again.");
-    } finally {
-      setIsLoading(false);
-    }
+    setPasswordMutation.mutate({ token, password });
   };
 
   if (!token) {
@@ -185,10 +137,10 @@ export default function SetPassword() {
 
           <button
             type="submit"
-            disabled={isLoading}
+            disabled={setPasswordMutation.isPending}
             className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold py-3 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
-            {isLoading ? (
+            {setPasswordMutation.isPending ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
                 Setting password...

@@ -5,6 +5,9 @@ import type { Server as HttpServer } from "http";
 
 // https://vitejs.dev/config/
 export default defineConfig(() => ({
+  test: {
+    environment: "jsdom",
+  },
   server: {
     host: "::",
     port: 8080,

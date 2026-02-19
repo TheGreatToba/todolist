@@ -2,15 +2,12 @@ import React, {
   createContext,
   useContext,
   useState,
-  useEffect,
+  useCallback,
   ReactNode,
 } from "react";
-import {
-  User,
-  LoginResponse,
-  SignupResponse,
-  ProfileResponse,
-} from "@shared/api";
+import type { User } from "@shared/api";
+import { useProfileQuery, queryKeys } from "@/hooks/queries";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchWithCsrf } from "@/lib/api";
 
 interface AuthContextType {
@@ -21,106 +18,120 @@ interface AuthContextType {
   logout: () => void;
   isLoading: boolean;
   error: string | null;
+  /** Set when profile fetch fails (network/backend), distinct from "not authenticated". */
+  profileError: Error | null;
+  refetchProfile: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
-  const fetchProfile = async () => {
-    try {
-      const response = await fetch("/api/auth/profile", {
-        credentials: "include",
-      });
+  const {
+    data: profile,
+    isLoading: profileLoading,
+    isError: profileIsError,
+    error: profileError,
+  } = useProfileQuery();
 
-      if (response.ok) {
-        const { user: userData }: ProfileResponse = await response.json();
-        setUser(userData);
-        setIsAuthenticated(true);
-      } else {
-        setUser(null);
-        setIsAuthenticated(false);
-      }
-    } catch {
-      setUser(null);
-      setIsAuthenticated(false);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const user = profile?.user ?? null;
+  const isAuthenticated = !!user;
 
-  useEffect(() => {
-    fetchProfile();
-  }, []);
-
-  const login = async (email: string, password: string) => {
-    setIsLoading(true);
-    setError(null);
-    try {
+  const loginMutation = useMutation({
+    mutationFn: async (body: { email: string; password: string }) => {
       const response = await fetchWithCsrf("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify(body),
       });
-
       if (!response.ok) {
         const data = await response.json();
         throw new Error(data.error || "Login failed");
       }
+      return response.json() as Promise<{ user: User }>;
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(queryKeys.auth.profile, data);
+      setError(null);
+    },
+    onError: (err) => {
+      setError(err instanceof Error ? err.message : "An error occurred");
+    },
+  });
 
-      const { user: userData }: LoginResponse = await response.json();
-      setIsAuthenticated(true);
-      setUser(userData);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "An error occurred";
-      setError(message);
-      throw err;
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const signup = async (name: string, email: string, password: string) => {
-    setIsLoading(true);
-    setError(null);
-    try {
+  const signupMutation = useMutation({
+    mutationFn: async (body: {
+      name: string;
+      email: string;
+      password: string;
+    }) => {
       const response = await fetchWithCsrf("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password, role: "MANAGER" }),
+        body: JSON.stringify({
+          ...body,
+          role: "MANAGER",
+        }),
       });
-
       if (!response.ok) {
         const data = await response.json();
         throw new Error(data.error || "Signup failed");
       }
+      return response.json() as Promise<{ user: User }>;
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(queryKeys.auth.profile, data);
+      setError(null);
+    },
+    onError: (err) => {
+      setError(err instanceof Error ? err.message : "An error occurred");
+    },
+  });
 
-      const { user: userData }: SignupResponse = await response.json();
-      setIsAuthenticated(true);
-      setUser(userData);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "An error occurred";
-      setError(message);
-      throw err;
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const login = useCallback(
+    async (email: string, password: string) => {
+      setError(null);
+      await loginMutation.mutateAsync({ email, password });
+    },
+    [loginMutation],
+  );
 
-  const logout = () => {
-    setIsAuthenticated(false);
-    setUser(null);
+  const signup = useCallback(
+    async (name: string, email: string, password: string) => {
+      setError(null);
+      await signupMutation.mutateAsync({ name, email, password });
+    },
+    [signupMutation],
+  );
+
+  const refetchProfile = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: queryKeys.auth.profile });
+  }, [queryClient]);
+
+  const logout = useCallback(() => {
     setError(null);
+    queryClient.setQueryData(queryKeys.auth.profile, { user: null });
     fetchWithCsrf("/api/auth/logout", { method: "POST" }).catch(() => {});
-  };
+  }, [queryClient]);
+
+  const isLoading =
+    profileLoading || loginMutation.isPending || signupMutation.isPending;
 
   return (
     <AuthContext.Provider
-      value={{ user, isAuthenticated, login, signup, logout, isLoading, error }}
+      value={{
+        user,
+        isAuthenticated,
+        login,
+        signup,
+        logout,
+        isLoading,
+        error,
+        profileError: profileIsError ? (profileError ?? null) : null,
+        refetchProfile,
+      }}
     >
       {children}
     </AuthContext.Provider>

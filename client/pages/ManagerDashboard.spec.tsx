@@ -1,11 +1,8 @@
 import React from "react";
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import {
-  render,
-  screen,
-  waitForElementToBeRemoved,
-} from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 vi.mock("react-router-dom", async () => {
   const actual =
@@ -41,6 +38,15 @@ const mockDashboardResponse = {
 
 const mockWorkstationsResponse: unknown[] = [];
 const mockTeamMembersResponse: unknown[] = [];
+
+function renderWithProviders(ui: React.ReactElement) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>,
+  );
+}
 
 describe("ManagerDashboard Settings modal", () => {
   beforeEach(() => {
@@ -86,7 +92,7 @@ describe("ManagerDashboard Settings modal", () => {
   });
 
   it("opens and closes the Settings modal and displays the team name", async () => {
-    render(<ManagerDashboard />);
+    renderWithProviders(<ManagerDashboard />);
 
     const settingsButton = await screen.findByRole("button", {
       name: /open team settings/i,
@@ -97,15 +103,13 @@ describe("ManagerDashboard Settings modal", () => {
       name: /team settings/i,
     });
     expect(dialog).not.toBeNull();
-    expect(screen.getByText("Test Team")).toBeTruthy();
+    expect(within(dialog).getByText("Test Team")).toBeTruthy();
 
     const closeButton = await screen.findByRole("button", {
       name: /close settings modal/i,
     });
     await userEvent.click(closeButton);
 
-    await waitForElementToBeRemoved(() =>
-      screen.queryByRole("dialog", { name: /team settings/i }),
-    );
+    expect(screen.queryByRole("dialog", { name: /team settings/i })).toBeNull();
   });
 });

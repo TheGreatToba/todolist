@@ -1,8 +1,19 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
-import { fetchWithCsrf } from "@/lib/api";
 import { useSocket } from "@/hooks/useSocket";
+import {
+  useManagerDashboardQuery,
+  useWorkstationsQuery,
+  useTeamMembersQuery,
+  useCreateWorkstationMutation,
+  useDeleteWorkstationMutation,
+  useCreateEmployeeMutation,
+  useUpdateEmployeeWorkstationsMutation,
+  useCreateTaskTemplateMutation,
+  queryKeys,
+} from "@/hooks/queries";
 import { ManagerDashboard as ManagerDashboardType } from "@shared/api";
 import {
   Loader2,
@@ -17,29 +28,7 @@ import {
   Calendar,
   Download,
 } from "lucide-react";
-import { logger } from "@/lib/logger";
 import { todayLocalISO } from "@/lib/date-utils";
-
-interface TeamMember {
-  id: string;
-  name: string;
-  email: string;
-  workstations: Array<{ id: string; name: string }>;
-}
-
-interface WorkstationEmployeeSummary {
-  employee: {
-    id: string;
-    name: string;
-    email: string;
-  };
-}
-
-interface WorkstationWithEmployees {
-  id: string;
-  name: string;
-  employees?: WorkstationEmployeeSummary[];
-}
 
 type DashboardTask = ManagerDashboardType["dailyTasks"][number];
 
@@ -59,15 +48,9 @@ type TasksByWorkstationMap = Record<
 
 export default function ManagerDashboard() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { logout } = useAuth();
   const { on } = useSocket();
-  const [dashboard, setDashboard] = useState<ManagerDashboardType | null>(null);
-
-  const handleLogout = () => {
-    logout();
-    navigate("/", { replace: true });
-  };
-  const [isLoading, setIsLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState<string>(() =>
     todayLocalISO(),
   );
@@ -80,10 +63,6 @@ export default function ManagerDashboard() {
   const [activeTab, setActiveTab] = useState<
     "tasks" | "workstations" | "employees"
   >("tasks");
-  const [workstations, setWorkstations] = useState<WorkstationWithEmployees[]>(
-    [],
-  );
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [editingEmployee, setEditingEmployee] = useState<string | null>(null);
   const [editingWorkstations, setEditingWorkstations] = useState<string[]>([]);
 
@@ -104,47 +83,91 @@ export default function ManagerDashboard() {
   const [operationError, setOperationError] = useState<string | null>(null);
   const [operationSuccess, setOperationSuccess] = useState<string | null>(null);
 
-  const fetchDashboard = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      const params = new URLSearchParams();
-      if (selectedDate) params.set("date", selectedDate);
-      if (selectedEmployee) params.set("employeeId", selectedEmployee);
-      if (selectedWorkstation) params.set("workstationId", selectedWorkstation);
-      const url = `/api/manager/dashboard${params.toString() ? `?${params.toString()}` : ""}`;
-      const response = await fetch(url, {
-        credentials: "include",
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setDashboard(data);
-      }
-    } catch (error) {
-      logger.error("Failed to fetch dashboard:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [selectedDate, selectedEmployee, selectedWorkstation]);
-
-  const fetchDashboardRef = useRef(fetchDashboard);
   const settingsModalRef = useRef<HTMLDivElement | null>(null);
   const lastFocusedElementRef = useRef<HTMLElement | null>(null);
   const previousBodyOverflowRef = useRef<string | null>(null);
-  fetchDashboardRef.current = fetchDashboard;
 
-  useEffect(() => {
-    fetchWorkstations();
-    fetchTeamMembers();
-  }, []);
+  const { data: dashboard, isLoading } = useManagerDashboardQuery({
+    date: selectedDate,
+    employeeId: selectedEmployee,
+    workstationId: selectedWorkstation,
+  });
+  const { data: workstations = [] } = useWorkstationsQuery();
+  const { data: teamMembers = [] } = useTeamMembersQuery();
 
-  useEffect(() => {
-    fetchDashboard();
-  }, [fetchDashboard]);
+  const createWorkstation = useCreateWorkstationMutation({
+    onSuccess: () => {
+      setNewWorkstation("");
+      setOperationSuccess("Workstation created successfully!");
+      setOperationError(null);
+    },
+    onError: (err) => {
+      setOperationError(err.message);
+      setOperationSuccess(null);
+    },
+  });
+  const deleteWorkstation = useDeleteWorkstationMutation({
+    onSuccess: () => {
+      setOperationSuccess("Workstation deleted successfully!");
+      setOperationError(null);
+    },
+    onError: (err) => {
+      setOperationError(err.message);
+      setOperationSuccess(null);
+    },
+  });
+  const createEmployee = useCreateEmployeeMutation({
+    onSuccess: (data) => {
+      setNewEmployee({ name: "", email: "", workstationIds: [] });
+      setOperationSuccess(
+        `Employee created successfully!${data.emailSent ? " Email sent." : " (Email delivery skipped)"}`,
+      );
+      setOperationError(null);
+    },
+    onError: (err) => {
+      setOperationError(err.message);
+      setOperationSuccess(null);
+    },
+  });
+  const updateEmployeeWorkstations = useUpdateEmployeeWorkstationsMutation({
+    onSuccess: () => {
+      setEditingEmployee(null);
+      setEditingWorkstations([]);
+      setOperationSuccess("Employee workstations updated successfully!");
+      setOperationError(null);
+    },
+    onError: (err) => {
+      setOperationError(err.message);
+      setOperationSuccess(null);
+    },
+  });
+  const createTaskTemplate = useCreateTaskTemplateMutation({
+    onSuccess: () => {
+      setNewTask({
+        title: "",
+        description: "",
+        workstationId: "",
+        assignedToEmployeeId: "",
+        assignmentType: "workstation",
+        notifyEmployee: true,
+      });
+      setShowNewTaskModal(false);
+    },
+    onError: (err) => {
+      alert(err.message || "Failed to create task");
+    },
+  });
+
+  const handleLogout = () => {
+    logout();
+    navigate("/", { replace: true });
+  };
 
   useEffect(() => {
     const unsubscribeUpdate = on("task:updated", () => {
-      fetchDashboardRef.current?.();
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.manager.dashboardPrefix,
+      });
     });
 
     const unsubscribeAssigned = on("task:assigned", (data) => {
@@ -158,99 +181,28 @@ export default function ManagerDashboard() {
       unsubscribeUpdate();
       unsubscribeAssigned();
     };
-  }, [on]);
-
-  const fetchWorkstations = async () => {
-    try {
-      const response = await fetch("/api/workstations", {
-        credentials: "include",
-      });
-
-      if (response.ok) {
-        const data: WorkstationWithEmployees[] = await response.json();
-        setWorkstations(data);
-      }
-    } catch (error) {
-      logger.error("Failed to fetch workstations:", error);
-    }
-  };
-
-  const fetchTeamMembers = async () => {
-    try {
-      const response = await fetch("/api/team/members", {
-        credentials: "include",
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setTeamMembers(data);
-      }
-    } catch (error) {
-      logger.error("Failed to fetch team members:", error);
-    }
-  };
+  }, [on, queryClient]);
 
   const handleCreateWorkstation = async (e: React.FormEvent) => {
     e.preventDefault();
     setOperationError(null);
     setOperationSuccess(null);
-
     if (!newWorkstation.trim()) {
       setOperationError("Please enter a workstation name");
       return;
     }
-
-    try {
-      const response = await fetchWithCsrf("/api/workstations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newWorkstation }),
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        setNewWorkstation("");
-        setOperationSuccess("Workstation created successfully!");
-        await fetchWorkstations();
-      } else {
-        setOperationError(data.error || "Failed to create workstation");
-      }
-    } catch (error) {
-      setOperationError("An error occurred");
-      logger.error("Failed to create workstation:", error);
-    }
+    createWorkstation.mutate({ name: newWorkstation.trim() });
   };
 
   const handleDeleteWorkstation = async (workstationId: string) => {
     if (!confirm("Are you sure you want to delete this workstation?")) return;
-
-    try {
-      const response = await fetchWithCsrf(
-        `/api/workstations/${workstationId}`,
-        {
-          method: "DELETE",
-        },
-      );
-
-      if (response.ok) {
-        setOperationSuccess("Workstation deleted successfully!");
-        await fetchWorkstations();
-      } else {
-        const data = await response.json();
-        setOperationError(data.error || "Failed to delete workstation");
-      }
-    } catch (error) {
-      setOperationError("An error occurred");
-      logger.error("Failed to delete workstation:", error);
-    }
+    deleteWorkstation.mutate(workstationId);
   };
 
   const handleCreateEmployee = async (e: React.FormEvent) => {
     e.preventDefault();
     setOperationError(null);
     setOperationSuccess(null);
-
     if (
       !newEmployee.name ||
       !newEmployee.email ||
@@ -261,29 +213,7 @@ export default function ManagerDashboard() {
       );
       return;
     }
-
-    try {
-      const response = await fetchWithCsrf("/api/employees", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newEmployee),
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        setNewEmployee({ name: "", email: "", workstationIds: [] });
-        setOperationSuccess(
-          `Employee created successfully!${data.emailSent ? " Email sent." : " (Email delivery skipped)"}`,
-        );
-        await fetchTeamMembers();
-      } else {
-        setOperationError(data.error || "Failed to create employee");
-      }
-    } catch (error) {
-      setOperationError("An error occurred");
-      logger.error("Failed to create employee:", error);
-    }
+    createEmployee.mutate(newEmployee);
   };
 
   const handleUpdateEmployeeWorkstations = async (employeeId: string) => {
@@ -291,46 +221,22 @@ export default function ManagerDashboard() {
       setOperationError("Please select at least one workstation");
       return;
     }
-
-    try {
-      const response = await fetchWithCsrf(
-        `/api/employees/${employeeId}/workstations`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ workstationIds: editingWorkstations }),
-        },
-      );
-
-      const data = await response.json();
-
-      if (response.ok) {
-        setEditingEmployee(null);
-        setEditingWorkstations([]);
-        setOperationSuccess("Employee workstations updated successfully!");
-        await fetchTeamMembers();
-      } else {
-        setOperationError(data.error || "Failed to update employee");
-      }
-    } catch (error) {
-      setOperationError("An error occurred");
-      logger.error("Failed to update employee:", error);
-    }
+    updateEmployeeWorkstations.mutate({
+      employeeId,
+      workstationIds: editingWorkstations,
+    });
   };
 
   const handleCreateTask = async (e: React.FormEvent) => {
     e.preventDefault();
-
     if (!newTask.title) {
       alert("Please fill in the task title");
       return;
     }
-
     if (newTask.assignmentType === "workstation" && !newTask.workstationId) {
       alert("Please select a workstation");
       return;
     }
-
     if (
       newTask.assignmentType === "employee" &&
       !newTask.assignedToEmployeeId
@@ -338,45 +244,14 @@ export default function ManagerDashboard() {
       alert("Please select an employee");
       return;
     }
-
-    try {
-      const payload = {
-        title: newTask.title,
-        description: newTask.description,
-        notifyEmployee: newTask.notifyEmployee,
-        ...(newTask.assignmentType === "workstation" && {
-          workstationId: newTask.workstationId,
-        }),
-        ...(newTask.assignmentType === "employee" && {
-          assignedToEmployeeId: newTask.assignedToEmployeeId,
-        }),
-      };
-
-      const response = await fetchWithCsrf("/api/tasks/templates", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      if (response.ok) {
-        setNewTask({
-          title: "",
-          description: "",
-          workstationId: "",
-          assignedToEmployeeId: "",
-          assignmentType: "workstation",
-          notifyEmployee: true,
-        });
-        setShowNewTaskModal(false);
-        await fetchDashboard();
-      } else {
-        const data = await response.json();
-        alert(data.error || "Failed to create task");
-      }
-    } catch (error) {
-      logger.error("Failed to create task:", error);
-      alert("An error occurred while creating the task");
-    }
+    createTaskTemplate.mutate({
+      title: newTask.title,
+      description: newTask.description,
+      workstationId: newTask.workstationId,
+      assignedToEmployeeId: newTask.assignedToEmployeeId,
+      assignmentType: newTask.assignmentType,
+      notifyEmployee: newTask.notifyEmployee,
+    });
   };
 
   useEffect(() => {
