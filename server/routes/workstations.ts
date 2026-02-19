@@ -8,6 +8,7 @@ import { logger } from "../lib/logger";
 import { getAuthOrThrow } from "../middleware/requireAuth";
 import { sendSetPasswordEmail } from "../lib/email";
 import { getSetPasswordTokenExpiryHours } from "../lib/set-password-expiry";
+import { getFrontendBaseUrl } from "../lib/app-url";
 import {
   getManagerTeamIds,
   getManagerFirstTeam,
@@ -267,8 +268,7 @@ export const handleCreateEmployee: RequestHandler = async (req, res) => {
     });
 
     // Send email with set-password link (no password in email)
-    const baseUrl = process.env.APP_URL || "http://localhost:8080";
-    const setPasswordLink = `${baseUrl.replace(/\/$/, "")}/set-password?token=${encodeURIComponent(setPasswordToken)}`;
+    const setPasswordLink = `${getFrontendBaseUrl()}/set-password?token=${encodeURIComponent(setPasswordToken)}`;
     const workstationNames = workstations.map((ws) => ws.name);
     const emailResult = await sendSetPasswordEmail(
       body.email,

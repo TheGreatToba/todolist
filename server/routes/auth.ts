@@ -19,6 +19,7 @@ import { getAuthOrThrow } from "../middleware/requireAuth";
 import { logger } from "../lib/logger";
 import { sendPasswordResetEmail } from "../lib/email";
 import { getPasswordResetTokenExpiryHours } from "../lib/password-reset-expiry";
+import { getFrontendBaseUrl } from "../lib/app-url";
 
 /**
  * Structured log when role from DB is invalid (do not emit JWT).
@@ -435,8 +436,7 @@ export const handleForgotPassword: RequestHandler = async (req, res) => {
     });
 
     // Build reset link
-    const baseUrl = process.env.FRONTEND_URL || "http://localhost:8080";
-    const resetLink = `${baseUrl.replace(/\/$/, "")}/reset-password?token=${encodeURIComponent(resetToken)}`;
+    const resetLink = `${getFrontendBaseUrl()}/reset-password?token=${encodeURIComponent(resetToken)}`;
 
     // Send email asynchronously (don't await) to prevent timing attacks
     // This ensures both code paths (user exists / doesn't exist) take similar time
