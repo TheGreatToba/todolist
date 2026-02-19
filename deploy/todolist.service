@@ -1,0 +1,15 @@
+[Unit]
+Description=Todolist SaaS (Node/Express)
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/todolist
+EnvironmentFile=/home/ubuntu/todolist/.env
+ExecStart=/usr/bin/node /home/ubuntu/todolist/dist/server/node-build.mjs
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
