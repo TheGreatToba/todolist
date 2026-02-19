@@ -97,9 +97,11 @@ export function verifyToken(token: string): JwtPayload | null {
   }
 }
 
-/** __Host- prefix in prod: requires Secure, no Domain, Path=/ (limits cookie scope) */
+/** __Host- prefix in prod with HTTPS only; with HTTP (COOKIE_SECURE=false) use "token" */
 export const AUTH_COOKIE_NAME =
-  process.env.NODE_ENV === "production" ? "__Host-token" : "token";
+  process.env.NODE_ENV === "production" && process.env.COOKIE_SECURE !== "false"
+    ? "__Host-token"
+    : "token";
 
 const COOKIE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
@@ -113,7 +115,9 @@ export function getAuthCookieOptions(): {
 } {
   return {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure:
+      process.env.NODE_ENV === "production" &&
+      process.env.COOKIE_SECURE !== "false",
     sameSite: "lax",
     maxAge: COOKIE_MAX_AGE_MS,
     path: "/",

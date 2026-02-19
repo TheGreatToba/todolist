@@ -50,10 +50,13 @@ export function setCsrfCookieIfMissing(
   const existing = getCsrfTokenFromCookie(req);
   if (!existing) {
     const token = generateCsrfToken();
-    const isProd = process.env.NODE_ENV === "production";
+    // In prod with HTTP-only (no HTTPS), set COOKIE_SECURE=false so browser sends cookie
+    const secure =
+      process.env.NODE_ENV === "production" &&
+      process.env.COOKIE_SECURE !== "false";
     res.cookie(CSRF_COOKIE_NAME, token, {
       httpOnly: false, // Must be readable by JS for double-submit
-      secure: isProd,
+      secure,
       sameSite: "lax",
       maxAge: CSRF_COOKIE_MAX_AGE_MS,
       path: "/",

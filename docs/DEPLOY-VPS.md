@@ -28,8 +28,9 @@ nano .env
 - **JWT_SECRET** : une clé secrète forte et unique (générer avec `openssl rand -base64 32`)
 - **NODE_ENV** : `production`
 - **PORT** : ex. `8080` (ou laisser 3000)
+- **COOKIE_SECURE** : `false` si tu accèdes au site en **HTTP** (ex. `http://IP:3000`) — sinon le login échoue avec « Invalid CSRF token ». Mets `true` ou oublie la variable quand tu passes en HTTPS (nginx).
 - **TRUST_PROXY** : `true` si tu mets nginx devant
-- **ALLOWED_ORIGINS** : ton domaine, ex. `https://ton-domaine.com`
+- **ALLOWED_ORIGINS** : ton domaine ou `http://IP_DU_VPS:3000`, ex. `https://ton-domaine.com`
 - **CRON_SECRET** : (optionnel) pour l’endpoint `/api/cron/daily-tasks`
 - **SMTP\_\*** : (optionnel) pour les emails (set password, reset password, etc.)
 
