@@ -227,11 +227,107 @@ export function useUpdateDailyTaskMutation(
       return res.json() as Promise<DailyTask>;
     },
     ...options,
+    onMutate: async (variables) => {
+      await Promise.all([
+        queryClient.cancelQueries({ queryKey: queryKeys.tasks.dailyPrefix }),
+        queryClient.cancelQueries({
+          queryKey: queryKeys.manager.dashboardPrefix,
+        }),
+      ]);
+
+      const previousDaily = queryClient.getQueriesData<DailyTask[]>({
+        queryKey: queryKeys.tasks.dailyPrefix,
+      });
+      const previousManager =
+        queryClient.getQueriesData<ManagerDashboardType | null>({
+          queryKey: queryKeys.manager.dashboardPrefix,
+        });
+
+      for (const [key, data] of previousDaily) {
+        if (!Array.isArray(data)) continue;
+        queryClient.setQueryData(
+          key,
+          data.map((task) => applyOptimisticTaskUpdate(task, variables, data)),
+        );
+      }
+
+      for (const [key, data] of previousManager) {
+        if (!data) continue;
+        queryClient.setQueryData(key, {
+          ...data,
+          dailyTasks: data.dailyTasks.map((task) =>
+            applyOptimisticTaskUpdate(task, variables, data.dailyTasks),
+          ),
+        });
+      }
+
+      return { previousDaily, previousManager };
+    },
+    onError: (error, variables, ctx) => {
+      if (ctx?.previousDaily) {
+        for (const [key, data] of ctx.previousDaily) {
+          queryClient.setQueryData(key, data);
+        }
+      }
+      if (ctx?.previousManager) {
+        for (const [key, data] of ctx.previousManager) {
+          queryClient.setQueryData(key, data);
+        }
+      }
+      options?.onError?.(error, variables, ctx);
+    },
     onSuccess: (data, variables, ctx) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.tasks.dailyPrefix });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.manager.dashboardPrefix,
+      });
       options?.onSuccess?.(data, variables, ctx);
     },
   });
+}
+
+function applyOptimisticTaskUpdate<
+  T extends DailyTask | ManagerDashboardType["dailyTasks"][number],
+>(
+  task: T,
+  variables: { taskId: string; isCompleted?: boolean; employeeId?: string },
+  tasks: T[],
+): T {
+  if (task.id !== variables.taskId) return task;
+
+  const next = {
+    ...task,
+  } as T;
+
+  if (variables.isCompleted !== undefined) {
+    next.isCompleted = variables.isCompleted;
+    next.completedAt = variables.isCompleted
+      ? new Date().toISOString()
+      : undefined;
+  }
+
+  if (variables.employeeId !== undefined) {
+    const prevEmployeeId =
+      "employee" in task ? task.employee.id : task.employeeId;
+    if ("employee" in next) {
+      const targetEmployee = tasks.find(
+        (candidate) =>
+          "employee" in candidate &&
+          candidate.employee.id === variables.employeeId,
+      );
+      if (targetEmployee && "employee" in targetEmployee) {
+        next.employee = targetEmployee.employee;
+      }
+    } else {
+      next.employeeId = variables.employeeId;
+    }
+    if (prevEmployeeId !== variables.employeeId && task.isCompleted) {
+      next.isCompleted = false;
+      next.completedAt = undefined;
+    }
+  }
+
+  return next;
 }
 
 export function useUpdateProfileMutation(
