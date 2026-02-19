@@ -202,13 +202,43 @@ describe("ManagerDashboard Settings modal", () => {
     const dialog = await screen.findByRole("dialog", {
       name: /team settings/i,
     });
-    dialog.focus();
-    expect(document.activeElement).toBe(dialog);
-
-    await userEvent.tab({ shift: true });
-    const closeButton = within(dialog).getByRole("button", {
+    const firstFocusable = within(dialog).getByRole("button", {
       name: /close settings modal/i,
     });
-    expect(document.activeElement).toBe(closeButton);
+    const lastFocusable = within(dialog).getByRole("button", {
+      name: /^Close$/,
+    });
+
+    firstFocusable.focus();
+    expect(document.activeElement).toBe(firstFocusable);
+
+    await userEvent.tab({ shift: true });
+    expect(document.activeElement).toBe(lastFocusable);
+  });
+
+  it("allows focus to stay in portaled content with data-focus-trap-allow", async () => {
+    renderWithProviders(<ManagerDashboard />);
+
+    const settingsButton = (
+      await screen.findAllByRole("button", { name: /open team settings/i })
+    )[0];
+    await userEvent.click(settingsButton);
+
+    await screen.findByRole("dialog", { name: /team settings/i });
+
+    const portalRoot = document.createElement("div");
+    portalRoot.setAttribute("data-focus-trap-allow", "");
+    const portalButton = document.createElement("button");
+    portalButton.type = "button";
+    portalButton.textContent = "Portal action";
+    portalRoot.appendChild(portalButton);
+    document.body.appendChild(portalRoot);
+
+    try {
+      portalButton.focus();
+      expect(document.activeElement).toBe(portalButton);
+    } finally {
+      portalRoot.remove();
+    }
   });
 });
