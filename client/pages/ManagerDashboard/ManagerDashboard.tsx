@@ -1,10 +1,11 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   useManagerDashboardQuery,
   useWorkstationsQuery,
   useTeamMembersQuery,
+  useTaskTemplatesQuery,
 } from "@/hooks/queries";
 import { Loader2, LogOut } from "lucide-react";
 import { toastError, toastInfo } from "@/lib/toast";
@@ -15,8 +16,11 @@ import { ManagerDashboardHeader } from "./ManagerDashboardHeader";
 import { TasksTab } from "./TasksTab";
 import { WorkstationsTab } from "./WorkstationsTab";
 import { EmployeesTab } from "./EmployeesTab";
+import { TemplatesTab } from "./TemplatesTab";
 import { NewTaskModal } from "./NewTaskModal";
+import { EditTaskTemplateModal } from "./EditTaskTemplateModal";
 import { SettingsModal } from "./SettingsModal";
+import type { EditTaskTemplateFormState } from "./EditTaskTemplateModal";
 
 export default function ManagerDashboard() {
   const navigate = useNavigate();
@@ -35,6 +39,10 @@ export default function ManagerDashboard() {
   });
   const { data: workstations = [] } = useWorkstationsQuery();
   const { data: teamMembers = [] } = useTeamMembersQuery();
+  const { data: templates = [] } = useTaskTemplatesQuery();
+
+  const [editTemplateForm, setEditTemplateForm] =
+    useState<EditTaskTemplateFormState | null>(null);
 
   const handleLogout = () => {
     logout();
@@ -112,6 +120,88 @@ export default function ManagerDashboard() {
       notifyEmployee: mutations.newTask.notifyEmployee,
     });
   };
+
+  const handleEditTemplate = (
+    template: import("@shared/api").TaskTemplateWithRelations,
+  ) => {
+    setEditTemplateForm({
+      title: template.title,
+      description: template.description || "",
+      workstationId: template.workstationId || "",
+      assignedToEmployeeId: template.assignedToEmployeeId || "",
+      assignmentType: template.workstationId ? "workstation" : "employee",
+      isRecurring: template.isRecurring,
+      notifyEmployee: template.notifyEmployee,
+    });
+    modals.setEditingTemplate(template);
+    modals.setShowEditTemplateModal(true);
+  };
+
+  const handleUpdateTemplate = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!modals.editingTemplate || !editTemplateForm) return;
+    if (!editTemplateForm.title) {
+      toastError("Please fill in the task title");
+      return;
+    }
+    if (
+      editTemplateForm.assignmentType === "workstation" &&
+      !editTemplateForm.workstationId
+    ) {
+      toastError("Please select a workstation");
+      return;
+    }
+    if (
+      editTemplateForm.assignmentType === "employee" &&
+      !editTemplateForm.assignedToEmployeeId
+    ) {
+      toastError("Please select an employee");
+      return;
+    }
+
+    const updateData: import("@shared/api").UpdateTaskTemplateRequest = {
+      title: editTemplateForm.title,
+      description:
+        editTemplateForm.description === ""
+          ? null
+          : editTemplateForm.description || undefined,
+      workstationId:
+        editTemplateForm.assignmentType === "workstation"
+          ? editTemplateForm.workstationId || null
+          : null,
+      assignedToEmployeeId:
+        editTemplateForm.assignmentType === "employee"
+          ? editTemplateForm.assignedToEmployeeId || null
+          : null,
+      isRecurring: editTemplateForm.isRecurring,
+      notifyEmployee: editTemplateForm.notifyEmployee,
+    };
+
+    mutations.updateTaskTemplate.mutate(
+      {
+        templateId: modals.editingTemplate.id,
+        data: updateData,
+      },
+      {
+        onSuccess: () => {
+          modals.setShowEditTemplateModal(false);
+          modals.setEditingTemplate(null);
+          setEditTemplateForm(null);
+        },
+      },
+    );
+  };
+
+  const handleDeleteTemplate = (templateId: string) => {
+    mutations.deleteTaskTemplate.mutate(templateId);
+  };
+
+  // Reset edit form when modal closes
+  useEffect(() => {
+    if (!modals.showEditTemplateModal) {
+      setEditTemplateForm(null);
+    }
+  }, [modals.showEditTemplateModal]);
 
   const handleExportCsv = () => {
     if (!dashboard) return;
@@ -233,6 +323,14 @@ export default function ManagerDashboard() {
             onSaveWorkstations={handleUpdateEmployeeWorkstations}
           />
         )}
+
+        {filters.activeTab === "templates" && (
+          <TemplatesTab
+            templates={templates}
+            onEdit={handleEditTemplate}
+            onDelete={handleDeleteTemplate}
+          />
+        )}
       </div>
 
       <NewTaskModal
@@ -244,6 +342,32 @@ export default function ManagerDashboard() {
         workstations={dashboard.workstations}
         teamMembers={teamMembers}
         isSubmitting={mutations.createTaskTemplate.isPending}
+      />
+
+      <EditTaskTemplateModal
+        isOpen={modals.showEditTemplateModal}
+        onClose={() => {
+          modals.setShowEditTemplateModal(false);
+          modals.setEditingTemplate(null);
+          setEditTemplateForm(null);
+        }}
+        template={modals.editingTemplate}
+        form={
+          editTemplateForm || {
+            title: "",
+            description: "",
+            workstationId: "",
+            assignedToEmployeeId: "",
+            assignmentType: "workstation",
+            isRecurring: true,
+            notifyEmployee: true,
+          }
+        }
+        onFormChange={setEditTemplateForm}
+        onSubmit={handleUpdateTemplate}
+        workstations={dashboard.workstations}
+        teamMembers={teamMembers}
+        isSubmitting={mutations.updateTaskTemplate.isPending}
       />
 
       <SettingsModal

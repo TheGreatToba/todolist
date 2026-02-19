@@ -6,10 +6,12 @@ import type { Server as HttpServer } from "http";
 // https://vitejs.dev/config/
 export default defineConfig(() => ({
   test: {
+    pool: "forks",
     environment: "jsdom",
     setupFiles: ["./client/vitest-setup.ts"],
     include: ["client/**/*.spec.{ts,tsx}", "server/**/*.spec.ts"],
-    pool: "forks",
+    // Server tests run via test:server (VITEST_SERVER=1) so MSW is off; they execute in same env
+    // but against real app. For explicit node env for server, use a separate Vitest config if needed.
   },
   server: {
     host: "::",

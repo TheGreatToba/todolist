@@ -7,6 +7,7 @@ import { ensureCsrfConfig } from "./csrf";
 import { getSetPasswordTokenExpiryHours } from "./set-password-expiry";
 import request from "supertest";
 import { createApp } from "../index";
+import { getCspScriptSrc } from "./csp";
 
 describe("getAuthCookieOptions / getAuthCookieClearOptions", () => {
   it("clearCookie options mirror setCookie options (path, httpOnly, secure, sameSite)", () => {
@@ -211,6 +212,33 @@ describe("Request ID (observability)", () => {
   });
 });
 
+describe("getCspScriptSrc (CSP script-src by env)", () => {
+  it("returns ['self', 'unsafe-inline'] in development", () => {
+    expect(getCspScriptSrc("development")).toEqual([
+      "'self'",
+      "'unsafe-inline'",
+    ]);
+  });
+
+  it("returns ['self'] only in production (no unsafe-inline for XSS protection)", () => {
+    expect(getCspScriptSrc("production")).toEqual(["'self'"]);
+  });
+
+  it("returns ['self'] only in test", () => {
+    expect(getCspScriptSrc("test")).toEqual(["'self'"]);
+  });
+
+  it("returns ['self'] only for unknown or empty env", () => {
+    expect(getCspScriptSrc("")).toEqual(["'self'"]);
+    expect(getCspScriptSrc("staging")).toEqual(["'self'"]);
+  });
+
+  it("returns ['self'] only for case variants (only exact 'development' enables unsafe-inline)", () => {
+    expect(getCspScriptSrc("Development")).toEqual(["'self'"]);
+    expect(getCspScriptSrc("DEVELOPMENT")).toEqual(["'self'"]);
+  });
+});
+
 describe("CSP headers", () => {
   it("includes expected directives (defaultSrc, scriptSrc, styleSrc, connectSrc with ws/wss)", async () => {
     const app = createApp();
@@ -224,5 +252,16 @@ describe("CSP headers", () => {
     expect(csp).toMatch(/connect-src[^;]*'self'[^;]*ws:/);
     expect(csp).toMatch(/connect-src[^;]*wss:/);
     expect(csp).toContain("frame-ancestors 'self'");
+  });
+
+  it("script-src does not include unsafe-inline when NODE_ENV is test (app runs as test)", async () => {
+    const app = createApp();
+    const res = await request(app).get("/api/ping");
+    const csp = res.headers["content-security-policy"];
+    expect(csp).toBeDefined();
+    const scriptSrcMatch = csp!.match(/script-src ([^;]+)/);
+    expect(scriptSrcMatch).toBeTruthy();
+    expect(scriptSrcMatch![1]).toContain("'self'");
+    expect(scriptSrcMatch![1]).not.toContain("unsafe-inline");
   });
 });

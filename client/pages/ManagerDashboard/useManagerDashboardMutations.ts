@@ -7,9 +7,12 @@ import {
   useCreateEmployeeMutation,
   useUpdateEmployeeWorkstationsMutation,
   useCreateTaskTemplateMutation,
+  useUpdateTaskTemplateMutation,
+  useDeleteTaskTemplateMutation,
   queryKeys,
 } from "@/hooks/queries";
 import { toastSuccess, toastError } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/get-error-message";
 
 const FALLBACK = {
   createWorkstation: "Failed to create workstation.",
@@ -17,6 +20,8 @@ const FALLBACK = {
   createEmployee: "Failed to create employee.",
   updateWorkstations: "Failed to update employee workstations.",
   createTask: "Failed to create task.",
+  updateTemplate: "Failed to update template.",
+  deleteTemplate: "Failed to delete template.",
 } as const;
 
 export const initialNewTask = {
@@ -57,7 +62,7 @@ export function useManagerDashboardMutations(
       toastSuccess("Workstation created successfully!");
     },
     onError: (err) => {
-      toastError(err?.message ?? FALLBACK.createWorkstation);
+      toastError(getErrorMessage(err, FALLBACK.createWorkstation));
     },
   });
   const deleteWorkstation = useDeleteWorkstationMutation({
@@ -65,7 +70,7 @@ export function useManagerDashboardMutations(
       toastSuccess("Workstation deleted successfully!");
     },
     onError: (err) => {
-      toastError(err?.message ?? FALLBACK.deleteWorkstation);
+      toastError(getErrorMessage(err, FALLBACK.deleteWorkstation));
     },
   });
   const createEmployee = useCreateEmployeeMutation({
@@ -76,7 +81,7 @@ export function useManagerDashboardMutations(
       );
     },
     onError: (err) => {
-      toastError(err?.message ?? FALLBACK.createEmployee);
+      toastError(getErrorMessage(err, FALLBACK.createEmployee));
     },
   });
   const updateEmployeeWorkstations = useUpdateEmployeeWorkstationsMutation({
@@ -86,7 +91,7 @@ export function useManagerDashboardMutations(
       toastSuccess("Employee workstations updated successfully!");
     },
     onError: (err) => {
-      toastError(err?.message ?? FALLBACK.updateWorkstations);
+      toastError(getErrorMessage(err, FALLBACK.updateWorkstations));
     },
   });
   const createTaskTemplate = useCreateTaskTemplateMutation({
@@ -95,7 +100,25 @@ export function useManagerDashboardMutations(
       onTaskTemplateCreated?.();
     },
     onError: (err) => {
-      toastError(err?.message ?? FALLBACK.createTask);
+      toastError(getErrorMessage(err, FALLBACK.createTask));
+    },
+  });
+  const updateTaskTemplate = useUpdateTaskTemplateMutation({
+    onSuccess: () => {
+      toastSuccess("Template updated successfully!");
+      // Note: Modal closing is handled in ManagerDashboard component's onSuccess callback
+    },
+    onError: (err) => {
+      toastError(getErrorMessage(err, FALLBACK.updateTemplate));
+      // Note: Modal stays open on error so user can retry
+    },
+  });
+  const deleteTaskTemplate = useDeleteTaskTemplateMutation({
+    onSuccess: () => {
+      toastSuccess("Template deleted successfully!");
+    },
+    onError: (err) => {
+      toastError(getErrorMessage(err, FALLBACK.deleteTemplate));
     },
   });
 
@@ -117,6 +140,8 @@ export function useManagerDashboardMutations(
     createEmployee,
     updateEmployeeWorkstations,
     createTaskTemplate,
+    updateTaskTemplate,
+    deleteTaskTemplate,
   };
 }
 

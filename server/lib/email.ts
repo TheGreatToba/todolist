@@ -171,6 +171,65 @@ export async function sendTaskAssignmentEmail(
   }
 }
 
+/** Send password reset email with a link to reset password */
+export async function sendPasswordResetEmail(
+  userEmail: string,
+  userName: string,
+  resetLink: string,
+  expiryHours: number = 1,
+) {
+  try {
+    const transporter = await getTransporter();
+
+    const mailOptions = {
+      from: process.env.EMAIL_FROM || "noreply@taskflow.local",
+      to: userEmail,
+      subject: "TaskFlow - Reset Your Password",
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <div style="background-color: #0066cc; color: white; padding: 20px; border-radius: 8px 8px 0 0;">
+            <h1 style="margin: 0; font-size: 24px;">Password Reset Request</h1>
+          </div>
+          <div style="border: 1px solid #ddd; border-top: none; padding: 20px; border-radius: 0 0 8px 8px;">
+            <p>Hi ${escapeHtml(userName)},</p>
+            <p>We received a request to reset your password for your TaskFlow account. Click the button below to reset your password:</p>
+
+            <div style="text-align: center; margin: 24px 0;">
+              <a href="${escapeHtml(resetLink)}" style="display: inline-block; padding: 12px 24px; background-color: #0066cc; color: white; text-decoration: none; border-radius: 6px; font-weight: bold;">Reset my password</a>
+            </div>
+
+            <p style="font-size: 13px; color: #666;">Or copy this link into your browser:</p>
+            <p style="font-size: 12px; word-break: break-all; color: #666;">${escapeHtml(resetLink)}</p>
+
+            <div style="background-color: #fff3cd; border: 1px solid #ffc107; padding: 12px; border-radius: 4px; margin: 16px 0; font-size: 13px;">
+              <strong>Security:</strong> This link expires in ${expiryHours} hour${expiryHours === 1 ? "" : "s"} and can only be used once. If you didn't request this, please ignore this email and your password will remain unchanged.
+            </div>
+
+            <p style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 12px; color: #666;">
+              This is an automated message. Please do not reply to this email.
+            </p>
+          </div>
+        </div>
+      `,
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    logger.info("Password reset email sent:", info.messageId);
+
+    if (process.env.NODE_ENV !== "production" && !process.env.SMTP_HOST) {
+      logger.debug("Preview URL:", nodemailer.getTestMessageUrl(info));
+    }
+
+    return { success: true, messageId: info.messageId };
+  } catch (error) {
+    logger.error("Failed to send password reset email:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+  }
+}
+
 export default async function sendEmail(
   to: string,
   subject: string,

@@ -3,11 +3,31 @@
  * Prerequisites: JWT_SECRET and DATABASE_URL in env (e.g. .env or CI). Run `pnpm seed` before tests.
  * Uses mgr@test.com (MANAGER) and emp@test.com (EMPLOYEE) with password "password".
  * Note: Auth uses httpOnly cookies; tests use supertest agent for cookie persistence.
+ *
+ * Note on MSW warnings: These backend tests make real HTTP calls to the Express server
+ * (e.g., /api/auth/...) and may trigger MSW warnings. This is expected - MSW is configured
+ * for client tests only. Backend tests intentionally bypass MSW to test the actual Express
+ * server behavior. Email sending (sendPasswordResetEmail) is mocked to eliminate external
+ * timing variations.
  */
 import "dotenv/config";
 import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
 import request from "supertest";
 import { z } from "zod";
+
+// Mock email module before importing app to ensure mocks work with static imports
+vi.mock("./lib/email", async () => {
+  const actual =
+    await vi.importActual<typeof import("./lib/email")>("./lib/email");
+  return {
+    ...actual,
+    sendPasswordResetEmail: vi.fn().mockResolvedValue({
+      success: true,
+      messageId: "test-message-id",
+    }),
+  };
+});
+
 import { createApp } from "./index";
 import prisma from "./lib/db";
 import { validateCsrf } from "./lib/csrf";
@@ -23,6 +43,63 @@ import {
 import type { Request, Response, NextFunction } from "express";
 
 const app = createApp();
+
+/** Extract auth cookie value from login response for manual forwarding (supertest agent may not persist it). */
+function getAuthCookieFromResponse(loginRes: request.Response): string | null {
+  const setCookie = loginRes.headers["set-cookie"];
+  if (!setCookie || !Array.isArray(setCookie) || setCookie.length === 0)
+    return null;
+  const cookieName =
+    process.env.NODE_ENV === "production" ? "__Host-token" : "token";
+  const line = setCookie.find((c: string) => c.startsWith(cookieName + "="));
+  if (!line) return null;
+  return line.split(";")[0].trim();
+}
+
+/** Chain .set("Cookie", cookie) onto agent requests when cookie is present (for tests that do multiple requests after login). */
+function withAuthCookie(
+  agent: ReturnType<typeof request.agent>,
+  cookie: string | null,
+) {
+  if (!cookie) return agent;
+  return {
+    get: (url: string) => agent.get(url).set("Cookie", cookie),
+    post: (url: string) => agent.post(url).set("Cookie", cookie),
+    patch: (url: string) => agent.patch(url).set("Cookie", cookie),
+    delete: (url: string) => agent.delete(url).set("Cookie", cookie),
+  };
+}
+
+/**
+ * Helper to assert that a login was successful and verify authentication state.
+ * Returns the auth cookie (if present) so callers can pass it to subsequent requests
+ * via .set("Cookie", cookie), since the supertest agent may not persist cookies.
+ */
+async function assertLoggedIn(
+  agent: ReturnType<typeof request.agent>,
+  expectedEmail: string,
+  loginRes: request.Response,
+): Promise<string | null> {
+  expect(loginRes.status).toBe(200);
+  expect(loginRes.body).toHaveProperty("user");
+  expect(loginRes.body.user.email).toBe(expectedEmail);
+
+  const cookieValue = getAuthCookieFromResponse(loginRes);
+  const profileRes = cookieValue
+    ? await agent.get("/api/auth/profile").set("Cookie", cookieValue)
+    : await agent.get("/api/auth/profile");
+
+  if (process.env.DEBUG_AUTH_TESTS && profileRes.status !== 200) {
+    console.error(
+      `[Diagnostic] Profile check failed for ${expectedEmail}:`,
+      profileRes.status,
+      profileRes.body,
+    );
+  }
+  expect(profileRes.status).toBe(200);
+  expect(profileRes.body.user.email).toBe(expectedEmail);
+  return cookieValue;
+}
 
 describe("Auth API", () => {
   it("POST /api/auth/signup with MANAGER returns 201 and user", async () => {
@@ -87,6 +164,30 @@ describe("Auth API", () => {
     expect(res.body).toHaveProperty("user");
     expect(res.body.user.email).toBe("mgr@test.com");
     expect(res.body.user.role).toBe("MANAGER");
+
+    // Verify set-cookie header is present (when using request() directly, not agent)
+    const cookies = res.headers["set-cookie"];
+    if (cookies && Array.isArray(cookies)) {
+      const cookieName =
+        process.env.NODE_ENV === "production" ? "__Host-token" : "token";
+      const hasAuthCookie = cookies.some((c: string) => {
+        const cookieMatch = new RegExp(
+          `^${cookieName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}=`,
+        );
+        return cookieMatch.test(c);
+      });
+      expect(hasAuthCookie).toBe(true);
+    }
+    // Note: When using request.agent(), cookies are handled internally and may not appear in headers
+  });
+
+  it("POST /api/auth/login sets cookie and agent persists session", async () => {
+    const agent = request.agent(app);
+    const loginRes = await agent
+      .post("/api/auth/login")
+      .send({ email: "mgr@test.com", password: "password" });
+
+    await assertLoggedIn(agent, "mgr@test.com", loginRes);
   });
 
   it("POST /api/auth/login with invalid password returns 401", async () => {
@@ -115,6 +216,359 @@ describe("Auth API", () => {
     expect(res.body.user.email).toBe("mgr@test.com");
   });
 
+  // Minimal isolated test to diagnose auth persistence issues
+  // This test has no DB setup, no other dependencies - just login -> profile
+  // Enable DEBUG_AUTH_TESTS=1 to see detailed diagnostic output
+  it("POST /api/auth/login -> GET /api/auth/profile minimal isolated test", async () => {
+    const agent = request.agent(app);
+    const loginRes = await agent
+      .post("/api/auth/login")
+      .send({ email: "mgr@test.com", password: "password" });
+
+    await assertLoggedIn(agent, "mgr@test.com", loginRes);
+  });
+
+  describe("Password Reset", () => {
+    // Cleanup helper: remove any existing password reset tokens for a user
+    const cleanupPasswordResetTokens = async (email: string) => {
+      const user = await prisma.user.findUnique({
+        where: { email },
+        select: { id: true },
+      });
+      if (user) {
+        await prisma.passwordResetToken.deleteMany({
+          where: { userId: user.id },
+        });
+      }
+    };
+
+    it("POST /api/auth/forgot-password with valid email returns 200 and sends reset email", async () => {
+      // Cleanup any existing tokens
+      await cleanupPasswordResetTokens("mgr@test.com");
+
+      const res = await request(app)
+        .post("/api/auth/forgot-password")
+        .send({ email: "mgr@test.com" });
+
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({
+        success: true,
+        message:
+          "If an account exists with this email, a password reset link has been sent.",
+      });
+      expect(res.body.expiryHours).toBeGreaterThan(0);
+
+      // Verify token was created in DB
+      const user = await prisma.user.findUnique({
+        where: { email: "mgr@test.com" },
+        include: { passwordResetToken: true },
+      });
+      expect(user?.passwordResetToken).toBeTruthy();
+      expect(user?.passwordResetToken?.tokenHash).toBeTruthy();
+
+      // Cleanup after test
+      await cleanupPasswordResetTokens("mgr@test.com");
+    });
+
+    it("POST /api/auth/forgot-password with non-existent email returns same message (email enumeration protection)", async () => {
+      const res = await request(app)
+        .post("/api/auth/forgot-password")
+        .send({ email: "nonexistent@test.com" });
+
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({
+        success: true,
+        message:
+          "If an account exists with this email, a password reset link has been sent.",
+      });
+      expect(res.body.expiryHours).toBeGreaterThan(0);
+    });
+
+    it("POST /api/auth/reset-password with valid token resets password and logs user in", async () => {
+      // Cleanup any existing tokens
+      await cleanupPasswordResetTokens("mgr@test.com");
+
+      // Create a reset token
+      const user = await prisma.user.findUnique({
+        where: { email: "mgr@test.com" },
+      });
+      expect(user).toBeTruthy();
+
+      const crypto = await import("crypto");
+      const resetToken = crypto.randomBytes(32).toString("hex");
+      const { hashToken } = await import("./lib/auth");
+      const tokenHash = hashToken(resetToken);
+
+      const expiresAt = new Date();
+      expiresAt.setHours(expiresAt.getHours() + 1);
+
+      await prisma.passwordResetToken.create({
+        data: {
+          userId: user!.id,
+          tokenHash,
+          expiresAt,
+        },
+      });
+
+      // Reset password
+      const res = await request(app).post("/api/auth/reset-password").send({
+        token: resetToken,
+        password: "newpassword123",
+      });
+
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({
+        success: true,
+      });
+      expect(res.body.user.email).toBe("mgr@test.com");
+
+      // Verify token was deleted
+      const tokenRecord = await prisma.passwordResetToken.findUnique({
+        where: { tokenHash },
+      });
+      expect(tokenRecord).toBeNull();
+
+      // Verify password was changed
+      const updatedUser = await prisma.user.findUnique({
+        where: { email: "mgr@test.com" },
+      });
+      const { verifyPassword } = await import("./lib/auth");
+      const passwordValid = await verifyPassword(
+        "newpassword123",
+        updatedUser!.passwordHash,
+      );
+      expect(passwordValid).toBe(true);
+
+      // Reset password back for other tests
+      const passwordHash = await (
+        await import("./lib/auth")
+      ).hashPassword("password");
+      await prisma.user.update({
+        where: { id: user!.id },
+        data: { passwordHash },
+      });
+    });
+
+    it("POST /api/auth/reset-password with invalid token returns 400", async () => {
+      const res = await request(app).post("/api/auth/reset-password").send({
+        token: "invalid-token",
+        password: "newpassword123",
+      });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain("Invalid or expired");
+    });
+
+    it("POST /api/auth/reset-password with expired token returns 400", async () => {
+      // Cleanup any existing tokens
+      await cleanupPasswordResetTokens("mgr@test.com");
+
+      const user = await prisma.user.findUnique({
+        where: { email: "mgr@test.com" },
+      });
+      expect(user).toBeTruthy();
+
+      const crypto = await import("crypto");
+      const resetToken = crypto.randomBytes(32).toString("hex");
+      const { hashToken } = await import("./lib/auth");
+      const tokenHash = hashToken(resetToken);
+
+      const expiresAt = new Date();
+      expiresAt.setHours(expiresAt.getHours() - 1); // Expired
+
+      await prisma.passwordResetToken.create({
+        data: {
+          userId: user!.id,
+          tokenHash,
+          expiresAt,
+        },
+      });
+
+      const res = await request(app).post("/api/auth/reset-password").send({
+        token: resetToken,
+        password: "newpassword123",
+      });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain("expired");
+
+      // Verify token was deleted
+      const tokenRecord = await prisma.passwordResetToken.findUnique({
+        where: { tokenHash },
+      });
+      expect(tokenRecord).toBeNull();
+    });
+
+    it("POST /api/auth/reset-password handles race condition gracefully", async () => {
+      // Use a dedicated user to avoid unique constraint (userId) and cross-test pollution
+      const bcryptjs = (await import("bcryptjs")).default;
+      const raceEmail = `race-${Date.now()}@test.com`;
+      const raceUser = await prisma.user.create({
+        data: {
+          name: "Race Test User",
+          email: raceEmail,
+          passwordHash: await bcryptjs.hash("oldpass", 10),
+          role: "MANAGER",
+        },
+      });
+      const raceTeam = await prisma.team.create({
+        data: { name: "Race Team", managerId: raceUser.id },
+      });
+      await prisma.user.update({
+        where: { id: raceUser.id },
+        data: { teamId: raceTeam.id },
+      });
+
+      const crypto = await import("crypto");
+      const resetToken = crypto.randomBytes(32).toString("hex");
+      const { hashToken } = await import("./lib/auth");
+      const tokenHash = hashToken(resetToken);
+
+      const expiresAt = new Date();
+      expiresAt.setHours(expiresAt.getHours() + 1);
+
+      await prisma.passwordResetToken.create({
+        data: {
+          userId: raceUser.id,
+          tokenHash,
+          expiresAt,
+        },
+      });
+
+      let successfulRes: request.Response | undefined;
+      let failedRes: request.Response | undefined;
+      try {
+        // Simulate race condition: two concurrent requests with same token
+        const [res1, res2] = await Promise.all([
+          request(app).post("/api/auth/reset-password").send({
+            token: resetToken,
+            password: "newpassword123",
+          }),
+          (async () => {
+            await new Promise((resolve) => setTimeout(resolve, 10));
+            return request(app).post("/api/auth/reset-password").send({
+              token: resetToken,
+              password: "newpassword456",
+            });
+          })(),
+        ]);
+
+        successfulRes = [res1, res2].find((r) => r.status === 200);
+        failedRes = [res1, res2].find(
+          (r) =>
+            r.status === 400 && r.body.error?.includes("already been used"),
+        );
+
+        expect(successfulRes).toBeDefined();
+        expect(failedRes).toBeDefined();
+
+        // Verify token was consumed (deleted)
+        const tokenRecord = await prisma.passwordResetToken.findUnique({
+          where: { tokenHash },
+        });
+        expect(tokenRecord).toBeNull();
+
+        // One password must have been applied; verify it's one of the two
+        const updatedUser = await prisma.user.findUnique({
+          where: { id: raceUser.id },
+        });
+        expect(updatedUser).toBeTruthy();
+        const { verifyPassword } = await import("./lib/auth");
+        const matches123 = await verifyPassword(
+          "newpassword123",
+          updatedUser!.passwordHash,
+        );
+        const matches456 = await verifyPassword(
+          "newpassword456",
+          updatedUser!.passwordHash,
+        );
+        expect(matches123 !== matches456).toBe(true); // exactly one must match
+      } finally {
+        await prisma.passwordResetToken
+          .deleteMany({ where: { userId: raceUser.id } })
+          .catch(() => {});
+        await prisma.user
+          .delete({ where: { id: raceUser.id } })
+          .catch(() => {});
+        await prisma.team
+          .delete({ where: { id: raceTeam.id } })
+          .catch(() => {});
+      }
+    });
+
+    it("POST /api/auth/forgot-password has uniform timing to prevent enumeration", async () => {
+      // Cleanup any existing tokens
+      await cleanupPasswordResetTokens("mgr@test.com");
+
+      // Email sender is mocked at module level to eliminate external timing variations
+      // (Ethereal account creation, network calls, etc.)
+      const emailModule = await import("./lib/email");
+      const sendEmailSpy = vi.mocked(emailModule.sendPasswordResetEmail);
+
+      // Reset call count before test
+      sendEmailSpy.mockClear();
+
+      const MIN_RESPONSE_TIME_MS = 500;
+      const TIMING_TOLERANCE_MS = 50; // Reduced tolerance since email is mocked
+      // Allow up to 200ms difference between paths to account for:
+      // - Middleware variations (CSRF, rate limiting, logging, etc.)
+      // - Sequential request execution (second request may benefit from warmup)
+      // - Test environment performance variations (CI vs local)
+      // This is still much smaller than the minimum response time (500ms), so it effectively
+      // prevents timing-based enumeration attacks while remaining stable in test environments.
+      const MAX_TIMING_DIFF_MS = 200;
+
+      // Test with existing email
+      const startExisting = Date.now();
+      const resExisting = await request(app)
+        .post("/api/auth/forgot-password")
+        .send({ email: "mgr@test.com" });
+      const durationExisting = Date.now() - startExisting;
+
+      expect(resExisting.status).toBe(200);
+
+      // Test with non-existent email
+      const startNonExisting = Date.now();
+      const resNonExisting = await request(app)
+        .post("/api/auth/forgot-password")
+        .send({ email: "nonexistent@test.com" });
+      const durationNonExisting = Date.now() - startNonExisting;
+
+      expect(resNonExisting.status).toBe(200);
+
+      // Both should take at least MIN_RESPONSE_TIME_MS (minus tolerance for test environment)
+      expect(durationExisting).toBeGreaterThanOrEqual(
+        MIN_RESPONSE_TIME_MS - TIMING_TOLERANCE_MS,
+      );
+      expect(durationNonExisting).toBeGreaterThanOrEqual(
+        MIN_RESPONSE_TIME_MS - TIMING_TOLERANCE_MS,
+      );
+
+      // Timing difference should be small relative to minimum response time to prevent enumeration attacks
+      // The 200ms threshold accounts for middleware and test environment variations while still
+      // being much smaller than the 500ms minimum delay, effectively preventing timing attacks.
+      const timingDiff = Math.abs(durationExisting - durationNonExisting);
+      expect(
+        timingDiff,
+        `Timing difference (${timingDiff}ms) exceeds threshold (${MAX_TIMING_DIFF_MS}ms). ` +
+          `Existing email: ${durationExisting}ms, Non-existent email: ${durationNonExisting}ms. ` +
+          `This may indicate timing attack vulnerability or test environment instability.`,
+      ).toBeLessThan(MAX_TIMING_DIFF_MS);
+
+      // Verify email was only sent for existing email (not for non-existent)
+      expect(sendEmailSpy).toHaveBeenCalledTimes(1);
+      expect(sendEmailSpy).toHaveBeenCalledWith(
+        "mgr@test.com",
+        expect.any(String),
+        expect.stringContaining("/reset-password"),
+        expect.any(Number),
+      );
+
+      // Cleanup
+      await cleanupPasswordResetTokens("mgr@test.com");
+    });
+  });
+
   it("POST /api/auth/login with invalid role in DB returns 500 and logs structured event (no JWT)", async () => {
     const email = `invalid-role-${Date.now()}@test.com`;
     const signupRes = await request(app).post("/api/auth/signup").send({
@@ -126,6 +580,7 @@ describe("Auth API", () => {
     expect(signupRes.status).toBe(201);
     const userId = signupRes.body.user.id as string;
 
+    // BYPASS_PATTERN: raw SQL only to set invalid role for this test; see legacy template test.
     await prisma.$executeRawUnsafe(
       "UPDATE User SET role = ? WHERE id = ?",
       "INVALID",
@@ -508,6 +963,387 @@ describe("Permissions - role-based access", () => {
       expect(res.body).toMatchObject({ error: "Not found" });
     } finally {
       await prisma.user.delete({ where: { id: otherEmployee.id } });
+      await prisma.team.delete({ where: { id: otherTeam.id } });
+      await prisma.user.delete({ where: { id: otherManager.id } });
+    }
+  });
+
+  it("GET /api/tasks/templates returns templates for manager's teams", async () => {
+    const agent = request.agent(app);
+    const loginRes = await agent
+      .post("/api/auth/login")
+      .send({ email: "mgr@test.com", password: "password" });
+    const cookie = await assertLoggedIn(agent, "mgr@test.com", loginRes);
+    const auth = withAuthCookie(agent, cookie);
+
+    const manager = await prisma.user.findUnique({
+      where: { email: "mgr@test.com" },
+      select: { id: true, teamId: true },
+    });
+    expect(manager?.teamId).toBeTruthy();
+
+    const ws = await prisma.workstation.create({
+      data: { name: `WS GET ${Date.now()}`, teamId: manager!.teamId! },
+    });
+
+    let templateId: string | null = null;
+    try {
+      const template = await prisma.taskTemplate.create({
+        data: {
+          title: "Test Template GET",
+          workstationId: ws.id,
+          createdById: manager!.id,
+        },
+      });
+      templateId = template.id;
+
+      const res = await auth.get("/api/tasks/templates");
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body)).toBe(true);
+      const found = res.body.find((t: { id: string }) => t.id === template.id);
+      expect(found).toBeTruthy();
+      expect(found.title).toBe("Test Template GET");
+    } finally {
+      if (templateId) {
+        await prisma.taskTemplate.delete({ where: { id: templateId } });
+      }
+      await prisma.workstation.delete({ where: { id: ws.id } });
+    }
+  });
+
+  it("GET /api/tasks/templates as EMPLOYEE returns 403", async () => {
+    const agent = request.agent(app);
+    const loginRes = await agent
+      .post("/api/auth/login")
+      .send({ email: "emp@test.com", password: "password" });
+    const cookie = await assertLoggedIn(agent, "emp@test.com", loginRes);
+    const res = await withAuthCookie(agent, cookie).get("/api/tasks/templates");
+    expect(res.status).toBe(403);
+  });
+
+  it("PATCH /api/tasks/templates/:id updates template", async () => {
+    const agent = request.agent(app);
+    const loginRes = await agent
+      .post("/api/auth/login")
+      .send({ email: "mgr@test.com", password: "password" });
+    const cookie = await assertLoggedIn(agent, "mgr@test.com", loginRes);
+    const auth = withAuthCookie(agent, cookie);
+
+    const manager = await prisma.user.findUnique({
+      where: { email: "mgr@test.com" },
+      select: { id: true, teamId: true },
+    });
+    expect(manager?.teamId).toBeTruthy();
+
+    const ws = await prisma.workstation.create({
+      data: { name: `WS PATCH ${Date.now()}`, teamId: manager!.teamId! },
+    });
+
+    let templateId: string | null = null;
+    try {
+      const template = await prisma.taskTemplate.create({
+        data: {
+          title: "Original Title",
+          description: "Original Description",
+          workstationId: ws.id,
+          createdById: manager!.id,
+        },
+      });
+      templateId = template.id;
+
+      const res = await auth.patch(`/api/tasks/templates/${templateId}`).send({
+        title: "Updated Title",
+        description: "Updated Description",
+      });
+
+      expect(res.status).toBe(200);
+      expect(res.body.title).toBe("Updated Title");
+      expect(res.body.description).toBe("Updated Description");
+    } finally {
+      if (templateId) {
+        await prisma.taskTemplate.delete({ where: { id: templateId } });
+      }
+      await prisma.workstation.delete({ where: { id: ws.id } });
+    }
+  });
+
+  it("PATCH /api/tasks/templates/:id can clear description with null", async () => {
+    const agent = request.agent(app);
+    const loginRes = await agent
+      .post("/api/auth/login")
+      .send({ email: "mgr@test.com", password: "password" });
+    const cookie = await assertLoggedIn(agent, "mgr@test.com", loginRes);
+    const auth = withAuthCookie(agent, cookie);
+
+    const manager = await prisma.user.findUnique({
+      where: { email: "mgr@test.com" },
+      select: { id: true, teamId: true },
+    });
+    expect(manager?.teamId).toBeTruthy();
+
+    const ws = await prisma.workstation.create({
+      data: { name: `WS PATCH NULL ${Date.now()}`, teamId: manager!.teamId! },
+    });
+
+    let templateId: string | null = null;
+    try {
+      const template = await prisma.taskTemplate.create({
+        data: {
+          title: "Test Template",
+          description: "Has Description",
+          workstationId: ws.id,
+          createdById: manager!.id,
+        },
+      });
+      templateId = template.id;
+
+      const res = await auth.patch(`/api/tasks/templates/${templateId}`).send({
+        description: null,
+      });
+
+      expect(res.status).toBe(200);
+      expect(res.body.description).toBeNull();
+    } finally {
+      if (templateId) {
+        await prisma.taskTemplate.delete({ where: { id: templateId } });
+      }
+      await prisma.workstation.delete({ where: { id: ws.id } });
+    }
+  });
+
+  it("PATCH /api/tasks/templates/:id rejects update with both assignments null", async () => {
+    const agent = request.agent(app);
+    const loginRes = await agent
+      .post("/api/auth/login")
+      .send({ email: "mgr@test.com", password: "password" });
+    const cookie = await assertLoggedIn(agent, "mgr@test.com", loginRes);
+    const auth = withAuthCookie(agent, cookie);
+
+    const manager = await prisma.user.findUnique({
+      where: { email: "mgr@test.com" },
+      select: { id: true, teamId: true },
+    });
+    expect(manager?.teamId).toBeTruthy();
+
+    const ws = await prisma.workstation.create({
+      data: { name: `WS PATCH VALID ${Date.now()}`, teamId: manager!.teamId! },
+    });
+
+    let templateId: string | null = null;
+    try {
+      const template = await prisma.taskTemplate.create({
+        data: {
+          title: "Test Template",
+          workstationId: ws.id,
+          createdById: manager!.id,
+        },
+      });
+      templateId = template.id;
+
+      const res = await auth.patch(`/api/tasks/templates/${templateId}`).send({
+        workstationId: null,
+        assignedToEmployeeId: null,
+      });
+
+      expect(res.status).toBe(400);
+      // Zod refine returns "Validation error" with details; handler's final check returns custom message
+      expect(
+        res.body.error === "Validation error" ||
+          (typeof res.body.error === "string" &&
+            res.body.error.includes("must be provided")),
+      ).toBe(true);
+    } finally {
+      if (templateId) {
+        await prisma.taskTemplate.delete({ where: { id: templateId } });
+      }
+      await prisma.workstation.delete({ where: { id: ws.id } });
+    }
+  });
+
+  it("DELETE /api/tasks/templates/:id deletes template", async () => {
+    const agent = request.agent(app);
+    const loginRes = await agent
+      .post("/api/auth/login")
+      .send({ email: "mgr@test.com", password: "password" });
+    const cookie = await assertLoggedIn(agent, "mgr@test.com", loginRes);
+    const auth = withAuthCookie(agent, cookie);
+
+    const manager = await prisma.user.findUnique({
+      where: { email: "mgr@test.com" },
+      select: { id: true, teamId: true },
+    });
+    expect(manager?.teamId).toBeTruthy();
+
+    const ws = await prisma.workstation.create({
+      data: { name: `WS DELETE ${Date.now()}`, teamId: manager!.teamId! },
+    });
+
+    let templateId: string | null = null;
+    try {
+      const template = await prisma.taskTemplate.create({
+        data: {
+          title: "Template to Delete",
+          workstationId: ws.id,
+          createdById: manager!.id,
+        },
+      });
+      templateId = template.id;
+
+      const res = await auth.delete(`/api/tasks/templates/${templateId}`);
+      expect(res.status).toBe(204);
+
+      const deleted = await prisma.taskTemplate.findUnique({
+        where: { id: templateId },
+      });
+      expect(deleted).toBeNull();
+    } finally {
+      if (templateId) {
+        // Cleanup in case delete failed
+        await prisma.taskTemplate.deleteMany({ where: { id: templateId } });
+      }
+      await prisma.workstation.delete({ where: { id: ws.id } });
+    }
+  });
+
+  it("DELETE /api/tasks/templates/:id returns 404 for template not in manager teams", async () => {
+    const bcryptjs = (await import("bcryptjs")).default;
+    const otherManager = await prisma.user.create({
+      data: {
+        name: "Other Manager",
+        email: `other-mgr-del-${Date.now()}@test.com`,
+        passwordHash: await bcryptjs.hash("password", 10),
+        role: "MANAGER",
+      },
+    });
+    const otherTeam = await prisma.team.create({
+      data: { name: "Other Team", managerId: otherManager.id },
+    });
+    const otherWs = await prisma.workstation.create({
+      data: { name: "Other WS", teamId: otherTeam.id },
+    });
+    let templateId: string | null = null;
+    try {
+      templateId = (
+        await prisma.taskTemplate.create({
+          data: {
+            title: "Other Template",
+            workstationId: otherWs.id,
+            createdById: otherManager.id,
+          },
+        })
+      ).id;
+
+      const agent = request.agent(app);
+      const loginRes = await agent
+        .post("/api/auth/login")
+        .send({ email: "mgr@test.com", password: "password" });
+      const cookie = await assertLoggedIn(agent, "mgr@test.com", loginRes);
+      const auth = withAuthCookie(agent, cookie);
+
+      const res = await auth.delete(`/api/tasks/templates/${templateId}`);
+      expect(res.status).toBe(404);
+    } finally {
+      if (templateId) {
+        await prisma.taskTemplate.delete({ where: { id: templateId } });
+      }
+      await prisma.workstation.delete({ where: { id: otherWs.id } });
+      await prisma.team.delete({ where: { id: otherTeam.id } });
+      await prisma.user.delete({ where: { id: otherManager.id } });
+    }
+  });
+
+  it("GET /api/tasks/templates filters out cross-team relationships (legacy data)", async () => {
+    const agent = request.agent(app);
+    const loginRes = await agent
+      .post("/api/auth/login")
+      .send({ email: "mgr@test.com", password: "password" });
+    const cookie = await assertLoggedIn(agent, "mgr@test.com", loginRes);
+    const auth = withAuthCookie(agent, cookie);
+
+    const manager = await prisma.user.findUnique({
+      where: { email: "mgr@test.com" },
+      select: { id: true, teamId: true },
+    });
+    expect(manager?.teamId).toBeTruthy();
+
+    // Create another manager/team for cross-team scenario
+    const bcryptjs = (await import("bcryptjs")).default;
+    const otherManager = await prisma.user.create({
+      data: {
+        name: "Other Manager",
+        email: `other-mgr-legacy-${Date.now()}@test.com`,
+        passwordHash: await bcryptjs.hash("password", 10),
+        role: "MANAGER",
+      },
+    });
+    const otherTeam = await prisma.team.create({
+      data: { name: "Other Team Legacy", managerId: otherManager.id },
+    });
+    const otherWs = await prisma.workstation.create({
+      data: { name: "Other WS Legacy", teamId: otherTeam.id },
+    });
+    const otherEmployee = await prisma.user.create({
+      data: {
+        name: "Other Employee",
+        email: `other-emp-legacy-${Date.now()}@test.com`,
+        passwordHash: await bcryptjs.hash("password", 10),
+        role: "EMPLOYEE",
+        teamId: otherTeam.id,
+      },
+    });
+
+    const ws = await prisma.workstation.create({
+      data: { name: `WS Legacy ${Date.now()}`, teamId: manager!.teamId! },
+    });
+
+    let templateId: string | null = null;
+    try {
+      // Create template with workstation in managed team but assignedToEmployee in other team
+      // This simulates legacy inconsistent data.
+      // BYPASS_PATTERN: $executeRawUnsafe is used only here (and in invalid-role test) to bypass
+      // Prisma invariants and create data that the app would never create. Do not use in application
+      // code; restrict to tests that explicitly need inconsistent/legacy data.
+      templateId = `legacy-template-${Date.now()}`;
+      // SQLite stores booleans as integers (0/1)
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO TaskTemplate (id, title, "workstationId", "assignedToEmployeeId", "createdById", "isRecurring", "notifyEmployee", "createdAt", "updatedAt")
+         VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+        templateId,
+        "Cross-team Template",
+        ws.id,
+        otherEmployee.id,
+        manager!.id,
+        0, // false as integer for SQLite
+        0, // false as integer for SQLite
+      );
+
+      // Verify authentication still works after DB operations
+      const profileCheckRes = await auth.get("/api/auth/profile");
+      expect(profileCheckRes.status).toBe(200);
+      expect(profileCheckRes.body.user.email).toBe("mgr@test.com");
+
+      const res = await auth.get("/api/tasks/templates");
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body)).toBe(true);
+
+      const found = res.body.find((t: { id: string }) => t.id === templateId);
+      expect(found).toBeTruthy();
+      expect(found.title).toBe("Cross-team Template");
+
+      // Workstation should be exposed (belongs to managed team)
+      expect(found.workstation).toBeTruthy();
+      expect(found.workstation.id).toBe(ws.id);
+
+      // assignedToEmployee and assignedToEmployeeId must be null (cross-team, no ID leak)
+      expect(found.assignedToEmployee).toBeNull();
+      expect(found.assignedToEmployeeId).toBeNull();
+    } finally {
+      if (templateId) {
+        await prisma.taskTemplate.delete({ where: { id: templateId } });
+      }
+      await prisma.workstation.delete({ where: { id: ws.id } });
+      await prisma.user.delete({ where: { id: otherEmployee.id } });
+      await prisma.workstation.delete({ where: { id: otherWs.id } });
       await prisma.team.delete({ where: { id: otherTeam.id } });
       await prisma.user.delete({ where: { id: otherManager.id } });
     }
@@ -1345,10 +2181,12 @@ describe("Cron API", () => {
   it("POST /api/cron/daily-tasks respects rate limit (max 2/min in non-test mode)", async () => {
     const originalNodeEnv = process.env.NODE_ENV;
     const originalCronSecret = process.env.CRON_SECRET;
+    const originalDisableCsrf = process.env.DISABLE_CSRF;
 
     try {
       process.env.NODE_ENV = "development"; // Non-test mode to enforce rate limit
       process.env.CRON_SECRET = "test-cron-secret";
+      process.env.DISABLE_CSRF = "true"; // Avoid 403 from CSRF when NODE_ENV is development
       // Create new app after env change to ensure rate limiter uses correct config
       const limitedApp = createApp();
 
@@ -1376,16 +2214,20 @@ describe("Cron API", () => {
       process.env.NODE_ENV = originalNodeEnv;
       if (originalCronSecret === undefined) delete process.env.CRON_SECRET;
       else process.env.CRON_SECRET = originalCronSecret;
+      if (originalDisableCsrf === undefined) delete process.env.DISABLE_CSRF;
+      else process.env.DISABLE_CSRF = originalDisableCsrf;
     }
   });
 
   it("POST /api/cron/daily-tasks rejects invalid secrets without consuming rate limit quota", async () => {
     const originalNodeEnv = process.env.NODE_ENV;
     const originalCronSecret = process.env.CRON_SECRET;
+    const originalDisableCsrf = process.env.DISABLE_CSRF;
 
     try {
       process.env.NODE_ENV = "development";
       process.env.CRON_SECRET = "test-cron-secret";
+      process.env.DISABLE_CSRF = "true"; // Avoid 403 from CSRF when NODE_ENV is development
       const limitedApp = createApp();
 
       // Send many requests with invalid secret - should all be rejected immediately
@@ -1406,6 +2248,8 @@ describe("Cron API", () => {
       process.env.NODE_ENV = originalNodeEnv;
       if (originalCronSecret === undefined) delete process.env.CRON_SECRET;
       else process.env.CRON_SECRET = originalCronSecret;
+      if (originalDisableCsrf === undefined) delete process.env.DISABLE_CSRF;
+      else process.env.DISABLE_CSRF = originalDisableCsrf;
     }
   });
 });
@@ -1588,7 +2432,7 @@ describe("Workstations and employees API", () => {
     expect(res.body).toMatchObject({ name });
   });
 
-  it("POST /api/workstations duplicate (teamId, name) returns 409 CONFLICT (P2002 non-email fallback)", async () => {
+  it("POST /api/workstations duplicate (teamId, name) returns 400 (name unique per team)", async () => {
     const manager = await prisma.user.findUnique({
       where: { email: "mgr@test.com" },
       select: { teamId: true },
@@ -1596,23 +2440,25 @@ describe("Workstations and employees API", () => {
     expect(manager?.teamId).toBeTruthy();
 
     const agent = request.agent(app);
-    await agent
+    const loginRes = await agent
       .post("/api/auth/login")
       .send({ email: "mgr@test.com", password: "password" });
+    const cookie = await assertLoggedIn(agent, "mgr@test.com", loginRes);
+    const auth = withAuthCookie(agent, cookie);
 
-    const name = `P2002-fallback-${Date.now()}`;
-    const first = await agent
+    const name = `dup-name-${Date.now()}`;
+    const first = await auth
       .post("/api/workstations")
       .send({ name, teamId: manager!.teamId! });
     expect(first.status).toBe(201);
 
-    const second = await agent
+    const second = await auth
       .post("/api/workstations")
       .send({ name, teamId: manager!.teamId! });
-    expect(second.status).toBe(409);
+    // Route checks duplicate explicitly and returns 400 (not Prisma P2002 → 409)
+    expect(second.status).toBe(400);
     expect(second.body).toMatchObject({
-      error: "A record with this value already exists.",
-      code: "CONFLICT",
+      error: "A workstation with this name already exists in your team",
     });
 
     await prisma.workstation

@@ -7,9 +7,10 @@ import {
   useUpdateDailyTaskMutation,
   queryKeys,
 } from "@/hooks/queries";
-import { Check, Loader2, LogOut, X, AlertCircle, Calendar } from "lucide-react";
+import { Check, Loader2, LogOut, Calendar } from "lucide-react";
 import { logger } from "@/lib/logger";
-import { toastError } from "@/lib/toast";
+import { toastError, toastSuccess } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/get-error-message";
 import { todayLocalISO, isToday, formatTaskDateLabel } from "@/lib/date-utils";
 
 export default function EmployeeDashboard() {
@@ -19,10 +20,6 @@ export default function EmployeeDashboard() {
   const [selectedDate, setSelectedDate] = useState<string>(() =>
     todayLocalISO(),
   );
-  const [notification, setNotification] = useState<{
-    title: string;
-    description?: string;
-  } | null>(null);
 
   const { data: tasks = [], isLoading } = useDailyTasksQuery(selectedDate);
   const updateTask = useUpdateDailyTaskMutation();
@@ -40,10 +37,9 @@ export default function EmployeeDashboard() {
     const unsubscribeAssigned = on("task:assigned", (data) => {
       if (data.employeeId === user?.id) {
         logger.debug("New task assigned:", data);
-        setNotification({
-          title: data.taskTitle,
-          description: data.taskDescription,
-        });
+        const title = (data.taskTitle ?? "").trim() || "New task assigned";
+        const description = (data.taskDescription ?? "").trim() || undefined;
+        toastSuccess(title, description);
         if (isToday(selectedDate)) {
           setTimeout(() => {
             queryClient.invalidateQueries({
@@ -51,7 +47,6 @@ export default function EmployeeDashboard() {
             });
           }, 500);
         }
-        setTimeout(() => setNotification(null), 6000);
       }
     });
 
@@ -66,8 +61,9 @@ export default function EmployeeDashboard() {
       await updateTask.mutateAsync({ taskId, isCompleted: !isCompleted });
     } catch (error) {
       logger.error("Failed to update task:", error);
-      const message = error instanceof Error ? error.message : undefined;
-      toastError(message ?? "Failed to update task. Please try again.");
+      toastError(
+        getErrorMessage(error, "Failed to update task. Please try again."),
+      );
     }
   };
 
@@ -112,34 +108,6 @@ export default function EmployeeDashboard() {
           </div>
         </div>
       </div>
-
-      {/* Notification Toast */}
-      {notification && (
-        <div className="fixed top-4 right-4 z-50 max-w-sm animate-in slide-in-from-top-2">
-          <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 shadow-lg">
-            <div className="flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <p className="font-semibold text-blue-900">New Task Assigned</p>
-                <p className="text-sm text-blue-800 mt-1">
-                  {notification.title}
-                </p>
-                {notification.description && (
-                  <p className="text-xs text-blue-700 mt-1">
-                    {notification.description}
-                  </p>
-                )}
-              </div>
-              <button
-                onClick={() => setNotification(null)}
-                className="text-blue-600 hover:text-blue-900 flex-shrink-0"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Progress Card */}
       <div className="max-w-2xl mx-auto px-4 py-6">

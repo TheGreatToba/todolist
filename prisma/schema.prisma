@@ -71,6 +71,7 @@ model User {
   dailyTasks        DailyTask[]
   createdTasks      TaskTemplate[] @relation("TaskCreator")
   setPasswordToken  SetPasswordToken?
+  passwordResetToken PasswordResetToken?
   assignedTasks   TaskTemplate[] @relation("AssignedTasks")
 
   createdAt DateTime @default(now())
@@ -113,6 +114,17 @@ model SetPasswordToken {
   expiresAt DateTime
 
   @@index([token])
+  @@index([expiresAt])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  expiresAt DateTime
+
+  @@index([tokenHash])
   @@index([expiresAt])
 }
 

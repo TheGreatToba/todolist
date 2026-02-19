@@ -64,3 +64,8 @@ export const workstationsHandler = http.get("*/api/workstations", () =>
 export const teamMembersHandler = http.get("*/api/team/members", () =>
   HttpResponse.json([]),
 );
+
+/** GET /api/tasks/templates – empty list (manager dashboard may request this). */
+export const taskTemplatesHandler = http.get("*/api/tasks/templates", () =>
+  HttpResponse.json([]),
+);

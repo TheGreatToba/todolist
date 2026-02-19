@@ -15,8 +15,12 @@ import type {
   ProfileResponse,
   User,
   TeamMember,
+  ForgotPasswordResponse,
+  ResetPasswordResponse,
+  TaskTemplateWithRelations,
+  UpdateTaskTemplateRequest,
 } from "@shared/api";
-import { fetchWithCsrf } from "@/lib/api";
+import { api, fetchWithCsrf, parseApiError } from "@/lib/api";
 
 // ---------- Query keys ----------
 /** Prefix keys for invalidation (match all queries starting with this key). */
@@ -33,6 +37,7 @@ export const queryKeys = {
     dashboardPrefix: ["manager", "dashboard"] as const,
     workstations: ["manager", "workstations"] as const,
     teamMembers: ["manager", "teamMembers"] as const,
+    taskTemplates: ["manager", "taskTemplates"] as const,
   },
   tasks: {
     daily: (date: string) => ["tasks", "daily", date] as const,
@@ -42,8 +47,8 @@ export const queryKeys = {
 
 // ---------- Fetchers (GET) ----------
 async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, { credentials: "include" });
-  if (!res.ok) throw new Error(await res.text().catch(() => res.statusText));
+  const res = await api.get(url);
+  if (!res.ok) throw new Error(await parseApiError(res));
   return res.json() as Promise<T>;
 }
 
@@ -51,9 +56,9 @@ export type ProfileResult = ProfileResponse | { user: null };
 
 /** 401/403 -> { user: null }; other errors (network, 5xx) propagate for UX/debug. */
 export async function fetchProfile(): Promise<ProfileResult> {
-  const res = await fetch("/api/auth/profile", { credentials: "include" });
+  const res = await api.get("/api/auth/profile");
   if (res.status === 401 || res.status === 403) return { user: null };
-  if (!res.ok) throw new Error(await res.text().catch(() => res.statusText));
+  if (!res.ok) throw new Error(await parseApiError(res));
   return res.json() as Promise<ProfileResponse>;
 }
 
@@ -67,10 +72,10 @@ export async function fetchManagerDashboard(params: {
   if (params.employeeId) search.set("employeeId", params.employeeId);
   if (params.workstationId) search.set("workstationId", params.workstationId);
   const url = `/api/manager/dashboard${search.toString() ? `?${search.toString()}` : ""}`;
-  const res = await fetch(url, { credentials: "include" });
+  const res = await api.get(url);
   if (!res.ok) {
     if (res.status === 404) return null;
-    throw new Error(await res.text().catch(() => res.statusText));
+    throw new Error(await parseApiError(res));
   }
   return res.json() as Promise<ManagerDashboardType>;
 }
@@ -90,6 +95,12 @@ export async function fetchWorkstations(): Promise<WorkstationWithEmployees[]> {
 
 export async function fetchTeamMembers(): Promise<TeamMember[]> {
   return fetchJson("/api/team/members");
+}
+
+export async function fetchTaskTemplates(): Promise<
+  TaskTemplateWithRelations[]
+> {
+  return fetchJson("/api/tasks/templates");
 }
 
 export async function fetchDailyTasks(date: string): Promise<DailyTask[]> {
@@ -150,6 +161,19 @@ export function useTeamMembersQuery(
   return useQuery({
     queryKey: queryKeys.manager.teamMembers,
     queryFn: fetchTeamMembers,
+    ...options,
+  });
+}
+
+export function useTaskTemplatesQuery(
+  options?: Omit<
+    UseQueryOptions<TaskTemplateWithRelations[], Error>,
+    "queryKey" | "queryFn"
+  >,
+) {
+  return useQuery({
+    queryKey: queryKeys.manager.taskTemplates,
+    queryFn: fetchTaskTemplates,
     ...options,
   });
 }
@@ -391,6 +415,77 @@ export function useCreateTaskTemplateMutation(
       queryClient.invalidateQueries({
         queryKey: queryKeys.manager.dashboardPrefix,
       });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.manager.taskTemplates,
+      });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tasks.dailyPrefix });
+      options?.onSuccess?.(data, variables, ctx);
+    },
+  });
+}
+
+export function useUpdateTaskTemplateMutation(
+  options?: UseMutationOptions<
+    TaskTemplateWithRelations,
+    Error,
+    { templateId: string; data: UpdateTaskTemplateRequest }
+  >,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      templateId,
+      data,
+    }: {
+      templateId: string;
+      data: UpdateTaskTemplateRequest;
+    }) => {
+      const res = await fetchWithCsrf(`/api/tasks/templates/${templateId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      const responseData = await res.json();
+      if (!res.ok)
+        throw new Error(responseData.error || "Failed to update template");
+      return responseData as TaskTemplateWithRelations;
+    },
+    ...options,
+    onSuccess: (data, variables, ctx) => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.manager.taskTemplates,
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.manager.dashboardPrefix,
+      });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tasks.dailyPrefix });
+      options?.onSuccess?.(data, variables, ctx);
+    },
+  });
+}
+
+export function useDeleteTaskTemplateMutation(
+  options?: UseMutationOptions<void, Error, string>,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (templateId: string) => {
+      const res = await fetchWithCsrf(`/api/tasks/templates/${templateId}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to delete template");
+      }
+    },
+    ...options,
+    onSuccess: (data, variables, ctx) => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.manager.taskTemplates,
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.manager.dashboardPrefix,
+      });
       queryClient.invalidateQueries({ queryKey: queryKeys.tasks.dailyPrefix });
       options?.onSuccess?.(data, variables, ctx);
     },
@@ -421,6 +516,56 @@ export function useSetPasswordMutation(
       const raw = await res.json();
       if (!res.ok) throw new Error(raw.error ?? "Failed to set password");
       return raw as { user: User };
+    },
+    ...options,
+  });
+}
+
+export function useForgotPasswordMutation(
+  options?: UseMutationOptions<
+    ForgotPasswordResponse,
+    Error,
+    { email: string }
+  >,
+) {
+  return useMutation({
+    mutationFn: async ({ email }: { email: string }) => {
+      const res = await fetchWithCsrf("/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const raw = await res.json();
+      if (!res.ok) throw new Error(raw.error ?? "Failed to send reset email");
+      return raw as ForgotPasswordResponse;
+    },
+    ...options,
+  });
+}
+
+export function useResetPasswordMutation(
+  options?: UseMutationOptions<
+    ResetPasswordResponse,
+    Error,
+    { token: string; password: string }
+  >,
+) {
+  return useMutation({
+    mutationFn: async ({
+      token,
+      password,
+    }: {
+      token: string;
+      password: string;
+    }) => {
+      const res = await fetchWithCsrf("/api/auth/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, password }),
+      });
+      const raw = await res.json();
+      if (!res.ok) throw new Error(raw.error ?? "Failed to reset password");
+      return raw as ResetPasswordResponse;
     },
     ...options,
   });

@@ -1,5 +1,6 @@
 import { RequestHandler } from "express";
 import { z } from "zod";
+import crypto from "crypto";
 import prisma from "../lib/db";
 import { Request, Response } from "express";
 import {
@@ -10,11 +11,14 @@ import {
   AUTH_COOKIE_NAME,
   getAuthCookieOptions,
   getAuthCookieClearOptions,
+  hashToken,
 } from "../lib/auth";
 import { sendErrorResponse } from "../lib/errors";
 import { redactEmailForLog, emailHashForLog } from "../lib/log-pii";
 import { getAuthOrThrow } from "../middleware/requireAuth";
 import { logger } from "../lib/logger";
+import { sendPasswordResetEmail } from "../lib/email";
+import { getPasswordResetTokenExpiryHours } from "../lib/password-reset-expiry";
 
 /**
  * Structured log when role from DB is invalid (do not emit JWT).
@@ -64,6 +68,15 @@ function createTokenOrFail(
 }
 
 const SetPasswordSchema = z.object({
+  token: z.string().min(1),
+  password: z.string().min(6),
+});
+
+const ForgotPasswordSchema = z.object({
+  email: z.string().email(),
+});
+
+const ResetPasswordSchema = z.object({
   token: z.string().min(1),
   password: z.string().min(6),
 });
@@ -221,6 +234,10 @@ export const handleLogout: RequestHandler = (_req, res) => {
   res.json({ success: true });
 };
 
+function generateSecureToken(): string {
+  return crypto.randomBytes(32).toString("hex");
+}
+
 /** Set password using token from welcome email (employee onboarding) */
 export const handleSetPassword: RequestHandler = async (req, res) => {
   try {
@@ -269,6 +286,181 @@ export const handleSetPassword: RequestHandler = async (req, res) => {
         email: record.user.email,
         role: record.user.role,
         teamId: record.user.teamId,
+      },
+    });
+  } catch (error) {
+    sendErrorResponse(res, error, req);
+  }
+};
+
+/** Request password reset - sends email with reset link */
+export const handleForgotPassword: RequestHandler = async (req, res) => {
+  const startTime = Date.now();
+  const MIN_RESPONSE_TIME_MS = 500; // Minimum response time to prevent timing attacks
+
+  try {
+    const body = ForgotPasswordSchema.parse(req.body);
+
+    // Always return success to prevent email enumeration
+    // Find user by email
+    const user = await prisma.user.findUnique({
+      where: { email: body.email },
+    });
+
+    const expiryHours = getPasswordResetTokenExpiryHours();
+
+    if (!user) {
+      // Return success even if user doesn't exist to prevent email enumeration
+      // Add delay to prevent timing attacks
+      const elapsed = Date.now() - startTime;
+      if (elapsed < MIN_RESPONSE_TIME_MS) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, MIN_RESPONSE_TIME_MS - elapsed),
+        );
+      }
+      res.json({
+        success: true,
+        message:
+          "If an account exists with this email, a password reset link has been sent.",
+        expiryHours, // Expose expiry for frontend
+      });
+      return;
+    }
+
+    // Generate secure token
+    const resetToken = generateSecureToken();
+    const tokenHash = hashToken(resetToken);
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + expiryHours);
+
+    // Delete any existing reset token for this user and create a new one
+    await prisma.$transaction(async (tx) => {
+      await tx.passwordResetToken.deleteMany({
+        where: { userId: user.id },
+      });
+
+      await tx.passwordResetToken.create({
+        data: {
+          userId: user.id,
+          tokenHash,
+          expiresAt,
+        },
+      });
+    });
+
+    // Build reset link
+    const baseUrl = process.env.FRONTEND_URL || "http://localhost:8080";
+    const resetLink = `${baseUrl.replace(/\/$/, "")}/reset-password?token=${encodeURIComponent(resetToken)}`;
+
+    // Send email asynchronously (don't await) to prevent timing attacks
+    // This ensures both code paths (user exists / doesn't exist) take similar time
+    sendPasswordResetEmail(user.email, user.name, resetLink, expiryHours).catch(
+      (error) => {
+        // Log email failures but don't fail the request
+        logger.error("Failed to send password reset email", error);
+      },
+    );
+
+    // Add delay to prevent timing attacks (uniform for both paths)
+    const elapsed = Date.now() - startTime;
+    if (elapsed < MIN_RESPONSE_TIME_MS) {
+      await new Promise((resolve) =>
+        setTimeout(resolve, MIN_RESPONSE_TIME_MS - elapsed),
+      );
+    }
+
+    res.json({
+      success: true,
+      message:
+        "If an account exists with this email, a password reset link has been sent.",
+      expiryHours, // Expose expiry for frontend
+    });
+  } catch (error) {
+    sendErrorResponse(res, error, req);
+  }
+};
+
+/** Reset password using token from email */
+export const handleResetPassword: RequestHandler = async (req, res) => {
+  try {
+    const body = ResetPasswordSchema.parse(req.body);
+
+    // Hash the provided token to search for matching hash in DB
+    const tokenHash = hashToken(body.token);
+
+    // Find record by tokenHash (atomic lookup)
+    const record = await prisma.passwordResetToken.findUnique({
+      where: { tokenHash },
+      include: { user: true },
+    });
+
+    if (!record) {
+      res.status(400).json({
+        error:
+          "Invalid or expired reset link. Please request a new password reset.",
+      });
+      return;
+    }
+
+    if (record.expiresAt < new Date()) {
+      // Delete expired token (best effort, ignore if already deleted)
+      await prisma.passwordResetToken.deleteMany({
+        where: { id: record.id },
+      });
+      res.status(400).json({
+        error:
+          "This reset link has expired. Please request a new password reset.",
+      });
+      return;
+    }
+
+    const passwordHash = await hashPassword(body.password);
+
+    // Atomic transaction: delete token FIRST, then update password
+    // This ensures that if two requests arrive concurrently, only one can consume the token
+    const result = await prisma.$transaction(async (tx) => {
+      // Delete token atomically FIRST (only if it still exists)
+      // This acts as a lock: if count === 0, another request already consumed it
+      const deleteResult = await tx.passwordResetToken.deleteMany({
+        where: { id: record.id },
+      });
+
+      // If token was already deleted (race condition), abort transaction
+      if (deleteResult.count === 0) {
+        return null;
+      }
+
+      // Token successfully consumed, now safe to update password
+      await tx.user.update({
+        where: { id: record.userId },
+        data: { passwordHash },
+      });
+
+      return record.user;
+    });
+
+    // Handle race condition: if token was already used, return error
+    if (!result) {
+      res.status(400).json({
+        error:
+          "This reset link has already been used. Please request a new password reset.",
+      });
+      return;
+    }
+
+    // Optionally log the user in after password reset
+    const token = createTokenOrFail(req, res, result);
+    if (!token) return;
+    res.cookie(AUTH_COOKIE_NAME, token, getAuthCookieOptions());
+
+    res.json({
+      success: true,
+      user: {
+        id: result.id,
+        name: result.name,
+        email: result.email,
+        role: result.role,
+        teamId: result.teamId,
       },
     });
   } catch (error) {

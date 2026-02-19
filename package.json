@@ -22,8 +22,9 @@
     "start": "node dist/server/node-build.mjs",
     "smoke:prod": "node scripts/smoke-prod-server.mjs",
     "pretest": "prisma generate",
-    "test": "vitest --run",
-    "test:client": "vitest run client",
+    "test": "pnpm run test:client && pnpm run test:server",
+    "test:client": "vitest run client/",
+    "test:server": "cross-env VITEST_SERVER=1 vitest run server/",
     "ci": "pnpm run typecheck && pnpm run seed && pnpm run test",
     "format.fix": "prettier --write .",
     "format.check": "prettier --check .",
@@ -60,6 +61,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "cross-env": "^7.0.3",
     "@eslint/js": "^10.0.1",
     "@hookform/resolvers": "^5.2.1",
     "@radix-ui/react-accordion": "^1.2.11",

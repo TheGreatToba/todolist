@@ -13,6 +13,7 @@ import {
 } from "./lib/csrf";
 import { requestIdMiddleware } from "./lib/observability";
 import { logger } from "./lib/logger";
+import { getCspScriptSrc } from "./lib/csp";
 
 ensureAuthConfig();
 ensureCsrfConfig();
@@ -29,11 +30,16 @@ import {
   handleProfile,
   handleLogout,
   handleSetPassword,
+  handleForgotPassword,
+  handleResetPassword,
 } from "./routes/auth";
 import {
   handleGetEmployeeDailyTasks,
   handleUpdateDailyTask,
   handleCreateTaskTemplate,
+  handleGetTaskTemplates,
+  handleUpdateTaskTemplate,
+  handleDeleteTaskTemplate,
   handleGetManagerDashboard,
   handleDailyTaskAssignment,
 } from "./routes/tasks";
@@ -83,14 +89,23 @@ export function createApp(): Express {
   app.use(requestIdMiddleware);
 
   // Security headers (helmet) - X-Content-Type-Options, X-Frame-Options, etc.
-  // TODO: Replace style-src 'unsafe-inline' with nonce/hash when build setup allows (Tailwind)
+  // CSP: styleSrc uses 'unsafe-inline' because Radix UI and app code set the style
+  // attribute on elements; nonces apply only to <style>/<script> elements, not to
+  // style="". External stylesheets from 'self' need no nonce. See docs/CSP.md for
+  // style-src-elem vs style-src-attr, and for nonce/hash on inline <style> blocks only.
+  // script-src: 'unsafe-inline' only in dev (Vite HMR/inline scripts); in prod keep 'self' for XSS protection.
   app.use(
     helmet({
       contentSecurityPolicy: {
         directives: {
           defaultSrc: ["'self'"],
-          scriptSrc: ["'self'"],
-          styleSrc: ["'self'", "'unsafe-inline'"],
+          scriptSrc: getCspScriptSrc(process.env.NODE_ENV ?? ""),
+          styleSrc: [
+            "'self'",
+            "'unsafe-inline'",
+            "https://fonts.googleapis.com",
+          ],
+          fontSrc: ["'self'", "https://fonts.gstatic.com"],
           imgSrc: ["'self'", "data:", "blob:"],
           connectSrc: ["'self'", "ws:", "wss:"],
           frameAncestors: ["'self'"],
@@ -183,6 +198,8 @@ export function createApp(): Express {
   app.get("/api/auth/profile", requireAuth, handleProfile);
   app.post("/api/auth/logout", handleLogout);
   app.post("/api/auth/set-password", setPasswordLimiter, handleSetPassword);
+  app.post("/api/auth/forgot-password", authLimiter, handleForgotPassword);
+  app.post("/api/auth/reset-password", setPasswordLimiter, handleResetPassword);
 
   // Task routes
   app.get("/api/tasks/daily", requireAuth, handleGetEmployeeDailyTasks);
@@ -192,6 +209,24 @@ export function createApp(): Express {
     requireAuth,
     requireRole("MANAGER"),
     handleCreateTaskTemplate,
+  );
+  app.get(
+    "/api/tasks/templates",
+    requireAuth,
+    requireRole("MANAGER"),
+    handleGetTaskTemplates,
+  );
+  app.patch(
+    "/api/tasks/templates/:templateId",
+    requireAuth,
+    requireRole("MANAGER"),
+    handleUpdateTaskTemplate,
+  );
+  app.delete(
+    "/api/tasks/templates/:templateId",
+    requireAuth,
+    requireRole("MANAGER"),
+    handleDeleteTaskTemplate,
   );
   app.get(
     "/api/manager/dashboard",

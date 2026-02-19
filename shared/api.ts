@@ -44,6 +44,30 @@ export interface SetPasswordResponse {
   user: User;
 }
 
+/** Request payload for POST /api/auth/forgot-password */
+export interface ForgotPasswordRequest {
+  email: string;
+}
+
+/** Response payload for POST /api/auth/forgot-password */
+export interface ForgotPasswordResponse {
+  success: boolean;
+  message: string;
+  expiryHours: number;
+}
+
+/** Request payload for POST /api/auth/reset-password */
+export interface ResetPasswordRequest {
+  token: string;
+  password: string;
+}
+
+/** Response payload for POST /api/auth/reset-password */
+export interface ResetPasswordResponse {
+  success: boolean;
+  user: User;
+}
+
 export interface LoginRequest {
   email: string;
   password: string;
@@ -57,16 +81,17 @@ export interface SignupRequest {
   role: "MANAGER";
 }
 
-// Task types
+// Task types (aligned with backend JSON: description and assignment ids can be null from DB)
 export interface TaskTemplate {
   id: string;
   title: string;
-  description?: string;
-  workstationId?: string;
-  assignedToEmployeeId?: string;
+  description?: string | null;
+  workstationId?: string | null;
+  assignedToEmployeeId?: string | null;
   isRecurring: boolean;
   notifyEmployee: boolean;
   createdAt: string;
+  updatedAt: string;
 }
 
 export interface DailyTask {
@@ -94,6 +119,27 @@ export interface CreateTaskTemplateRequest {
   assignedToEmployeeId?: string;
   isRecurring?: boolean;
   notifyEmployee?: boolean;
+}
+
+export interface UpdateTaskTemplateRequest {
+  title?: string;
+  description?: string | null;
+  workstationId?: string | null;
+  assignedToEmployeeId?: string | null;
+  isRecurring?: boolean;
+  notifyEmployee?: boolean;
+}
+
+export interface TaskTemplateWithRelations extends TaskTemplate {
+  workstation?: {
+    id: string;
+    name: string;
+  } | null;
+  assignedToEmployee?: {
+    id: string;
+    name: string;
+    email: string;
+  } | null;
 }
 
 export interface UpdateDailyTaskRequest {

@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken";
 import bcryptjs from "bcryptjs";
+import crypto from "crypto";
 import { z } from "zod";
 import { parse as parseCookie } from "cookie";
 
@@ -59,6 +60,25 @@ export async function verifyPassword(
   hash: string,
 ): Promise<boolean> {
   return bcryptjs.compare(password, hash);
+}
+
+/** Hash a token using SHA-256 for secure storage */
+export function hashToken(token: string): string {
+  return crypto.createHash("sha256").update(token).digest("hex");
+}
+
+/** Verify a token against a stored hash */
+export function verifyTokenHash(token: string, hash: string): boolean {
+  const tokenHash = hashToken(token);
+  // Use constant-time comparison to prevent timing attacks
+  // Both SHA-256 hashes are 64 hex characters = 32 bytes
+  if (tokenHash.length !== hash.length) {
+    return false;
+  }
+  return crypto.timingSafeEqual(
+    Buffer.from(tokenHash, "hex"),
+    Buffer.from(hash, "hex"),
+  );
 }
 
 export function generateToken(payload: JwtPayload): string {

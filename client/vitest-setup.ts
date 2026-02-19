@@ -1,29 +1,29 @@
 /**
  * Vitest setup for client tests (jsdom).
  *
- * - Extends expect with @testing-library/jest-dom matchers (toBeInTheDocument, toBeDisabled, etc.).
- * - Explicit afterEach(cleanup): Vitest does not run RTL's auto-cleanup by default in our config,
- *   so we call cleanup() to avoid duplicate nodes and cross-test DOM leakage.
- * - MSW lifecycle: listen once, resetHandlers after each test, close at end. Centralized so specs
- *   using MSW don't duplicate beforeAll/afterEach/afterAll.
+ * - Extends expect with @testing-library/jest-dom matchers.
+ * - afterEach(cleanup) for RTL.
+ * - MSW: only started when NOT running server-only (VITEST_SERVER=1). Server specs are run via
+ *   "pnpm test:server" with VITEST_SERVER=1 so they don't load MSW and get real HTTP to the app.
  */
 import "@testing-library/jest-dom/vitest";
 import { beforeAll, afterAll, afterEach } from "vitest";
 import { cleanup } from "@testing-library/react";
-import { server } from "@/test/mocks/server";
 
 afterEach(() => {
   cleanup();
 });
 
-beforeAll(() => {
-  server.listen({ onUnhandledRequest: "warn" });
-});
-
-afterEach(() => {
-  server.resetHandlers();
-});
-
-afterAll(() => {
-  server.close();
-});
+// Only start MSW when running client tests. Server tests use VITEST_SERVER=1 and skip MSW.
+import { server } from "@/test/mocks/server";
+if (process.env.VITEST_SERVER !== "1") {
+  beforeAll(() => {
+    server.listen({ onUnhandledRequest: "warn" });
+  });
+  afterEach(() => {
+    server.resetHandlers();
+  });
+  afterAll(() => {
+    server.close();
+  });
+}

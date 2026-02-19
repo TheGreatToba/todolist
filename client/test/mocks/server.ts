@@ -8,6 +8,7 @@ import {
   managerDashboardHandler,
   workstationsHandler,
   teamMembersHandler,
+  taskTemplatesHandler,
 } from "./handlers";
 
 export const server = setupServer(
@@ -16,4 +17,5 @@ export const server = setupServer(
   managerDashboardHandler,
   workstationsHandler,
   teamMembersHandler,
+  taskTemplatesHandler,
 );

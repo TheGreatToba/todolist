@@ -82,6 +82,17 @@ export function ManagerDashboardHeader({
             <Users className="w-4 h-4 inline mr-2" />
             Employees
           </button>
+          <button
+            onClick={() => onTabChange("templates")}
+            className={`px-4 py-2 font-medium transition border-b-2 ${
+              activeTab === "templates"
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+            type="button"
+          >
+            Templates
+          </button>
         </div>
       </div>
     </div>

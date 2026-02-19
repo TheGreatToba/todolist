@@ -127,15 +127,26 @@ export default function Login() {
             )}
           </button>
 
-          <div className="text-center text-sm text-muted-foreground">
-            Don't have an account?{" "}
-            <button
-              type="button"
-              onClick={() => navigate("/signup")}
-              className="text-primary hover:text-primary/90 font-medium transition"
-            >
-              Create one
-            </button>
+          <div className="space-y-2">
+            <div className="text-center text-sm text-muted-foreground">
+              <button
+                type="button"
+                onClick={() => navigate("/forgot-password")}
+                className="text-primary hover:text-primary/90 font-medium transition"
+              >
+                Forgot your password?
+              </button>
+            </div>
+            <div className="text-center text-sm text-muted-foreground">
+              Don't have an account?{" "}
+              <button
+                type="button"
+                onClick={() => navigate("/signup")}
+                className="text-primary hover:text-primary/90 font-medium transition"
+              >
+                Create one
+              </button>
+            </div>
           </div>
         </form>
 

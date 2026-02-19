@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { todayLocalISO } from "@/lib/date-utils";
 
-export type ManagerTab = "tasks" | "workstations" | "employees";
+export type ManagerTab = "tasks" | "workstations" | "employees" | "templates";
 
 export function useManagerDashboardFilters() {
   const [selectedDate, setSelectedDate] = useState<string>(() =>
