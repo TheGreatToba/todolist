@@ -5,6 +5,12 @@ import type { Server as HttpServer } from "http";
 
 // https://vitejs.dev/config/
 export default defineConfig(() => ({
+  test: {
+    environment: "jsdom",
+    setupFiles: ["./client/vitest-setup.ts"],
+    include: ["client/**/*.spec.{ts,tsx}", "server/**/*.spec.ts"],
+    pool: "forks",
+  },
   server: {
     host: "::",
     port: 8080,

@@ -2,6 +2,8 @@
 
 SaaS de gestion de tâches quotidiennes par poste de travail. Les employés suivent une checklist sur mobile, les managers supervisent en temps réel.
 
+**CI** : `pnpm run ci` (gate complet) · `pnpm test:client` (tests frontend) — voir [Signaux CI / commandes de test](#signaux-ci--commandes-de-test).
+
 ## Prérequis
 
 - Node.js 18+
@@ -195,16 +197,26 @@ Configurez un cron (cron-job.org, GitHub Actions, ou crontab) pour appeler cet e
 
 Sans ces variables, `createApp()` et les specs qui utilisent la base peuvent échouer. En local, un `cp .env.example .env` suffit. Pour les tests d'API (auth, permissions, tâches), exécuter une fois `pnpm seed` pour disposer des comptes de démo (mgr@test.com, emp@test.com).
 
+### Signaux CI / commandes de test
+
+| Commande               | Rôle                                                                                                                                                               |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **`pnpm run ci`**      | **Gate principal** : typecheck + seed + **suite complète** (client + serveur). Utilisé en CI pour ne pas masquer les régressions backend. À lancer avant un merge. |
+| **`pnpm test:client`** | **Tests frontend uniquement** (Vitest, sous `client/`). Plus rapide, utile pour le feedback pendant le dev ou un job CI dédié. Ne remplace pas le gate global.     |
+
+En CI, deux jobs tournent en parallèle : un exécute `pnpm run ci` (gate complet), l’autre `pnpm test:client` (signal frontend rapide). Voir [docs/TESTING.md](docs/TESTING.md) pour les conventions de test.
+
 ## Commandes utiles
 
-| Commande         | Description                              |
-| ---------------- | ---------------------------------------- |
-| `pnpm dev`       | Démarre le serveur de dev                |
-| `pnpm build`     | Build production                         |
-| `pnpm start`     | Lance le serveur production              |
-| `pnpm seed`      | Remplit la base avec des données de démo |
-| `pnpm typecheck` | Vérification TypeScript                  |
-| `pnpm test`      | Exécute les tests (Vitest)               |
+| Commande           | Description                              |
+| ------------------ | ---------------------------------------- |
+| `pnpm dev`         | Démarre le serveur de dev                |
+| `pnpm build`       | Build production                         |
+| `pnpm start`       | Lance le serveur production              |
+| `pnpm seed`        | Remplit la base avec des données de démo |
+| `pnpm typecheck`   | Vérification TypeScript                  |
+| `pnpm test`        | Suite complète (Vitest)                  |
+| `pnpm test:client` | Tests frontend uniquement                |
 
 ## Architecture
 

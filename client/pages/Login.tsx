@@ -69,7 +69,11 @@ export default function Login() {
           className="space-y-5 bg-card rounded-2xl shadow-sm border border-border p-8"
         >
           {(error || localError) && (
-            <div className="bg-destructive/10 border border-destructive/20 rounded-lg px-4 py-3 text-sm text-destructive">
+            <div
+              role="alert"
+              aria-label={error || localError || "Error"}
+              className="bg-destructive/10 border border-destructive/20 rounded-lg px-4 py-3 text-sm text-destructive"
+            >
               {error || localError}
             </div>
           )}
