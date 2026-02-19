@@ -105,7 +105,7 @@ export function createApp(): Express {
             "'unsafe-inline'",
             "https://fonts.googleapis.com",
           ],
-          fontSrc: ["'self'", "https://fonts.gstatic.com"],
+          fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
           imgSrc: ["'self'", "data:", "blob:"],
           connectSrc: ["'self'", "ws:", "wss:"],
           frameAncestors: ["'self'"],
