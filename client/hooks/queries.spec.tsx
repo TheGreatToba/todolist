@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, cleanup } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React from "react";
@@ -32,6 +32,7 @@ function createWrapper() {
 
 describe("useUpdateDailyTaskMutation", () => {
   beforeEach(() => {
+    cleanup();
     vi.clearAllMocks();
     mockFetchWithCsrf.mockResolvedValue(
       new Response(
@@ -81,10 +82,43 @@ describe("useUpdateDailyTaskMutation", () => {
       queryKey: queryKeys.tasks.dailyPrefix,
     });
   });
+
+  it("on non-OK response does not invalidate and propagates error", async () => {
+    mockFetchWithCsrf.mockResolvedValue(
+      new Response(JSON.stringify({ error: "Forbidden" }), {
+        status: 403,
+        headers: { "Content-Type": "application/json" },
+      }) as Response,
+    );
+    const { invalidateSpy, wrapper } = createWrapper();
+
+    function ToggleTaskTest() {
+      const mutation = useUpdateDailyTaskMutation();
+      return (
+        <button
+          onClick={() => mutation.mutate({ taskId: "dt1", isCompleted: true })}
+        >
+          Toggle
+        </button>
+      );
+    }
+
+    render(<ToggleTaskTest />, { wrapper });
+    await userEvent.click(screen.getByRole("button", { name: /toggle/i }));
+
+    await waitFor(() => {
+      expect(mockFetchWithCsrf).toHaveBeenCalledWith(
+        "/api/tasks/daily/dt1",
+        expect.any(Object),
+      );
+    });
+    expect(invalidateSpy).not.toHaveBeenCalled();
+  });
 });
 
 describe("useCreateWorkstationMutation", () => {
   beforeEach(() => {
+    cleanup();
     vi.clearAllMocks();
     mockFetchWithCsrf.mockResolvedValue(
       new Response(JSON.stringify({ id: "ws1", name: "New WS" }), {
@@ -127,5 +161,35 @@ describe("useCreateWorkstationMutation", () => {
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: queryKeys.manager.dashboardPrefix,
     });
+  });
+
+  it("on non-OK response does not invalidate and propagates error", async () => {
+    mockFetchWithCsrf.mockResolvedValue(
+      new Response(JSON.stringify({ error: "Duplicate name" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      }) as Response,
+    );
+    const { invalidateSpy, wrapper } = createWrapper();
+
+    function CreateWorkstationTest() {
+      const mutation = useCreateWorkstationMutation();
+      return (
+        <button onClick={() => mutation.mutate({ name: "New WS" })}>
+          Create
+        </button>
+      );
+    }
+
+    render(<CreateWorkstationTest />, { wrapper });
+    await userEvent.click(screen.getByRole("button", { name: /create/i }));
+
+    await waitFor(() => {
+      expect(mockFetchWithCsrf).toHaveBeenCalledWith(
+        "/api/workstations",
+        expect.any(Object),
+      );
+    });
+    expect(invalidateSpy).not.toHaveBeenCalled();
   });
 });
