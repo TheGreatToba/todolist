@@ -2,7 +2,7 @@ import crypto from "crypto";
 import { RequestHandler } from "express";
 import { z } from "zod";
 import prisma from "../lib/db";
-import { hashPassword } from "../lib/auth";
+import { hashPassword, hashToken } from "../lib/auth";
 import { sendErrorResponse } from "../lib/errors";
 import { logger } from "../lib/logger";
 import { getAuthOrThrow } from "../middleware/requireAuth";
@@ -204,6 +204,7 @@ export const handleCreateEmployee: RequestHandler = async (req, res) => {
     const passwordHash = await hashPassword(placeholderPassword);
 
     const setPasswordToken = generateSecureToken();
+    const setPasswordTokenHash = hashToken(setPasswordToken);
     const expiryHours = getSetPasswordTokenExpiryHours();
     const expiresAt = new Date();
     expiresAt.setHours(expiresAt.getHours() + expiryHours);
@@ -225,7 +226,7 @@ export const handleCreateEmployee: RequestHandler = async (req, res) => {
           },
           setPasswordToken: {
             create: {
-              token: setPasswordToken,
+              tokenHash: setPasswordTokenHash,
               expiresAt,
             },
           },

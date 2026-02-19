@@ -327,9 +327,10 @@ function generateSecureToken(): string {
 export const handleSetPassword: RequestHandler = async (req, res) => {
   try {
     const body = SetPasswordSchema.parse(req.body);
+    const tokenHash = hashToken(body.token);
 
     const record = await prisma.setPasswordToken.findUnique({
-      where: { token: body.token },
+      where: { tokenHash },
       include: { user: true },
     });
 
