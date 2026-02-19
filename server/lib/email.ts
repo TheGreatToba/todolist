@@ -63,20 +63,20 @@ export async function sendSetPasswordEmail(
     const transporter = await getTransporter();
 
     const mailOptions = {
-      from: process.env.EMAIL_FROM || "noreply@taskflow.local",
+      from: process.env.EMAIL_FROM || "noreply@tastycrousty.local",
       to: employeeEmail,
-      subject: "Welcome to TaskFlow - Set Your Password",
+      subject: "Welcome to Tasty Crousty - Set Your Password",
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <div style="background-color: #0066cc; color: white; padding: 20px; border-radius: 8px 8px 0 0;">
-            <h1 style="margin: 0; font-size: 24px;">Welcome to TaskFlow</h1>
+          <div style="background-color: #e91e8c; color: white; padding: 20px; border-radius: 8px 8px 0 0;">
+            <h1 style="margin: 0; font-size: 24px;">Welcome to Tasty Crousty</h1>
           </div>
           <div style="border: 1px solid #ddd; border-top: none; padding: 20px; border-radius: 0 0 8px 8px;">
             <p>Hi ${escapeHtml(employeeName)},</p>
-            <p>Your manager has created a TaskFlow account for you. Click the button below to set your password and activate your account:</p>
+            <p>Your manager has created a Tasty Crousty account for you. Click the button below to set your password and activate your account:</p>
 
             <div style="text-align: center; margin: 24px 0;">
-              <a href="${escapeHtml(setPasswordLink)}" style="display: inline-block; padding: 12px 24px; background-color: #0066cc; color: white; text-decoration: none; border-radius: 6px; font-weight: bold;">Set my password</a>
+              <a href="${escapeHtml(setPasswordLink)}" style="display: inline-block; padding: 12px 24px; background-color: #e91e8c; color: white; text-decoration: none; border-radius: 6px; font-weight: bold;">Set my password</a>
             </div>
 
             <p style="font-size: 13px; color: #666;">Or copy this link into your browser:</p>
@@ -126,24 +126,24 @@ export async function sendTaskAssignmentEmail(
     const transporter = await getTransporter();
 
     const mailOptions = {
-      from: process.env.EMAIL_FROM || "noreply@taskflow.local",
+      from: process.env.EMAIL_FROM || "noreply@tastycrousty.local",
       to: employeeEmail,
-      subject: "New Task Assigned in TaskFlow",
+      subject: "New Task Assigned in Tasty Crousty",
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <div style="background-color: #0066cc; color: white; padding: 20px; border-radius: 8px 8px 0 0;">
+          <div style="background-color: #e91e8c; color: white; padding: 20px; border-radius: 8px 8px 0 0;">
             <h1 style="margin: 0; font-size: 24px;">New Task Assigned</h1>
           </div>
           <div style="border: 1px solid #ddd; border-top: none; padding: 20px; border-radius: 0 0 8px 8px;">
             <p>Hi ${escapeHtml(employeeName)},</p>
             <p>You have been assigned a new task:</p>
 
-            <div style="background-color: #f5f5f5; padding: 15px; border-radius: 4px; margin: 20px 0;">
-              <h3 style="margin: 0 0 10px 0; color: #0066cc;">${escapeHtml(taskTitle)}</h3>
+            <div style="background-color: #fce4ec; padding: 15px; border-radius: 4px; margin: 20px 0;">
+              <h3 style="margin: 0 0 10px 0; color: #e91e8c;">${escapeHtml(taskTitle)}</h3>
               ${taskDescription ? `<p style="margin: 0; color: #666;">${escapeHtml(taskDescription)}</p>` : ""}
             </div>
 
-            <p>Please log in to your TaskFlow dashboard to view and complete this task.</p>
+            <p>Please log in to your Tasty Crousty dashboard to view and complete this task.</p>
 
             <p style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 12px; color: #666;">
               This is an automated message. Please do not reply to this email.
@@ -182,20 +182,20 @@ export async function sendPasswordResetEmail(
     const transporter = await getTransporter();
 
     const mailOptions = {
-      from: process.env.EMAIL_FROM || "noreply@taskflow.local",
+      from: process.env.EMAIL_FROM || "noreply@tastycrousty.local",
       to: userEmail,
-      subject: "TaskFlow - Reset Your Password",
+      subject: "Tasty Crousty - Reset Your Password",
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <div style="background-color: #0066cc; color: white; padding: 20px; border-radius: 8px 8px 0 0;">
+          <div style="background-color: #e91e8c; color: white; padding: 20px; border-radius: 8px 8px 0 0;">
             <h1 style="margin: 0; font-size: 24px;">Password Reset Request</h1>
           </div>
           <div style="border: 1px solid #ddd; border-top: none; padding: 20px; border-radius: 0 0 8px 8px;">
             <p>Hi ${escapeHtml(userName)},</p>
-            <p>We received a request to reset your password for your TaskFlow account. Click the button below to reset your password:</p>
+            <p>We received a request to reset your password for your Tasty Crousty account. Click the button below to reset your password:</p>
 
             <div style="text-align: center; margin: 24px 0;">
-              <a href="${escapeHtml(resetLink)}" style="display: inline-block; padding: 12px 24px; background-color: #0066cc; color: white; text-decoration: none; border-radius: 6px; font-weight: bold;">Reset my password</a>
+              <a href="${escapeHtml(resetLink)}" style="display: inline-block; padding: 12px 24px; background-color: #e91e8c; color: white; text-decoration: none; border-radius: 6px; font-weight: bold;">Reset my password</a>
             </div>
 
             <p style="font-size: 13px; color: #666;">Or copy this link into your browser:</p>
@@ -238,7 +238,7 @@ export default async function sendEmail(
   try {
     const transporter = await getTransporter();
     const info = await transporter.sendMail({
-      from: process.env.EMAIL_FROM || "noreply@taskflow.local",
+      from: process.env.EMAIL_FROM || "noreply@tastycrousty.local",
       to,
       subject,
       text,

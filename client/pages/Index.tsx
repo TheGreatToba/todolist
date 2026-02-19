@@ -29,22 +29,14 @@ export default function Home() {
       <nav className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="inline-flex items-center justify-center w-10 h-10 rounded-lg bg-primary/15">
-              <svg
-                className="w-6 h-6 text-primary"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
-                />
-              </svg>
-            </div>
-            <h1 className="text-2xl font-bold text-foreground">TaskFlow</h1>
+            <img
+              src="/logo.png"
+              alt="Tasty Crousty"
+              className="h-10 w-auto object-contain"
+            />
+            <h1 className="text-2xl font-bold text-foreground">
+              Tasty Crousty
+            </h1>
           </div>
           <div className="flex items-center gap-3">
             <button
@@ -321,7 +313,8 @@ export default function Home() {
           Ready to get started?
         </h2>
         <p className="text-lg text-muted-foreground mb-8">
-          Join teams already using TaskFlow to manage daily tasks efficiently.
+          Join teams already using Tasty Crousty to manage daily tasks
+          efficiently.
         </p>
 
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -343,7 +336,7 @@ export default function Home() {
       {/* Footer */}
       <footer className="bg-card border-t border-border py-8 mt-12">
         <div className="max-w-6xl mx-auto px-4 text-center text-muted-foreground text-sm">
-          <p>&copy; 2025 TaskFlow. All rights reserved.</p>
+          <p>&copy; 2025 Tasty Crousty. All rights reserved.</p>
         </div>
       </footer>
     </div>

@@ -54,11 +54,11 @@ describe("Index (Home)", () => {
     });
   });
 
-  it("renders TaskFlow branding and hero when user is not logged in", () => {
+  it("renders Tasty Crousty branding and hero when user is not logged in", () => {
     const { view } = renderIndex();
 
     expect(
-      view.getByRole("heading", { name: /taskflow/i }),
+      view.getByRole("heading", { name: /tasty crousty/i }),
     ).toBeInTheDocument();
     expect(
       view.getByRole("heading", {

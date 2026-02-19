@@ -55,11 +55,11 @@ describe("Login", () => {
     });
   });
 
-  it("renders TaskFlow title and login form", () => {
+  it("renders Tasty Crousty title and login form", () => {
     const { view } = renderLogin();
 
     expect(
-      view.getByRole("heading", { name: /taskflow/i }),
+      view.getByRole("heading", { name: /tasty crousty/i }),
     ).toBeInTheDocument();
     expect(view.getByRole("textbox", { name: /email/i })).toBeInTheDocument();
     expect(view.getByLabelText(/password/i)).toBeInTheDocument();

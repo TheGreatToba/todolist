@@ -82,7 +82,7 @@ export default function SetPassword() {
             Set your password
           </h1>
           <p className="text-muted-foreground">
-            Create a secure password for your TaskFlow account
+            Create a secure password for your Tasty Crousty account
           </p>
         </div>
 
