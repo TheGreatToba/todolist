@@ -53,9 +53,15 @@ const UpdateTaskTemplateSchema = z
     return true;
   }, "Either workstationId or assignedToEmployeeId must be provided");
 
-const UpdateDailyTaskSchema = z.object({
-  isCompleted: z.boolean(),
-});
+const UpdateDailyTaskSchema = z
+  .object({
+    isCompleted: z.boolean().optional(),
+    employeeId: z.string().min(1).optional(),
+  })
+  .refine(
+    (data) => data.isCompleted !== undefined || data.employeeId !== undefined,
+    "Either isCompleted or employeeId must be provided",
+  );
 
 // Get all daily tasks for an employee on a specific date
 export const handleGetEmployeeDailyTasks: RequestHandler = async (req, res) => {
@@ -64,7 +70,7 @@ export const handleGetEmployeeDailyTasks: RequestHandler = async (req, res) => {
     if (!payload) return;
     const query = req.query as Record<string, unknown>;
     const parsedDate = parseDateQueryParam(query.date, query);
-    if (!parsedDate.success) {
+    if ("error" in parsedDate) {
       res.status(400).json({ error: parsedDate.error });
       return;
     }
@@ -124,17 +130,102 @@ export const handleUpdateDailyTask: RequestHandler = async (req, res) => {
       return;
     }
 
-    if (task.employeeId !== payload.userId) {
+    const taskEmployee = await prisma.user.findUnique({
+      where: { id: task.employeeId },
+      select: { teamId: true },
+    });
+    if (!taskEmployee?.teamId) {
+      res.status(404).json({ error: "Task employee not found" });
+      return;
+    }
+
+    let managerTeamIds = new Set<string>();
+    let isManagerOfTaskTeam = false;
+    if (payload.role === "MANAGER") {
+      managerTeamIds = new Set(await getManagerTeamIds(payload.userId));
+      isManagerOfTaskTeam = managerTeamIds.has(taskEmployee.teamId);
+    }
+    const isTaskOwner = task.employeeId === payload.userId;
+
+    if (
+      body.isCompleted !== undefined &&
+      !isTaskOwner &&
+      !isManagerOfTaskTeam
+    ) {
       res.status(403).json({ error: "Forbidden" });
       return;
     }
 
+    if (body.employeeId !== undefined) {
+      if (!isManagerOfTaskTeam) {
+        res.status(403).json({ error: "Forbidden" });
+        return;
+      }
+
+      const targetEmployee = await prisma.user.findUnique({
+        where: { id: body.employeeId },
+        select: { id: true, role: true, teamId: true },
+      });
+      if (
+        !targetEmployee ||
+        targetEmployee.role !== "EMPLOYEE" ||
+        !targetEmployee.teamId
+      ) {
+        res.status(404).json({ error: "Employee not found" });
+        return;
+      }
+      if (
+        !managerTeamIds.has(targetEmployee.teamId) ||
+        targetEmployee.teamId !== taskEmployee.teamId
+      ) {
+        res.status(403).json({ error: "Forbidden" });
+        return;
+      }
+
+      if (body.employeeId !== task.employeeId) {
+        const existing = await prisma.dailyTask.findFirst({
+          where: {
+            id: { not: task.id },
+            taskTemplateId: task.taskTemplateId,
+            employeeId: body.employeeId,
+            date: {
+              gte: new Date(new Date(task.date).setHours(0, 0, 0, 0)),
+              lt: new Date(new Date(task.date).setHours(24, 0, 0, 0)),
+            },
+          },
+          select: { id: true },
+        });
+        if (existing) {
+          res.status(409).json({
+            error:
+              "This employee already has this task template assigned for the same date.",
+            code: "CONFLICT",
+          });
+          return;
+        }
+      }
+    }
+
+    const updateData: {
+      isCompleted?: boolean;
+      completedAt?: Date | null;
+      employeeId?: string;
+    } = {};
+    if (body.isCompleted !== undefined) {
+      updateData.isCompleted = body.isCompleted;
+      updateData.completedAt = body.isCompleted ? new Date() : null;
+    }
+    if (body.employeeId !== undefined) {
+      updateData.employeeId = body.employeeId;
+      if (body.employeeId !== task.employeeId && task.isCompleted) {
+        updateData.isCompleted = false;
+        updateData.completedAt = null;
+      }
+    }
+
     const updatedTask = await prisma.dailyTask.update({
       where: { id: taskId },
-      data: {
-        isCompleted: body.isCompleted,
-        completedAt: body.isCompleted ? new Date() : null,
-      },
+      data: updateData,
       include: {
         taskTemplate: {
           select: {
@@ -257,73 +348,84 @@ export const handleCreateTaskTemplate: RequestHandler = async (req, res) => {
       },
     });
 
-    // If recurring, create daily tasks
-    if (body.isRecurring) {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const employees: string[] = [];
+    // Create today's daily tasks immediately for recurring and one-shot templates.
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const employees: string[] = [];
 
-      // If assigned to specific employee, create task only for them
-      if (body.assignedToEmployeeId) {
-        employees.push(body.assignedToEmployeeId);
-      } else if (body.workstationId) {
-        // If assigned to workstation, create tasks for all employees in that workstation
-        const employeeWorkstations = await prisma.employeeWorkstation.findMany({
-          where: {
-            workstationId: body.workstationId,
+    // If assigned to specific employee, create task only for them
+    if (body.assignedToEmployeeId) {
+      employees.push(body.assignedToEmployeeId);
+    } else if (body.workstationId) {
+      // If assigned to workstation, create tasks for all employees in that workstation
+      const employeeWorkstations = await prisma.employeeWorkstation.findMany({
+        where: {
+          workstationId: body.workstationId,
+        },
+        select: {
+          employeeId: true,
+        },
+      });
+      employees.push(...employeeWorkstations.map((ew) => ew.employeeId));
+    }
+
+    // Create daily tasks for each employee
+    for (const employeeId of employees) {
+      const existing = await prisma.dailyTask.findFirst({
+        where: {
+          taskTemplateId: taskTemplate.id,
+          employeeId,
+          date: {
+            gte: today,
+            lt: new Date(today.getTime() + 24 * 60 * 60 * 1000),
           },
-          select: {
-            employeeId: true,
-          },
+        },
+        select: { id: true },
+      });
+      if (existing) continue;
+
+      await prisma.dailyTask.create({
+        data: {
+          taskTemplateId: taskTemplate.id,
+          employeeId,
+          date: today,
+          isCompleted: false,
+        },
+      });
+
+      // Send notification if enabled
+      if (body.notifyEmployee) {
+        const employee = await prisma.user.findUnique({
+          where: { id: employeeId },
+          select: { email: true, name: true },
         });
-        employees.push(...employeeWorkstations.map((ew) => ew.employeeId));
-      }
 
-      // Create daily tasks for each employee
-      for (const employeeId of employees) {
-        await prisma.dailyTask.create({
-          data: {
-            taskTemplateId: taskTemplate.id,
-            employeeId,
-            date: today,
-            isCompleted: false,
-          },
-        });
+        if (employee) {
+          // Emit socket event to the assigned employee only
+          const io = getIO();
+          if (io) {
+            io.to(`user:${employeeId}`).emit("task:assigned", {
+              taskId: taskTemplate.id,
+              employeeId,
+              employeeName: employee.name,
+              taskTitle: body.title,
+              taskDescription: body.description,
+            });
+          }
 
-        // Send notification if enabled
-        if (body.notifyEmployee) {
-          const employee = await prisma.user.findUnique({
-            where: { id: employeeId },
-            select: { email: true, name: true },
-          });
-
-          if (employee) {
-            // Emit socket event to the assigned employee only
-            const io = getIO();
-            if (io) {
-              io.to(`user:${employeeId}`).emit("task:assigned", {
-                taskId: taskTemplate.id,
-                employeeId,
-                employeeName: employee.name,
-                taskTitle: body.title,
-                taskDescription: body.description,
-              });
-            }
-
-            // Send email notification (optional, using nodemailer if available)
-            try {
-              const { sendTaskAssignmentEmail } = await import("../lib/email");
-              await sendTaskAssignmentEmail(
-                employee.email,
-                employee.name,
-                body.title,
-                body.description,
-              );
-            } catch {
-              logger.info(
-                "Email notification skipped (email service not available)",
-              );
-            }
+          // Send email notification (optional, using nodemailer if available)
+          try {
+            const { sendTaskAssignmentEmail } = await import("../lib/email");
+            await sendTaskAssignmentEmail(
+              employee.email,
+              employee.name,
+              body.title,
+              body.description,
+            );
+          } catch {
+            logger.info(
+              "Email notification skipped (email service not available)",
+            );
           }
         }
       }
@@ -726,7 +828,7 @@ export const handleDailyTaskAssignment: RequestHandler = async (req, res) => {
     // Secret is already verified by middleware, proceed directly to date validation
     const query = req.query as Record<string, unknown>;
     const parsedDate = parseDateQueryParam(query.date, query);
-    if (!parsedDate.success) {
+    if ("error" in parsedDate) {
       res.status(400).json({ error: parsedDate.error });
       return;
     }
@@ -754,7 +856,7 @@ export const handleGetManagerDashboard: RequestHandler = async (req, res) => {
     const payload = getAuthOrThrow(req, res);
     if (!payload) return;
     const parsedQuery = parseManagerDashboardQuery(req.query);
-    if (!parsedQuery.success) {
+    if ("error" in parsedQuery) {
       res.status(400).json({ error: parsedQuery.error });
       return;
     }

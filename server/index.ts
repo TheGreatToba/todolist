@@ -28,6 +28,7 @@ import {
   handleSignup,
   handleLogin,
   handleProfile,
+  handleUpdateProfile,
   handleLogout,
   handleSetPassword,
   handleForgotPassword,
@@ -50,6 +51,7 @@ import {
   handleDeleteWorkstation,
   handleGetTeamMembers,
   handleUpdateEmployeeWorkstations,
+  handleUpdateWorkstationEmployees,
 } from "./routes/workstations";
 
 export function createApp(): Express {
@@ -200,6 +202,7 @@ export function createApp(): Express {
   app.post("/api/auth/signup", authLimiter, handleSignup);
   app.post("/api/auth/login", authLimiter, handleLogin);
   app.get("/api/auth/profile", requireAuth, handleProfile);
+  app.patch("/api/auth/profile", requireAuth, handleUpdateProfile);
   app.post("/api/auth/logout", handleLogout);
   app.post("/api/auth/set-password", setPasswordLimiter, handleSetPassword);
   app.post("/api/auth/forgot-password", authLimiter, handleForgotPassword);
@@ -265,6 +268,12 @@ export function createApp(): Express {
     requireAuth,
     requireRole("MANAGER"),
     handleDeleteWorkstation,
+  );
+  app.patch(
+    "/api/workstations/:workstationId/employees",
+    requireAuth,
+    requireRole("MANAGER"),
+    handleUpdateWorkstationEmployees,
   );
 
   // Employee management routes (rate-limited)

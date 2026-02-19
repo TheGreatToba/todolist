@@ -13,12 +13,16 @@ import type {
   ManagerDashboard as ManagerDashboardType,
   DailyTask,
   ProfileResponse,
+  UpdateProfileRequest,
+  UpdateProfileResponse,
+  UpdateDailyTaskRequest,
   User,
   TeamMember,
   ForgotPasswordResponse,
   ResetPasswordResponse,
   TaskTemplateWithRelations,
   UpdateTaskTemplateRequest,
+  UpdateWorkstationEmployeesRequest,
 } from "@shared/api";
 import { api, fetchWithCsrf, parseApiError } from "@/lib/api";
 
@@ -196,7 +200,7 @@ export function useUpdateDailyTaskMutation(
   options?: UseMutationOptions<
     DailyTask,
     Error,
-    { taskId: string; isCompleted: boolean }
+    { taskId: string } & UpdateDailyTaskRequest
   >,
 ) {
   const queryClient = useQueryClient();
@@ -204,15 +208,19 @@ export function useUpdateDailyTaskMutation(
     mutationFn: async ({
       taskId,
       isCompleted,
+      employeeId,
     }: {
       taskId: string;
-      isCompleted: boolean;
+      isCompleted?: boolean;
+      employeeId?: string;
     }) => {
-      // Caller passes the new desired value (e.g. !current)
       const res = await fetchWithCsrf(`/api/tasks/daily/${taskId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isCompleted }),
+        body: JSON.stringify({
+          ...(isCompleted !== undefined ? { isCompleted } : {}),
+          ...(employeeId !== undefined ? { employeeId } : {}),
+        }),
       });
       if (!res.ok)
         throw new Error(await res.text().catch(() => res.statusText));
@@ -221,6 +229,33 @@ export function useUpdateDailyTaskMutation(
     ...options,
     onSuccess: (data, variables, ctx) => {
       queryClient.invalidateQueries({ queryKey: queryKeys.tasks.dailyPrefix });
+      options?.onSuccess?.(data, variables, ctx);
+    },
+  });
+}
+
+export function useUpdateProfileMutation(
+  options?: UseMutationOptions<
+    UpdateProfileResponse,
+    Error,
+    UpdateProfileRequest
+  >,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: UpdateProfileRequest) => {
+      const res = await fetchWithCsrf("/api/auth/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to update profile");
+      return data as UpdateProfileResponse;
+    },
+    ...options,
+    onSuccess: (data, variables, ctx) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.auth.profile });
       options?.onSuccess?.(data, variables, ctx);
     },
   });
@@ -277,6 +312,52 @@ export function useDeleteWorkstationMutation(
     onSuccess: (data, variables, ctx) => {
       queryClient.invalidateQueries({
         queryKey: queryKeys.manager.workstations,
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.manager.dashboardPrefix,
+      });
+      options?.onSuccess?.(data, variables, ctx);
+    },
+  });
+}
+
+export function useUpdateWorkstationEmployeesMutation(
+  options?: UseMutationOptions<
+    WorkstationWithEmployees,
+    Error,
+    { workstationId: string } & UpdateWorkstationEmployeesRequest
+  >,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      workstationId,
+      employeeIds,
+    }: {
+      workstationId: string;
+      employeeIds: string[];
+    }) => {
+      const res = await fetchWithCsrf(
+        `/api/workstations/${workstationId}/employees`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ employeeIds }),
+        },
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to update workstation employees");
+      }
+      return data as WorkstationWithEmployees;
+    },
+    ...options,
+    onSuccess: (data, variables, ctx) => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.manager.workstations,
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.manager.teamMembers,
       });
       queryClient.invalidateQueries({
         queryKey: queryKeys.manager.dashboardPrefix,
@@ -377,6 +458,7 @@ export function useCreateTaskTemplateMutation(
       assignedToEmployeeId?: string;
       assignmentType: "workstation" | "employee";
       notifyEmployee: boolean;
+      isRecurring?: boolean;
     }
   >,
 ) {
@@ -389,11 +471,13 @@ export function useCreateTaskTemplateMutation(
       assignedToEmployeeId?: string;
       assignmentType: "workstation" | "employee";
       notifyEmployee: boolean;
+      isRecurring?: boolean;
     }) => {
       const body = {
         title: payload.title,
         description: payload.description,
         notifyEmployee: payload.notifyEmployee,
+        isRecurring: payload.isRecurring,
         ...(payload.assignmentType === "workstation" && {
           workstationId: payload.workstationId,
         }),

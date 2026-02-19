@@ -6,12 +6,14 @@ interface TemplatesTabProps {
   templates: TaskTemplateWithRelations[];
   onEdit: (template: TaskTemplateWithRelations) => void;
   onDelete: (templateId: string) => void;
+  onCreateTemplate: () => void;
 }
 
 export function TemplatesTab({
   templates,
   onEdit,
   onDelete,
+  onCreateTemplate,
 }: TemplatesTabProps) {
   const handleDelete = (templateId: string, title: string) => {
     if (
@@ -26,9 +28,16 @@ export function TemplatesTab({
   return (
     <div>
       <div className="mb-6">
-        <h2 className="text-xl font-bold text-foreground mb-4">
-          Task Templates
-        </h2>
+        <div className="flex items-center justify-between gap-4 mb-4">
+          <h2 className="text-xl font-bold text-foreground">Task Templates</h2>
+          <button
+            type="button"
+            onClick={onCreateTemplate}
+            className="px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-medium transition text-sm"
+          >
+            Create template
+          </button>
+        </div>
         <p className="text-sm text-muted-foreground mb-4">
           Manage your task templates. Templates define recurring tasks that are
           automatically assigned to employees.
@@ -37,9 +46,14 @@ export function TemplatesTab({
 
       {templates.length === 0 ? (
         <div className="text-center py-12 bg-card rounded-xl border border-border">
-          <p className="text-muted-foreground">
-            No task templates yet. Create one from the Tasks tab.
-          </p>
+          <p className="text-muted-foreground mb-4">No task templates yet.</p>
+          <button
+            type="button"
+            onClick={onCreateTemplate}
+            className="px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-medium transition text-sm"
+          >
+            Create your first template
+          </button>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

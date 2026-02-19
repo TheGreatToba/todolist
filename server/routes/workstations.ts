@@ -43,6 +43,14 @@ const UpdateEmployeeWorkstationsSchema = z.object({
     }),
 });
 
+const UpdateWorkstationEmployeesSchema = z.object({
+  employeeIds: z
+    .array(z.string())
+    .refine((ids) => new Set(ids).size === ids.length, {
+      message: "employeeIds must not contain duplicates",
+    }),
+});
+
 // Get all workstations used by the manager's teams (all managed teams)
 export const handleGetWorkstations: RequestHandler = async (req, res) => {
   try {
@@ -509,6 +517,103 @@ export const handleUpdateEmployeeWorkstations: RequestHandler = async (
       email: updatedEmployee.email,
       workstations,
     });
+  } catch (error) {
+    sendErrorResponse(res, error, req);
+  }
+};
+
+export const handleUpdateWorkstationEmployees: RequestHandler = async (
+  req,
+  res,
+) => {
+  try {
+    const payload = getAuthOrThrow(req, res);
+    if (!payload) return;
+    const workstationId = paramString(req.params.workstationId);
+    if (!workstationId) {
+      res.status(400).json({ error: "Invalid workstation ID" });
+      return;
+    }
+
+    const body = UpdateWorkstationEmployeesSchema.parse(req.body);
+    const managerTeamIds = await getManagerTeamIds(payload.userId);
+    if (managerTeamIds.length === 0) {
+      res.status(404).json({ error: "Team not found" });
+      return;
+    }
+
+    const workstation = await prisma.workstation.findUnique({
+      where: { id: workstationId },
+      select: { id: true, teamId: true },
+    });
+
+    if (
+      !workstation ||
+      !workstation.teamId ||
+      !managerTeamIds.includes(workstation.teamId)
+    ) {
+      res.status(404).json({ error: "Workstation not found" });
+      return;
+    }
+
+    const employees = await prisma.user.findMany({
+      where: { id: { in: body.employeeIds } },
+      select: { id: true, role: true, teamId: true },
+    });
+
+    if (employees.length !== body.employeeIds.length) {
+      res.status(400).json({ error: "One or more employees not found" });
+      return;
+    }
+
+    const validEmployees = employees.every(
+      (employee) =>
+        employee.role === "EMPLOYEE" &&
+        employee.teamId === workstation.teamId &&
+        employee.teamId !== null &&
+        managerTeamIds.includes(employee.teamId),
+    );
+    if (!validEmployees) {
+      res.status(403).json({
+        error: "One or more employees do not belong to your managed team.",
+      });
+      return;
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.employeeWorkstation.deleteMany({
+        where: { workstationId },
+      });
+
+      if (body.employeeIds.length > 0) {
+        await tx.employeeWorkstation.createMany({
+          data: body.employeeIds.map((employeeId) => ({
+            workstationId,
+            employeeId,
+          })),
+        });
+      }
+    });
+
+    const updatedWorkstation = await prisma.workstation.findUnique({
+      where: { id: workstationId },
+      include: {
+        employees: {
+          where: { employee: { teamId: workstation.teamId } },
+          include: {
+            employee: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    res.json(updatedWorkstation);
   } catch (error) {
     sendErrorResponse(res, error, req);
   }

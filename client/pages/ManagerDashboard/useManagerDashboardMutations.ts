@@ -31,6 +31,7 @@ export const initialNewTask = {
   assignedToEmployeeId: "",
   assignmentType: "workstation" as "workstation" | "employee",
   notifyEmployee: true,
+  isRecurring: true,
 };
 
 export const initialNewEmployee = {

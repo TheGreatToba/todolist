@@ -93,6 +93,20 @@ const LoginSchema = z.object({
   password: z.string(),
 });
 
+const UpdateProfileSchema = z
+  .object({
+    name: z.string().min(1).optional(),
+    email: z.string().email().optional(),
+    password: z.string().min(6).optional(),
+  })
+  .refine(
+    (data) =>
+      data.name !== undefined ||
+      data.email !== undefined ||
+      data.password !== undefined,
+    "At least one field must be provided",
+  );
+
 export const handleSignup: RequestHandler = async (req, res) => {
   try {
     const body = SignupSchema.parse(req.body);
@@ -225,6 +239,77 @@ export const handleProfile: RequestHandler = async (req, res) => {
 
     res.json({ user });
   } catch (error) {
+    sendErrorResponse(res, error, req);
+  }
+};
+
+export const handleUpdateProfile: RequestHandler = async (req, res) => {
+  try {
+    const payload = getAuthOrThrow(req, res);
+    if (!payload) return;
+    const body = UpdateProfileSchema.parse(req.body);
+
+    const currentUser = await prisma.user.findUnique({
+      where: { id: payload.userId },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+      },
+    });
+
+    if (!currentUser) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+
+    const nextPasswordHash =
+      body.password !== undefined
+        ? await hashPassword(body.password)
+        : undefined;
+
+    const user = await prisma.user.update({
+      where: { id: payload.userId },
+      data: {
+        ...(body.name !== undefined ? { name: body.name } : {}),
+        ...(body.email !== undefined ? { email: body.email } : {}),
+        ...(nextPasswordHash !== undefined
+          ? { passwordHash: nextPasswordHash }
+          : {}),
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        teamId: true,
+      },
+    });
+
+    if (body.email !== undefined && body.email !== currentUser.email) {
+      const token = createTokenOrFail(req, res, {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+      });
+      if (!token) return;
+      res.cookie(AUTH_COOKIE_NAME, token, getAuthCookieOptions());
+    }
+
+    res.json({ user });
+  } catch (error) {
+    const prismaError = error as { code?: string; meta?: unknown };
+    const targets = getP2002TargetFields(prismaError);
+    const isEmailUniqueViolation =
+      prismaError?.code === "P2002" &&
+      targets.some((t) => t.toLowerCase().includes("email"));
+
+    if (isEmailUniqueViolation) {
+      res
+        .status(409)
+        .json({ error: "Email already registered", code: "CONFLICT" });
+      return;
+    }
     sendErrorResponse(res, error, req);
   }
 };

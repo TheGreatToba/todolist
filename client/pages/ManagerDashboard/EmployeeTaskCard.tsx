@@ -1,11 +1,22 @@
 import React from "react";
+import type { TeamMember } from "@shared/api";
 import type { TasksByEmployeeGroup } from "./types";
 
 interface EmployeeTaskCardProps {
   group: TasksByEmployeeGroup;
+  teamMembers: TeamMember[];
+  onToggleTask: (taskId: string, isCompleted: boolean) => void;
+  onReassignTask: (taskId: string, employeeId: string) => void;
+  pendingTaskId?: string | null;
 }
 
-export function EmployeeTaskCard({ group }: EmployeeTaskCardProps) {
+export function EmployeeTaskCard({
+  group,
+  teamMembers,
+  onToggleTask,
+  onReassignTask,
+  pendingTaskId,
+}: EmployeeTaskCardProps) {
   const { employee, tasks } = group;
   const empCompletedCount = tasks.filter((t) => t.isCompleted).length;
   const empProgressPercent =
@@ -72,8 +83,29 @@ export function EmployeeTaskCard({ group }: EmployeeTaskCardProps) {
                 </p>
               )}
             </div>
+            <button
+              type="button"
+              onClick={() => onToggleTask(task.id, task.isCompleted)}
+              disabled={pendingTaskId === task.id}
+              className="text-xs px-3 py-1.5 rounded-md border border-input hover:bg-secondary transition disabled:opacity-50"
+            >
+              {task.isCompleted ? "Mark pending" : "Mark done"}
+            </button>
+            <select
+              value={task.employee.id}
+              disabled={pendingTaskId === task.id}
+              onChange={(e) => onReassignTask(task.id, e.target.value)}
+              className="text-xs rounded-md border border-input bg-background px-2 py-1.5 text-foreground disabled:opacity-50"
+              aria-label={`Reassign task ${task.taskTemplate.title}`}
+            >
+              {teamMembers.map((member) => (
+                <option key={member.id} value={member.id}>
+                  {member.name}
+                </option>
+              ))}
+            </select>
             {task.isCompleted && (
-              <span className="text-xs font-medium text-primary">✓ Done</span>
+              <span className="text-xs font-medium text-primary">Done</span>
             )}
           </div>
         ))}

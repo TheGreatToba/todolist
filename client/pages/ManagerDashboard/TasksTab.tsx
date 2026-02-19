@@ -17,6 +17,9 @@ interface TasksTabProps {
   setSelectedWorkstation: (id: string | null) => void;
   onExportCsv: () => void;
   onNewTask: () => void;
+  onToggleTask: (taskId: string, isCompleted: boolean) => void;
+  onReassignTask: (taskId: string, employeeId: string) => void;
+  pendingTaskId?: string | null;
 }
 
 export function TasksTab({
@@ -30,6 +33,9 @@ export function TasksTab({
   setSelectedWorkstation,
   onExportCsv,
   onNewTask,
+  onToggleTask,
+  onReassignTask,
+  pendingTaskId,
 }: TasksTabProps) {
   const filteredTasks = dashboard.dailyTasks;
   const completedCount = filteredTasks.filter((t) => t.isCompleted).length;
@@ -65,7 +71,13 @@ export function TasksTab({
         onNewTask={onNewTask}
       />
 
-      <TasksByWorkstationList tasksByWorkstation={tasksByWorkstation} />
+      <TasksByWorkstationList
+        tasksByWorkstation={tasksByWorkstation}
+        teamMembers={teamMembers}
+        onToggleTask={onToggleTask}
+        onReassignTask={onReassignTask}
+        pendingTaskId={pendingTaskId}
+      />
     </>
   );
 }

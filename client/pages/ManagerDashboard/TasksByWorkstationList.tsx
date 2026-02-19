@@ -1,13 +1,22 @@
 import React from "react";
 import type { TasksByWorkstationMap } from "./types";
 import { EmployeeTaskCard } from "./EmployeeTaskCard";
+import type { TeamMember } from "@shared/api";
 
 interface TasksByWorkstationListProps {
   tasksByWorkstation: TasksByWorkstationMap;
+  teamMembers: TeamMember[];
+  onToggleTask: (taskId: string, isCompleted: boolean) => void;
+  onReassignTask: (taskId: string, employeeId: string) => void;
+  pendingTaskId?: string | null;
 }
 
 export function TasksByWorkstationList({
   tasksByWorkstation,
+  teamMembers,
+  onToggleTask,
+  onReassignTask,
+  pendingTaskId,
 }: TasksByWorkstationListProps) {
   const values = Object.values(tasksByWorkstation);
 
@@ -35,6 +44,10 @@ export function TasksByWorkstationList({
                 <EmployeeTaskCard
                   key={employee.id}
                   group={{ employee, tasks }}
+                  teamMembers={teamMembers}
+                  onToggleTask={onToggleTask}
+                  onReassignTask={onReassignTask}
+                  pendingTaskId={pendingTaskId}
                 />
               ),
             )}

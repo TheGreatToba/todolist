@@ -1,12 +1,15 @@
 import React from "react";
 import { X } from "lucide-react";
 import { useModalA11y } from "./useModalA11y";
+import type { User } from "@shared/api";
+import { AccountSettingsForm } from "@/components/AccountSettingsForm";
 
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   teamName: string;
   modalRef: React.RefObject<HTMLDivElement | null>;
+  user?: User | null;
 }
 
 export function SettingsModal({
@@ -14,6 +17,7 @@ export function SettingsModal({
   onClose,
   teamName,
   modalRef,
+  user,
 }: SettingsModalProps) {
   useModalA11y(modalRef, isOpen, onClose);
 
@@ -58,14 +62,8 @@ export function SettingsModal({
           </div>
 
           <div className="space-y-2">
-            <p className="text-sm font-medium text-foreground">
-              Display options
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Basic settings are available today. More advanced configuration
-              (notifications, templates, reports) will be added here in a future
-              version.
-            </p>
+            <p className="text-sm font-medium text-foreground">My account</p>
+            <AccountSettingsForm user={user} />
           </div>
         </div>
 

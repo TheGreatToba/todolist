@@ -57,7 +57,7 @@ export function ManagerDashboardHeader({
             }`}
             type="button"
           >
-            Tasks
+            Dashboard
           </button>
           <button
             onClick={() => onTabChange("workstations")}
@@ -91,7 +91,7 @@ export function ManagerDashboardHeader({
             }`}
             type="button"
           >
-            Templates
+            Task
           </button>
         </div>
       </div>

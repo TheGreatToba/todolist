@@ -6,9 +6,12 @@ import {
   useWorkstationsQuery,
   useTeamMembersQuery,
   useTaskTemplatesQuery,
+  useUpdateDailyTaskMutation,
+  useUpdateWorkstationEmployeesMutation,
 } from "@/hooks/queries";
 import { Loader2, LogOut } from "lucide-react";
 import { toastError, toastInfo } from "@/lib/toast";
+import { getErrorMessage } from "@/lib/get-error-message";
 import { useManagerDashboardFilters } from "./useManagerDashboardFilters";
 import { useManagerDashboardModals } from "./useManagerDashboardModals";
 import { useManagerDashboardMutations } from "./useManagerDashboardMutations";
@@ -24,7 +27,7 @@ import type { EditTaskTemplateFormState } from "./EditTaskTemplateModal";
 
 export default function ManagerDashboard() {
   const navigate = useNavigate();
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
 
   const filters = useManagerDashboardFilters();
   const modals = useManagerDashboardModals();
@@ -40,6 +43,8 @@ export default function ManagerDashboard() {
   const { data: workstations = [] } = useWorkstationsQuery();
   const { data: teamMembers = [] } = useTeamMembersQuery();
   const { data: templates = [] } = useTaskTemplatesQuery();
+  const updateDailyTask = useUpdateDailyTaskMutation();
+  const updateWorkstationEmployees = useUpdateWorkstationEmployeesMutation();
 
   const [editTemplateForm, setEditTemplateForm] =
     useState<EditTaskTemplateFormState | null>(null);
@@ -118,7 +123,31 @@ export default function ManagerDashboard() {
       assignedToEmployeeId: mutations.newTask.assignedToEmployeeId,
       assignmentType: mutations.newTask.assignmentType,
       notifyEmployee: mutations.newTask.notifyEmployee,
+      isRecurring: mutations.newTask.isRecurring,
     });
+  };
+
+  const handleToggleManagerTask = async (
+    taskId: string,
+    isCompleted: boolean,
+  ) => {
+    try {
+      await updateDailyTask.mutateAsync({ taskId, isCompleted: !isCompleted });
+    } catch (error) {
+      toastError(getErrorMessage(error, "Failed to update task."));
+    }
+  };
+
+  const handleReassignTask = async (taskId: string, employeeId: string) => {
+    try {
+      await updateDailyTask.mutateAsync({ taskId, employeeId });
+    } catch (error) {
+      const fallback =
+        error instanceof Error && /CONFLICT/i.test(error.message)
+          ? "This employee already has this task today."
+          : "Failed to reassign task.";
+      toastError(getErrorMessage(error, fallback));
+    }
   };
 
   const handleEditTemplate = (
@@ -296,16 +325,40 @@ export default function ManagerDashboard() {
             setSelectedWorkstation={filters.setSelectedWorkstation}
             onExportCsv={handleExportCsv}
             onNewTask={() => modals.setShowNewTaskModal(true)}
+            onToggleTask={handleToggleManagerTask}
+            onReassignTask={handleReassignTask}
+            pendingTaskId={updateDailyTask.variables?.taskId ?? null}
           />
         )}
 
         {filters.activeTab === "workstations" && (
           <WorkstationsTab
             workstations={workstations}
+            teamMembers={teamMembers}
             newWorkstation={mutations.newWorkstation}
             onNewWorkstationChange={mutations.setNewWorkstation}
             onSubmitCreate={handleCreateWorkstation}
             onDelete={handleDeleteWorkstation}
+            onSaveEmployees={(workstationId, employeeIds) =>
+              updateWorkstationEmployees.mutate(
+                {
+                  workstationId,
+                  employeeIds,
+                },
+                {
+                  onSuccess: () =>
+                    toastInfo("Workstation employees updated successfully."),
+                  onError: (error) =>
+                    toastError(
+                      getErrorMessage(
+                        error,
+                        "Failed to update workstation employees.",
+                      ),
+                    ),
+                },
+              )
+            }
+            isSavingEmployees={updateWorkstationEmployees.isPending}
           />
         )}
 
@@ -329,6 +382,7 @@ export default function ManagerDashboard() {
             templates={templates}
             onEdit={handleEditTemplate}
             onDelete={handleDeleteTemplate}
+            onCreateTemplate={() => modals.setShowNewTaskModal(true)}
           />
         )}
       </div>
@@ -375,6 +429,7 @@ export default function ManagerDashboard() {
         onClose={() => modals.setShowSettingsModal(false)}
         teamName={dashboard.team.name}
         modalRef={modals.settingsModalRef}
+        user={user}
       />
     </div>
   );

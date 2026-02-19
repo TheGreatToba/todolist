@@ -11,6 +11,7 @@ export interface NewTaskFormState {
   assignedToEmployeeId: string;
   assignmentType: "workstation" | "employee";
   notifyEmployee: boolean;
+  isRecurring: boolean;
 }
 
 interface NewTaskModalProps {
@@ -88,6 +89,50 @@ export function NewTaskModal({
               placeholder="e.g., Clean the workstation"
               className="w-full px-4 py-2 rounded-lg border border-input bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
             />
+          </div>
+
+          <div>
+            <span className="block text-sm font-medium text-foreground mb-2">
+              Task Type
+            </span>
+            <div className="flex gap-3">
+              <label
+                className="flex items-center gap-2 cursor-pointer flex-1 p-3 rounded-lg border-2 transition"
+                style={{
+                  borderColor: form.isRecurring
+                    ? "var(--primary)"
+                    : "var(--border)",
+                }}
+              >
+                <input
+                  type="radio"
+                  checked={form.isRecurring}
+                  onChange={() => onFormChange({ ...form, isRecurring: true })}
+                  className="w-4 h-4"
+                />
+                <span className="text-sm font-medium text-foreground">
+                  Recurring
+                </span>
+              </label>
+              <label
+                className="flex items-center gap-2 cursor-pointer flex-1 p-3 rounded-lg border-2 transition"
+                style={{
+                  borderColor: !form.isRecurring
+                    ? "var(--primary)"
+                    : "var(--border)",
+                }}
+              >
+                <input
+                  type="radio"
+                  checked={!form.isRecurring}
+                  onChange={() => onFormChange({ ...form, isRecurring: false })}
+                  className="w-4 h-4"
+                />
+                <span className="text-sm font-medium text-foreground">
+                  One-shot
+                </span>
+              </label>
+            </div>
           </div>
 
           <div>

@@ -37,6 +37,14 @@ export interface SignupResponse {
 
 /** Response payload for GET /api/auth/profile */
 export type ProfileResponse = AuthResponse;
+export interface UpdateProfileRequest {
+  name?: string;
+  email?: string;
+  password?: string;
+}
+export interface UpdateProfileResponse {
+  user: User;
+}
 
 /** Response payload for POST /api/auth/set-password */
 export interface SetPasswordResponse {
@@ -143,7 +151,12 @@ export interface TaskTemplateWithRelations extends TaskTemplate {
 }
 
 export interface UpdateDailyTaskRequest {
-  isCompleted: boolean;
+  isCompleted?: boolean;
+  employeeId?: string;
+}
+
+export interface UpdateWorkstationEmployeesRequest {
+  employeeIds: string[];
 }
 
 /** One item in GET /api/team/members response (manager dashboard team members list). */
