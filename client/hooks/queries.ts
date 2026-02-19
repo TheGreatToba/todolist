@@ -14,6 +14,7 @@ import type {
   DailyTask,
   ProfileResponse,
   User,
+  TeamMember,
 } from "@shared/api";
 import { fetchWithCsrf } from "@/lib/api";
 
@@ -87,14 +88,7 @@ export async function fetchWorkstations(): Promise<WorkstationWithEmployees[]> {
   return fetchJson("/api/workstations");
 }
 
-export async function fetchTeamMembers(): Promise<
-  Array<{
-    id: string;
-    name: string;
-    email: string;
-    workstations: Array<{ id: string; name: string }>;
-  }>
-> {
+export async function fetchTeamMembers(): Promise<TeamMember[]> {
   return fetchJson("/api/team/members");
 }
 
@@ -151,18 +145,7 @@ export function useWorkstationsQuery(
 }
 
 export function useTeamMembersQuery(
-  options?: Omit<
-    UseQueryOptions<
-      Array<{
-        id: string;
-        name: string;
-        email: string;
-        workstations: Array<{ id: string; name: string }>;
-      }>,
-      Error
-    >,
-    "queryKey" | "queryFn"
-  >,
+  options?: Omit<UseQueryOptions<TeamMember[], Error>, "queryKey" | "queryFn">,
 ) {
   return useQuery({
     queryKey: queryKeys.manager.teamMembers,

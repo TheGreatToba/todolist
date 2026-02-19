@@ -100,6 +100,14 @@ export interface UpdateDailyTaskRequest {
   isCompleted: boolean;
 }
 
+/** One item in GET /api/team/members response (manager dashboard team members list). */
+export interface TeamMember {
+  id: string;
+  name: string;
+  email: string;
+  workstations: Array<{ id: string; name: string }>;
+}
+
 export interface ManagerDashboard {
   team: {
     id: string;

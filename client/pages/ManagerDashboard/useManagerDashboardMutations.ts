@@ -143,6 +143,8 @@ function useSocketTaskEvents(
     const unsubscribeAssigned = on(
       "task:assigned",
       (data: { taskTitle?: string; employeeName?: string }) => {
+        successClearTimersRef.current.forEach((id) => clearTimeout(id));
+        successClearTimersRef.current = [];
         setOperationSuccess(
           `Task "${data.taskTitle ?? ""}" assigned to ${data.employeeName ?? ""}`,
         );

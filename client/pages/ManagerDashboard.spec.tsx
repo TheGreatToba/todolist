@@ -115,4 +115,97 @@ describe("ManagerDashboard Settings modal", () => {
 
     expect(screen.queryByRole("dialog", { name: /team settings/i })).toBeNull();
   });
+
+  it("closes the Settings modal on Escape", async () => {
+    renderWithProviders(<ManagerDashboard />);
+
+    const settingsButton = await screen.findByRole("button", {
+      name: /open team settings/i,
+    });
+    await userEvent.click(settingsButton);
+
+    await screen.findByRole("dialog", { name: /team settings/i });
+
+    await userEvent.keyboard("{Escape}");
+
+    expect(screen.queryByRole("dialog", { name: /team settings/i })).toBeNull();
+  });
+
+  it("locks body scroll when Settings modal is open and restores on close", async () => {
+    renderWithProviders(<ManagerDashboard />);
+
+    const settingsButton = (
+      await screen.findAllByRole("button", { name: /open team settings/i })
+    )[0];
+    await userEvent.click(settingsButton);
+
+    await screen.findByRole("dialog", { name: /team settings/i });
+    expect(document.body.style.overflow).toBe("hidden");
+
+    await userEvent.keyboard("{Escape}");
+    expect(document.body.style.overflow).not.toBe("hidden");
+  });
+
+  it("restores focus to the Settings trigger button when modal is closed", async () => {
+    renderWithProviders(<ManagerDashboard />);
+
+    const settingsButton = (
+      await screen.findAllByRole("button", { name: /open team settings/i })
+    )[0];
+    settingsButton.focus();
+    await userEvent.click(settingsButton);
+
+    await screen.findByRole("dialog", { name: /team settings/i });
+
+    const closeButton = await screen.findByRole("button", {
+      name: /close settings modal/i,
+    });
+    await userEvent.click(closeButton);
+
+    expect(document.activeElement).toBe(settingsButton);
+  });
+
+  it("traps Tab focus in Settings modal (Tab from last goes to first)", async () => {
+    renderWithProviders(<ManagerDashboard />);
+
+    const settingsButton = (
+      await screen.findAllByRole("button", { name: /open team settings/i })
+    )[0];
+    await userEvent.click(settingsButton);
+
+    const dialog = await screen.findByRole("dialog", {
+      name: /team settings/i,
+    });
+    const closeButton = within(dialog).getByRole("button", {
+      name: /close settings modal/i,
+    });
+
+    closeButton.focus();
+    expect(document.activeElement).toBe(closeButton);
+
+    await userEvent.tab();
+    // Focus should wrap to first focusable (dialog container or Close)
+    expect(dialog.contains(document.activeElement)).toBe(true);
+  });
+
+  it("traps Tab focus in Settings modal (Shift+Tab from first goes to last)", async () => {
+    renderWithProviders(<ManagerDashboard />);
+
+    const settingsButton = (
+      await screen.findAllByRole("button", { name: /open team settings/i })
+    )[0];
+    await userEvent.click(settingsButton);
+
+    const dialog = await screen.findByRole("dialog", {
+      name: /team settings/i,
+    });
+    dialog.focus();
+    expect(document.activeElement).toBe(dialog);
+
+    await userEvent.tab({ shift: true });
+    const closeButton = within(dialog).getByRole("button", {
+      name: /close settings modal/i,
+    });
+    expect(document.activeElement).toBe(closeButton);
+  });
 });
