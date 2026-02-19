@@ -5,15 +5,7 @@
  * Real AuthProvider + useProfileQuery; MSW returns 401 for GET /api/auth/profile.
  */
 import React from "react";
-import {
-  describe,
-  it,
-  expect,
-  vi,
-  beforeAll,
-  afterAll,
-  afterEach,
-} from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { render, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
@@ -44,18 +36,8 @@ function renderWithProviders() {
 }
 
 describe("Auth profile 401 (semi-integrated with MSW)", () => {
-  beforeAll(() => {
-    server.listen({ onUnhandledRequest: "warn" });
-  });
-
-  afterEach(() => {
-    server.resetHandlers();
-  });
-
-  afterAll(() => {
-    server.close();
-  });
-
+  // If this test becomes flaky, consider controlling resolution with a deferred promise
+  // instead of setTimeout(80) (e.g. resolve from outside the handler).
   it("shows loading state while GET /api/auth/profile is in flight", async () => {
     const { http, HttpResponse } = await import("msw");
     server.use(

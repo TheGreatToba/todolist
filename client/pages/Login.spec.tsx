@@ -5,7 +5,7 @@ import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import { TestMemoryRouter } from "@/test/router";
 import Login from "./Login";
 
 const mockNavigate = vi.fn();
@@ -32,9 +32,9 @@ const mockUseAuth = vi.mocked(useAuth);
 
 function renderLogin() {
   const { container } = render(
-    <MemoryRouter>
+    <TestMemoryRouter>
       <Login />
-    </MemoryRouter>,
+    </TestMemoryRouter>,
   );
   return { view: within(container) };
 }
