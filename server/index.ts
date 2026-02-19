@@ -111,6 +111,8 @@ export function createApp(): Express {
           imgSrc: ["'self'", "data:", "blob:"],
           connectSrc: ["'self'", "ws:", "wss:"],
           frameAncestors: ["'self'"],
+          // Disable so browser doesn't upgrade asset requests to HTTPS (server is HTTP-only)
+          "upgrade-insecure-requests": null,
         },
       },
     }),
