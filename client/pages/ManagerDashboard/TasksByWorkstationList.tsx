@@ -9,6 +9,7 @@ interface TasksByWorkstationListProps {
   onToggleTask: (taskId: string, isCompleted: boolean) => void;
   onReassignTask: (taskId: string, employeeId: string) => void;
   pendingTaskId?: string | null;
+  isTaskUpdating?: boolean;
 }
 
 export function TasksByWorkstationList({
@@ -17,6 +18,7 @@ export function TasksByWorkstationList({
   onToggleTask,
   onReassignTask,
   pendingTaskId,
+  isTaskUpdating = false,
 }: TasksByWorkstationListProps) {
   const values = Object.values(tasksByWorkstation);
 
@@ -48,6 +50,7 @@ export function TasksByWorkstationList({
                   onToggleTask={onToggleTask}
                   onReassignTask={onReassignTask}
                   pendingTaskId={pendingTaskId}
+                  isTaskUpdating={isTaskUpdating}
                 />
               ),
             )}

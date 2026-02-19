@@ -328,6 +328,7 @@ export default function ManagerDashboard() {
             onToggleTask={handleToggleManagerTask}
             onReassignTask={handleReassignTask}
             pendingTaskId={updateDailyTask.variables?.taskId ?? null}
+            isTaskUpdating={updateDailyTask.isPending}
           />
         )}
 

@@ -20,6 +20,7 @@ interface TasksTabProps {
   onToggleTask: (taskId: string, isCompleted: boolean) => void;
   onReassignTask: (taskId: string, employeeId: string) => void;
   pendingTaskId?: string | null;
+  isTaskUpdating?: boolean;
 }
 
 export function TasksTab({
@@ -36,6 +37,7 @@ export function TasksTab({
   onToggleTask,
   onReassignTask,
   pendingTaskId,
+  isTaskUpdating = false,
 }: TasksTabProps) {
   const filteredTasks = dashboard.dailyTasks;
   const completedCount = filteredTasks.filter((t) => t.isCompleted).length;
@@ -77,6 +79,7 @@ export function TasksTab({
         onToggleTask={onToggleTask}
         onReassignTask={onReassignTask}
         pendingTaskId={pendingTaskId}
+        isTaskUpdating={isTaskUpdating}
       />
     </>
   );

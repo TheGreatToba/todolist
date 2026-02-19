@@ -8,6 +8,7 @@ interface EmployeeTaskCardProps {
   onToggleTask: (taskId: string, isCompleted: boolean) => void;
   onReassignTask: (taskId: string, employeeId: string) => void;
   pendingTaskId?: string | null;
+  isTaskUpdating?: boolean;
 }
 
 export function EmployeeTaskCard({
@@ -16,6 +17,7 @@ export function EmployeeTaskCard({
   onToggleTask,
   onReassignTask,
   pendingTaskId,
+  isTaskUpdating = false,
 }: EmployeeTaskCardProps) {
   const { employee, tasks } = group;
   const [reassigningTaskId, setReassigningTaskId] = useState<string | null>(
@@ -52,7 +54,7 @@ export function EmployeeTaskCard({
               <button
                 type="button"
                 onClick={() => onToggleTask(task.id, task.isCompleted)}
-                disabled={pendingTaskId === task.id}
+                disabled={isTaskUpdating && pendingTaskId === task.id}
                 className={`flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all disabled:opacity-50 ${
                   task.isCompleted
                     ? "bg-primary border-primary"
@@ -97,7 +99,7 @@ export function EmployeeTaskCard({
               </div>
               <button
                 type="button"
-                disabled={pendingTaskId === task.id}
+                disabled={isTaskUpdating && pendingTaskId === task.id}
                 onClick={() => {
                   setReassigningTaskId(task.id);
                   setTargetEmployeeId(task.employee.id);
@@ -115,7 +117,7 @@ export function EmployeeTaskCard({
               <div className="ml-8 flex items-center gap-2">
                 <select
                   value={targetEmployeeId}
-                  disabled={pendingTaskId === task.id}
+                  disabled={isTaskUpdating && pendingTaskId === task.id}
                   onChange={(e) => setTargetEmployeeId(e.target.value)}
                   className="text-xs rounded-md border border-input bg-background px-2 py-1.5 text-foreground disabled:opacity-50"
                   aria-label={`Select employee for task ${task.taskTemplate.title}`}
@@ -130,6 +132,7 @@ export function EmployeeTaskCard({
                   type="button"
                   disabled={
                     pendingTaskId === task.id ||
+                    (isTaskUpdating && pendingTaskId === task.id) ||
                     !targetEmployeeId ||
                     targetEmployeeId === task.employee.id
                   }
