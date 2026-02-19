@@ -94,8 +94,10 @@ export function createApp(): Express {
   // style="". External stylesheets from 'self' need no nonce. See docs/CSP.md for
   // style-src-elem vs style-src-attr, and for nonce/hash on inline <style> blocks only.
   // script-src: 'unsafe-inline' only in dev (Vite HMR/inline scripts); in prod keep 'self' for XSS protection.
+  // Disable HSTS when not serving HTTPS (avoids browser forcing HTTPS and ERR_SSL_PROTOCOL_ERROR)
   app.use(
     helmet({
+      strictTransportSecurity: false,
       contentSecurityPolicy: {
         directives: {
           defaultSrc: ["'self'"],
