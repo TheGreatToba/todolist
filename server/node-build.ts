@@ -11,7 +11,7 @@ const port = process.env.PORT || 3000;
 const app = createApp();
 
 const __dirname = import.meta.dirname;
-const distPath = path.join(__dirname, "../dist/spa");
+const distPath = path.join(__dirname, "../spa");
 
 app.use(express.static(distPath));
 
