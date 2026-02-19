@@ -117,6 +117,7 @@ describe("useUpdateDailyTaskMutation", () => {
     });
     await waitFor(() => {
       expect(capturedError).toBeInstanceOf(Error);
+      expect(capturedError?.message).toContain("error");
       expect(capturedError?.message).toContain("Forbidden");
     });
     expect(invalidateSpy).not.toHaveBeenCalled();
