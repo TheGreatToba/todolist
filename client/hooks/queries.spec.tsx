@@ -91,9 +91,10 @@ describe("useUpdateDailyTaskMutation", () => {
       }) as Response,
     );
     const { invalidateSpy, wrapper } = createWrapper();
+    let capturedError: Error | null = null;
 
-    function ToggleTaskTest() {
-      const mutation = useUpdateDailyTaskMutation();
+    function ToggleTaskTest({ onError }: { onError: (err: Error) => void }) {
+      const mutation = useUpdateDailyTaskMutation({ onError });
       return (
         <button
           onClick={() => mutation.mutate({ taskId: "dt1", isCompleted: true })}
@@ -103,7 +104,9 @@ describe("useUpdateDailyTaskMutation", () => {
       );
     }
 
-    render(<ToggleTaskTest />, { wrapper });
+    render(<ToggleTaskTest onError={(err) => (capturedError = err)} />, {
+      wrapper,
+    });
     await userEvent.click(screen.getByRole("button", { name: /toggle/i }));
 
     await waitFor(() => {
@@ -111,6 +114,10 @@ describe("useUpdateDailyTaskMutation", () => {
         "/api/tasks/daily/dt1",
         expect.any(Object),
       );
+    });
+    await waitFor(() => {
+      expect(capturedError).toBeInstanceOf(Error);
+      expect(capturedError?.message).toBeTruthy();
     });
     expect(invalidateSpy).not.toHaveBeenCalled();
   });
@@ -171,9 +178,14 @@ describe("useCreateWorkstationMutation", () => {
       }) as Response,
     );
     const { invalidateSpy, wrapper } = createWrapper();
+    let capturedError: Error | null = null;
 
-    function CreateWorkstationTest() {
-      const mutation = useCreateWorkstationMutation();
+    function CreateWorkstationTest({
+      onError,
+    }: {
+      onError: (err: Error) => void;
+    }) {
+      const mutation = useCreateWorkstationMutation({ onError });
       return (
         <button onClick={() => mutation.mutate({ name: "New WS" })}>
           Create
@@ -181,7 +193,9 @@ describe("useCreateWorkstationMutation", () => {
       );
     }
 
-    render(<CreateWorkstationTest />, { wrapper });
+    render(<CreateWorkstationTest onError={(err) => (capturedError = err)} />, {
+      wrapper,
+    });
     await userEvent.click(screen.getByRole("button", { name: /create/i }));
 
     await waitFor(() => {
@@ -189,6 +203,10 @@ describe("useCreateWorkstationMutation", () => {
         "/api/workstations",
         expect.any(Object),
       );
+    });
+    await waitFor(() => {
+      expect(capturedError).toBeInstanceOf(Error);
+      expect(capturedError?.message).toBeTruthy();
     });
     expect(invalidateSpy).not.toHaveBeenCalled();
   });
