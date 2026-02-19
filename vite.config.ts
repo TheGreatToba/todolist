@@ -23,6 +23,7 @@ export default defineConfig(() => ({
   },
   build: {
     outDir: "dist/spa",
+    base: "/", // assets loaded from same origin (no absolute URL)
   },
   plugins: [react(), expressPlugin()],
   resolve: {
