@@ -179,6 +179,25 @@ export default function ManagerDashboard() {
     }
   };
 
+  const handlePrepareAssign = async (
+    templateId: string,
+    employeeId: string,
+  ) => {
+    try {
+      await mutations.assignTaskFromTemplate.mutateAsync({
+        templateId,
+        assignmentType: "employee",
+        assignedToEmployeeId: employeeId,
+        notifyEmployee: false,
+        date: filters.selectedDate,
+      });
+    } catch (error) {
+      toastError(
+        getErrorMessage(error, "Failed to prepare day task assignment."),
+      );
+    }
+  };
+
   const handleEditTemplate = (
     template: import("@shared/api").TaskTemplateWithRelations,
   ) => {
@@ -356,6 +375,8 @@ export default function ManagerDashboard() {
             onNewTask={() => modals.setShowNewTaskModal(true)}
             onToggleTask={handleToggleManagerTask}
             onReassignTask={handleReassignTask}
+            onPrepareAssign={handlePrepareAssign}
+            isPrepareAssigning={mutations.assignTaskFromTemplate.isPending}
             pendingTaskId={updateDailyTask.variables?.taskId ?? null}
             isTaskUpdating={updateDailyTask.isPending}
           />

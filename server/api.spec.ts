@@ -730,6 +730,17 @@ describe("Permissions - role-based access", () => {
 
     expect(res.status).toBe(200);
     expect(res.body).toHaveProperty("dailyTasks");
+    expect(res.body).toHaveProperty("dayPreparation");
+    expect(typeof res.body.dayPreparation.recurringTemplatesTotal).toBe(
+      "number",
+    );
+    expect(typeof res.body.dayPreparation.recurringUnassignedCount).toBe(
+      "number",
+    );
+    expect(typeof res.body.dayPreparation.isPrepared).toBe("boolean");
+    expect(
+      Array.isArray(res.body.dayPreparation.unassignedRecurringTemplates),
+    ).toBe(true);
   });
 
   it("GET /api/manager/dashboard includes taskTemplate.isRecurring on daily tasks", async () => {
@@ -787,6 +798,133 @@ describe("Permissions - role-based access", () => {
     } finally {
       await prisma.dailyTask.deleteMany({ where: { id: createdTask.id } });
       await prisma.taskTemplate.deleteMany({ where: { id: template.id } });
+    }
+  });
+
+  it("GET /api/manager/dashboard dayPreparation updates after assignment and keeps deterministic suggestions", async () => {
+    const manager = await prisma.user.findUnique({
+      where: { email: "mgr@test.com" },
+      select: { id: true, teamId: true },
+    });
+    expect(manager?.id).toBeTruthy();
+    expect(manager?.teamId).toBeTruthy();
+
+    const bcryptjs = (await import("bcryptjs")).default;
+    const workstation = await prisma.workstation.create({
+      data: {
+        name: `Prep WS ${Date.now()}`,
+        teamId: manager!.teamId!,
+      },
+    });
+    const employeeA = await prisma.user.create({
+      data: {
+        name: `Amy Prep ${Date.now()}`,
+        email: `amy-prep-${Date.now()}@test.com`,
+        passwordHash: await bcryptjs.hash("password", 10),
+        role: "EMPLOYEE",
+        teamId: manager!.teamId!,
+      },
+    });
+    const employeeZ = await prisma.user.create({
+      data: {
+        name: `Zed Prep ${Date.now()}`,
+        email: `zed-prep-${Date.now()}@test.com`,
+        passwordHash: await bcryptjs.hash("password", 10),
+        role: "EMPLOYEE",
+        teamId: manager!.teamId!,
+      },
+    });
+    await prisma.employeeWorkstation.createMany({
+      data: [
+        { employeeId: employeeZ.id, workstationId: workstation.id },
+        { employeeId: employeeA.id, workstationId: workstation.id },
+      ],
+    });
+    const template = await prisma.taskTemplate.create({
+      data: {
+        title: `Prepare flow recurring ${Date.now()}`,
+        createdById: manager!.id,
+        workstationId: workstation.id,
+        isRecurring: true,
+        notifyEmployee: false,
+      },
+    });
+
+    const targetDate = "2026-03-01";
+    try {
+      const agent = request.agent(app);
+      await agent
+        .post("/api/auth/login")
+        .send({ email: "mgr@test.com", password: "password" });
+
+      const before = await agent.get(
+        `/api/manager/dashboard?date=${targetDate}`,
+      );
+      expect(before.status).toBe(200);
+
+      const beforePrep = before.body.dayPreparation as {
+        recurringUnassignedCount: number;
+        isPrepared: boolean;
+        unassignedRecurringTemplates: Array<{
+          templateId: string;
+          suggestedEmployees: Array<{ id: string; name: string }>;
+        }>;
+      };
+      const targetBefore = beforePrep.unassignedRecurringTemplates.find(
+        (item) => item.templateId === template.id,
+      );
+      expect(targetBefore).toBeDefined();
+      expect(targetBefore?.suggestedEmployees.map((e) => e.name)).toEqual([
+        employeeA.name,
+        employeeZ.name,
+      ]);
+      expect(beforePrep.isPrepared).toBe(
+        beforePrep.recurringUnassignedCount === 0,
+      );
+
+      const assignRes = await agent
+        .post("/api/tasks/assign-from-template")
+        .send({
+          templateId: template.id,
+          assignmentType: "employee",
+          assignedToEmployeeId: employeeA.id,
+          notifyEmployee: false,
+          date: targetDate,
+        });
+      expect(assignRes.status).toBe(201);
+
+      const after = await agent.get(
+        `/api/manager/dashboard?date=${targetDate}`,
+      );
+      expect(after.status).toBe(200);
+      const afterPrep = after.body.dayPreparation as {
+        recurringUnassignedCount: number;
+        isPrepared: boolean;
+        unassignedRecurringTemplates: Array<{ templateId: string }>;
+      };
+      expect(afterPrep.recurringUnassignedCount).toBe(
+        beforePrep.recurringUnassignedCount - 1,
+      );
+      expect(
+        afterPrep.unassignedRecurringTemplates.some(
+          (item) => item.templateId === template.id,
+        ),
+      ).toBe(false);
+      expect(afterPrep.isPrepared).toBe(
+        afterPrep.recurringUnassignedCount === 0,
+      );
+    } finally {
+      await prisma.dailyTask.deleteMany({
+        where: { taskTemplateId: template.id },
+      });
+      await prisma.employeeWorkstation.deleteMany({
+        where: { workstationId: workstation.id },
+      });
+      await prisma.taskTemplate.deleteMany({ where: { id: template.id } });
+      await prisma.workstation.deleteMany({ where: { id: workstation.id } });
+      await prisma.user
+        .deleteMany({ where: { id: { in: [employeeA.id, employeeZ.id] } } })
+        .catch(() => {});
     }
   });
 

@@ -259,6 +259,7 @@ export const handleCreateEmployee: RequestHandler = async (req, res) => {
             taskTemplateId: template.id,
             employeeId: employee.id,
             date: today,
+            status: "ASSIGNED",
             isCompleted: false,
           })),
         });

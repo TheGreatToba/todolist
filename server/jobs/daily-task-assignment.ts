@@ -3,6 +3,7 @@
  * for a given date. Call this each morning (via cron or scheduled job).
  */
 import prisma from "../lib/db";
+import { shouldTemplateAppearOnDate } from "../lib/recurrence";
 
 export async function assignDailyTasksForDate(date: Date): Promise<{
   created: number;
@@ -25,53 +26,50 @@ export async function assignDailyTasksForDate(date: Date): Promise<{
   const errors: string[] = [];
 
   for (const template of recurringTemplates) {
-    let employeeIds: string[] = [];
-
-    if (template.assignedToEmployeeId) {
-      employeeIds = [template.assignedToEmployeeId];
-    } else if (template.workstationId) {
-      const assignments = await prisma.employeeWorkstation.findMany({
-        where: { workstationId: template.workstationId },
-        select: { employeeId: true },
-      });
-      employeeIds = assignments.map((a) => a.employeeId);
-    }
-
-    if (employeeIds.length === 0) {
+    if (
+      !shouldTemplateAppearOnDate(
+        {
+          isRecurring: template.isRecurring,
+          recurrenceType: template.recurrenceType,
+          recurrenceDays: template.recurrenceDays,
+        },
+        targetDate,
+      )
+    ) {
       continue;
     }
 
-    for (const employeeId of employeeIds) {
-      try {
-        const existing = await prisma.dailyTask.findFirst({
-          where: {
-            taskTemplateId: template.id,
-            employeeId,
-            date: {
-              gte: targetDate,
-              lt: new Date(targetDate.getTime() + 24 * 60 * 60 * 1000),
-            },
+    try {
+      const existing = await prisma.dailyTask.findFirst({
+        where: {
+          taskTemplateId: template.id,
+          employeeId: null,
+          status: "UNASSIGNED",
+          date: {
+            gte: targetDate,
+            lt: new Date(targetDate.getTime() + 24 * 60 * 60 * 1000),
           },
-        });
+        },
+      });
 
-        if (existing) {
-          skipped++;
-          continue;
-        }
-
-        await prisma.dailyTask.create({
-          data: {
-            taskTemplateId: template.id,
-            employeeId,
-            date: targetDate,
-            isCompleted: false,
-          },
-        });
-        created++;
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        errors.push(`Template ${template.id} / Employee ${employeeId}: ${msg}`);
+      if (existing) {
+        skipped++;
+        continue;
       }
+
+      await prisma.dailyTask.create({
+        data: {
+          taskTemplateId: template.id,
+          employeeId: null,
+          date: targetDate,
+          status: "UNASSIGNED",
+          isCompleted: false,
+        },
+      });
+      created++;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      errors.push(`Template ${template.id}: ${msg}`);
     }
   }
 

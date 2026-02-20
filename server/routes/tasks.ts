@@ -14,6 +14,10 @@ import {
   parseDateQueryParam,
   parseManagerDashboardQuery,
 } from "../lib/query-schemas";
+import {
+  parseRecurrenceDaysCsv,
+  shouldTemplateAppearOnDate,
+} from "../lib/recurrence";
 
 const CreateTaskTemplateSchema = z
   .object({
@@ -22,6 +26,9 @@ const CreateTaskTemplateSchema = z
     workstationId: z.string().optional(),
     assignedToEmployeeId: z.string().optional(),
     isRecurring: z.boolean().default(true),
+    recurrenceType: z.enum(["daily", "weekly", "x_per_week"]).optional(),
+    recurrenceDays: z.array(z.number().int().min(0).max(6)).optional(),
+    targetPerWeek: z.number().int().min(1).max(7).optional(),
     notifyEmployee: z.boolean().default(true),
     date: z.string().optional(),
   })
@@ -37,6 +44,12 @@ const UpdateTaskTemplateSchema = z
     workstationId: z.string().optional().nullable(),
     assignedToEmployeeId: z.string().optional().nullable(),
     isRecurring: z.boolean().optional(),
+    recurrenceType: z.enum(["daily", "weekly", "x_per_week"]).optional(),
+    recurrenceDays: z
+      .array(z.number().int().min(0).max(6))
+      .optional()
+      .nullable(),
+    targetPerWeek: z.number().int().min(1).max(7).optional().nullable(),
     notifyEmployee: z.boolean().optional(),
   })
   .refine((data) => {
@@ -100,6 +113,30 @@ function formatDateYmd(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
+function serializeTemplateResponse(template: {
+  id: string;
+  title: string;
+  description: string | null;
+  workstationId: string | null;
+  assignedToEmployeeId: string | null;
+  isRecurring: boolean;
+  recurrenceType: string;
+  recurrenceDays: string | null;
+  targetPerWeek: number | null;
+  notifyEmployee: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+  workstation?: { id: string; name: string } | null;
+  assignedToEmployee?: { id: string; name: string; email: string } | null;
+}) {
+  return {
+    ...template,
+    recurrenceDays: parseRecurrenceDaysCsv(template.recurrenceDays),
+    createdAt: template.createdAt.toISOString(),
+    updatedAt: template.updatedAt.toISOString(),
+  };
+}
+
 // Get all daily tasks for an employee on a specific date
 export const handleGetEmployeeDailyTasks: RequestHandler = async (req, res) => {
   try {
@@ -116,6 +153,7 @@ export const handleGetEmployeeDailyTasks: RequestHandler = async (req, res) => {
     const tasks = await prisma.dailyTask.findMany({
       where: {
         employeeId: payload.userId,
+        status: { in: ["ASSIGNED", "DONE"] },
         date: {
           gte: taskDate,
           lt: new Date(taskDate.getTime() + 24 * 60 * 60 * 1000),
@@ -169,10 +207,10 @@ export const handleUpdateDailyTask: RequestHandler = async (req, res) => {
     }
 
     const taskEmployee = await prisma.user.findUnique({
-      where: { id: task.employeeId },
+      where: { id: task.employeeId ?? "" },
       select: { teamId: true },
     });
-    if (!taskEmployee?.teamId) {
+    if (!task.employeeId || !taskEmployee?.teamId) {
       res.status(404).json({ error: "Task employee not found" });
       return;
     }
@@ -252,12 +290,18 @@ export const handleUpdateDailyTask: RequestHandler = async (req, res) => {
     if (body.isCompleted !== undefined) {
       updateData.isCompleted = body.isCompleted;
       updateData.completedAt = body.isCompleted ? new Date() : null;
+      // Keep explicit status aligned with completion state.
+      (updateData as { status?: string }).status = body.isCompleted
+        ? "DONE"
+        : "ASSIGNED";
     }
     if (body.employeeId !== undefined) {
       updateData.employeeId = body.employeeId;
+      (updateData as { status?: string }).status = "ASSIGNED";
       if (body.employeeId !== task.employeeId && task.isCompleted) {
         updateData.isCompleted = false;
         updateData.completedAt = null;
+        (updateData as { status?: string }).status = "ASSIGNED";
       }
     }
 
@@ -368,6 +412,11 @@ export const handleCreateTaskTemplate: RequestHandler = async (req, res) => {
         assignedToEmployeeId: body.assignedToEmployeeId || null,
         createdById: payload.userId,
         isRecurring: body.isRecurring,
+        recurrenceType: body.recurrenceType ?? "daily",
+        recurrenceDays: body.recurrenceDays?.length
+          ? body.recurrenceDays.join(",")
+          : null,
+        targetPerWeek: body.targetPerWeek ?? null,
         notifyEmployee: body.notifyEmployee,
       },
       include: {
@@ -387,94 +436,83 @@ export const handleCreateTaskTemplate: RequestHandler = async (req, res) => {
       },
     });
 
-    // Create today's daily tasks immediately for recurring and one-shot templates.
+    // Create today's daily task immediately.
     const taskDate = parseDateQuery(body.date);
     if (!taskDate) {
       res.status(400).json({ error: "Invalid date. Use YYYY-MM-DD." });
       return;
     }
-    const taskDateYmd = formatDateYmd(taskDate);
-    const employees: string[] = [];
-
-    // If assigned to specific employee, create task only for them
-    if (body.assignedToEmployeeId) {
-      employees.push(body.assignedToEmployeeId);
-    } else if (body.workstationId) {
-      // If assigned to workstation, create tasks for all employees in that workstation
-      const employeeWorkstations = await prisma.employeeWorkstation.findMany({
-        where: {
-          workstationId: body.workstationId,
-        },
-        select: {
-          employeeId: true,
-        },
-      });
-      employees.push(...employeeWorkstations.map((ew) => ew.employeeId));
-    }
-
-    // Create daily tasks for each employee
-    for (const employeeId of employees) {
+    const shouldAppearToday = shouldTemplateAppearOnDate(
+      {
+        isRecurring: taskTemplate.isRecurring,
+        recurrenceType: taskTemplate.recurrenceType,
+        recurrenceDays: taskTemplate.recurrenceDays,
+      },
+      taskDate,
+    );
+    if (shouldAppearToday || !taskTemplate.isRecurring) {
       const existing = await prisma.dailyTask.findFirst({
         where: {
           taskTemplateId: taskTemplate.id,
-          employeeId,
           date: {
             gte: taskDate,
             lt: new Date(taskDate.getTime() + 24 * 60 * 60 * 1000),
           },
+          status: "UNASSIGNED",
+          employeeId: null,
         },
         select: { id: true },
       });
-      if (existing) continue;
 
-      await prisma.dailyTask.create({
-        data: {
-          taskTemplateId: taskTemplate.id,
-          employeeId,
-          date: taskDate,
-          isCompleted: false,
-        },
-      });
-
-      // Send notification if enabled
-      if (body.notifyEmployee) {
-        const employee = await prisma.user.findUnique({
-          where: { id: employeeId },
-          select: { email: true, name: true },
+      if (!existing && taskTemplate.isRecurring) {
+        await prisma.dailyTask.create({
+          data: {
+            taskTemplateId: taskTemplate.id,
+            employeeId: null,
+            date: taskDate,
+            status: "UNASSIGNED",
+            isCompleted: false,
+          },
         });
+      } else if (!taskTemplate.isRecurring) {
+        const assigneeIds: string[] = [];
+        if (body.assignedToEmployeeId) {
+          assigneeIds.push(body.assignedToEmployeeId);
+        } else if (body.workstationId) {
+          const links = await prisma.employeeWorkstation.findMany({
+            where: { workstationId: body.workstationId },
+            select: { employeeId: true },
+          });
+          assigneeIds.push(...links.map((link) => link.employeeId));
+        }
 
-        if (employee) {
-          // Emit socket event to the assigned employee only
-          const io = getIO();
-          if (io) {
-            io.to(`user:${employeeId}`).emit("task:assigned", {
-              taskId: taskTemplate.id,
-              employeeId,
-              taskDate: taskDateYmd,
-              employeeName: employee.name,
-              taskTitle: body.title,
-              taskDescription: body.description,
-            });
-          }
-
-          // Send email notification (optional, using nodemailer if available)
-          try {
-            await sendTaskAssignmentEmail(
-              employee.email,
-              employee.name,
-              body.title,
-              body.description,
-            );
-          } catch {
-            logger.info(
-              "Email notification skipped (email service not available)",
-            );
-          }
+        for (const assigneeId of assigneeIds) {
+          const existingAssigned = await prisma.dailyTask.findFirst({
+            where: {
+              taskTemplateId: taskTemplate.id,
+              employeeId: assigneeId,
+              date: {
+                gte: taskDate,
+                lt: new Date(taskDate.getTime() + 24 * 60 * 60 * 1000),
+              },
+            },
+            select: { id: true },
+          });
+          if (existingAssigned) continue;
+          await prisma.dailyTask.create({
+            data: {
+              taskTemplateId: taskTemplate.id,
+              employeeId: assigneeId,
+              date: taskDate,
+              status: "ASSIGNED",
+              isCompleted: false,
+            },
+          });
         }
       }
     }
 
-    res.status(201).json(taskTemplate);
+    res.status(201).json(serializeTemplateResponse(taskTemplate));
   } catch (error) {
     sendErrorResponse(res, error, req);
   }
@@ -569,11 +607,11 @@ export const handleAssignTaskFromTemplate: RequestHandler = async (
       const existing = await prisma.dailyTask.findFirst({
         where: {
           taskTemplateId: template.id,
-          employeeId,
           date: {
             gte: taskDate,
             lt: new Date(taskDate.getTime() + 24 * 60 * 60 * 1000),
           },
+          employeeId,
         },
         select: { id: true },
       });
@@ -582,14 +620,45 @@ export const handleAssignTaskFromTemplate: RequestHandler = async (
         continue;
       }
 
-      const createdTask = await prisma.dailyTask.create({
-        data: {
-          taskTemplateId: template.id,
-          employeeId,
-          date: taskDate,
-          isCompleted: false,
-        },
-      });
+      let createdTask = null as null | { id: string };
+      if (template.isRecurring) {
+        const unassigned = await prisma.dailyTask.findFirst({
+          where: {
+            taskTemplateId: template.id,
+            date: {
+              gte: taskDate,
+              lt: new Date(taskDate.getTime() + 24 * 60 * 60 * 1000),
+            },
+            status: "UNASSIGNED",
+            employeeId: null,
+          },
+          select: { id: true },
+        });
+        if (unassigned) {
+          createdTask = await prisma.dailyTask.update({
+            where: { id: unassigned.id },
+            data: {
+              employeeId,
+              status: "ASSIGNED",
+              isCompleted: false,
+              completedAt: null,
+            },
+            select: { id: true },
+          });
+        }
+      }
+      if (!createdTask) {
+        createdTask = await prisma.dailyTask.create({
+          data: {
+            taskTemplateId: template.id,
+            employeeId,
+            date: taskDate,
+            status: "ASSIGNED",
+            isCompleted: false,
+          },
+          select: { id: true },
+        });
+      }
       createdCount += 1;
 
       if (!notifyEmployee) continue;
@@ -785,6 +854,9 @@ export const handleGetTaskTemplates: RequestHandler = async (req, res) => {
           workstationId: workstationOk ? t.workstationId : null,
           assignedToEmployeeId: employeeOk ? t.assignedToEmployeeId : null,
           isRecurring: t.isRecurring,
+          recurrenceType: t.recurrenceType,
+          recurrenceDays: parseRecurrenceDaysCsv(t.recurrenceDays),
+          targetPerWeek: t.targetPerWeek,
           notifyEmployee: t.notifyEmployee,
           createdAt: t.createdAt.toISOString(),
           updatedAt: t.updatedAt.toISOString(),
@@ -941,6 +1013,18 @@ export const handleUpdateTaskTemplate: RequestHandler = async (req, res) => {
         ...(body.isRecurring !== undefined && {
           isRecurring: body.isRecurring,
         }),
+        ...(body.recurrenceType !== undefined && {
+          recurrenceType: body.recurrenceType,
+        }),
+        ...(body.recurrenceDays !== undefined && {
+          recurrenceDays:
+            body.recurrenceDays && body.recurrenceDays.length > 0
+              ? body.recurrenceDays.join(",")
+              : null,
+        }),
+        ...(body.targetPerWeek !== undefined && {
+          targetPerWeek: body.targetPerWeek,
+        }),
         ...(body.notifyEmployee !== undefined && {
           notifyEmployee: body.notifyEmployee,
         }),
@@ -962,7 +1046,7 @@ export const handleUpdateTaskTemplate: RequestHandler = async (req, res) => {
       },
     });
 
-    res.json(updatedTemplate);
+    res.json(serializeTemplateResponse(updatedTemplate));
   } catch (error) {
     sendErrorResponse(res, error, req);
   }
@@ -1060,6 +1144,18 @@ export const handleGetManagerDashboard: RequestHandler = async (req, res) => {
     }
     const { date: taskDate, employeeId, workstationId } = parsedQuery;
 
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const requested = new Date(
+      taskDate.getFullYear(),
+      taskDate.getMonth(),
+      taskDate.getDate(),
+    );
+    if (requested.getTime() === today.getTime()) {
+      // "Generate on opening": idempotent job ensures recurring instances exist for today.
+      await assignDailyTasksForDate(taskDate);
+    }
+
     const teamIds = await getManagerTeamIds(payload.userId);
     if (teamIds.length === 0) {
       res.status(404).json({ error: "Team not found" });
@@ -1135,6 +1231,160 @@ export const handleGetManagerDashboard: RequestHandler = async (req, res) => {
       orderBy: [{ employee: { name: "asc" } }, { createdAt: "asc" }],
     });
 
+    // Day preparation summary: recurring templates expected today and those still unassigned.
+    const recurringTemplates = await prisma.taskTemplate.findMany({
+      where: {
+        isRecurring: true,
+        OR: [
+          {
+            workstation: {
+              teamId: { in: teamIds },
+            },
+          },
+          {
+            assignedToEmployee: {
+              role: "EMPLOYEE",
+              teamId: { in: teamIds },
+            },
+          },
+        ],
+      },
+      select: {
+        id: true,
+        title: true,
+        recurrenceType: true,
+        recurrenceDays: true,
+        workstation: {
+          select: {
+            id: true,
+            name: true,
+            teamId: true,
+          },
+        },
+        assignedToEmployee: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            teamId: true,
+          },
+        },
+      },
+    });
+
+    const dueRecurringTemplates = recurringTemplates.filter((template) =>
+      shouldTemplateAppearOnDate(
+        {
+          isRecurring: true,
+          recurrenceType: template.recurrenceType,
+          recurrenceDays: template.recurrenceDays,
+        },
+        taskDate,
+      ),
+    );
+    const dueRecurringTemplateIds = dueRecurringTemplates.map(
+      (template) => template.id,
+    );
+    const unassignedRecurringTasks =
+      dueRecurringTemplateIds.length === 0
+        ? []
+        : await prisma.dailyTask.findMany({
+            where: {
+              taskTemplateId: { in: dueRecurringTemplateIds },
+              status: "UNASSIGNED",
+              employeeId: null,
+              date: {
+                gte: taskDate,
+                lt: new Date(taskDate.getTime() + 24 * 60 * 60 * 1000),
+              },
+            },
+            select: {
+              taskTemplateId: true,
+            },
+          });
+    const unassignedTemplateIds = new Set(
+      unassignedRecurringTasks.map((task) => task.taskTemplateId),
+    );
+
+    const workstationIds = recurringTemplates
+      .map((template) => template.workstation?.id)
+      .filter((id): id is string => !!id);
+
+    const workstationMembers =
+      workstationIds.length === 0
+        ? []
+        : await prisma.employeeWorkstation.findMany({
+            where: {
+              workstationId: { in: workstationIds },
+              employee: {
+                role: "EMPLOYEE",
+                teamId: { in: teamIds },
+              },
+            },
+            select: {
+              workstationId: true,
+              employee: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                },
+              },
+            },
+            orderBy: [
+              { workstationId: "asc" },
+              { employee: { name: "asc" } },
+              { employeeId: "asc" },
+            ],
+          });
+
+    const membersByWorkstation = workstationMembers.reduce<
+      Record<string, Array<{ id: string; name: string; email: string }>>
+    >((acc, link) => {
+      if (!acc[link.workstationId]) {
+        acc[link.workstationId] = [];
+      }
+      acc[link.workstationId].push(link.employee);
+      return acc;
+    }, {});
+
+    const unassignedRecurringTemplates = dueRecurringTemplates
+      .filter((template) => unassignedTemplateIds.has(template.id))
+      .map((template) => {
+        const workstationAllowed =
+          !!template.workstation?.teamId &&
+          teamIds.includes(template.workstation.teamId);
+        const employeeAllowed =
+          !!template.assignedToEmployee?.teamId &&
+          teamIds.includes(template.assignedToEmployee.teamId);
+
+        const suggestedEmployees = employeeAllowed
+          ? [
+              {
+                id: template.assignedToEmployee!.id,
+                name: template.assignedToEmployee!.name,
+                email: template.assignedToEmployee!.email,
+              },
+            ]
+          : workstationAllowed && template.workstation
+            ? (membersByWorkstation[template.workstation.id] ?? [])
+            : [];
+
+        return {
+          templateId: template.id,
+          title: template.title,
+          workstation:
+            workstationAllowed && template.workstation
+              ? {
+                  id: template.workstation.id,
+                  name: template.workstation.name,
+                }
+              : null,
+          suggestedEmployees,
+          defaultEmployeeId: suggestedEmployees[0]?.id ?? null,
+        };
+      });
+
     // Workstations from all managed teams
     const workstations = await prisma.workstation.findMany({
       where: { teamId: { in: teamIds } },
@@ -1152,11 +1402,69 @@ export const handleGetManagerDashboard: RequestHandler = async (req, res) => {
       members,
     };
 
+    const existingPreparation = await prisma.dayPreparation.findUnique({
+      where: {
+        managerId_date: {
+          managerId: payload.userId,
+          date: taskDate,
+        },
+      },
+      select: { preparedAt: true },
+    });
+    let preparedAt = existingPreparation?.preparedAt ?? null;
+    if (unassignedRecurringTemplates.length === 0) {
+      if (!preparedAt) {
+        const saved = await prisma.dayPreparation.upsert({
+          where: {
+            managerId_date: {
+              managerId: payload.userId,
+              date: taskDate,
+            },
+          },
+          create: {
+            managerId: payload.userId,
+            date: taskDate,
+            preparedAt: new Date(),
+          },
+          update: {
+            preparedAt: existingPreparation?.preparedAt ?? new Date(),
+          },
+          select: { preparedAt: true },
+        });
+        preparedAt = saved.preparedAt;
+      }
+    } else if (preparedAt) {
+      await prisma.dayPreparation.upsert({
+        where: {
+          managerId_date: {
+            managerId: payload.userId,
+            date: taskDate,
+          },
+        },
+        create: {
+          managerId: payload.userId,
+          date: taskDate,
+          preparedAt: null,
+        },
+        update: {
+          preparedAt: null,
+        },
+      });
+      preparedAt = null;
+    }
+
     res.json({
       team,
       date: taskDate,
       dailyTasks,
       workstations,
+      dayPreparation: {
+        recurringTemplatesTotal: dueRecurringTemplates.length,
+        recurringUnassignedCount: unassignedRecurringTemplates.length,
+        isPrepared: unassignedRecurringTemplates.length === 0,
+        preparedAt: preparedAt ? preparedAt.toISOString() : null,
+        unassignedRecurringTemplates,
+      },
     });
   } catch (error) {
     sendErrorResponse(res, error, req);

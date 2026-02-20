@@ -97,6 +97,9 @@ export interface TaskTemplate {
   workstationId?: string | null;
   assignedToEmployeeId?: string | null;
   isRecurring: boolean;
+  recurrenceType?: "daily" | "weekly" | "x_per_week";
+  recurrenceDays?: number[] | null;
+  targetPerWeek?: number | null;
   notifyEmployee: boolean;
   createdAt: string;
   updatedAt: string;
@@ -105,8 +108,9 @@ export interface TaskTemplate {
 export interface DailyTask {
   id: string;
   taskTemplateId: string;
-  employeeId: string;
+  employeeId?: string | null;
   date: string;
+  status?: "UNASSIGNED" | "ASSIGNED" | "DONE";
   isCompleted: boolean;
   completedAt?: string;
   taskTemplate: {
@@ -127,6 +131,9 @@ export interface CreateTaskTemplateRequest {
   workstationId?: string;
   assignedToEmployeeId?: string;
   isRecurring?: boolean;
+  recurrenceType?: "daily" | "weekly" | "x_per_week";
+  recurrenceDays?: number[];
+  targetPerWeek?: number;
   notifyEmployee?: boolean;
   date?: string;
 }
@@ -146,6 +153,9 @@ export interface UpdateTaskTemplateRequest {
   workstationId?: string | null;
   assignedToEmployeeId?: string | null;
   isRecurring?: boolean;
+  recurrenceType?: "daily" | "weekly" | "x_per_week";
+  recurrenceDays?: number[] | null;
+  targetPerWeek?: number | null;
   notifyEmployee?: boolean;
 }
 
@@ -202,4 +212,24 @@ export interface ManagerDashboard {
     id: string;
     name: string;
   }>;
+  dayPreparation?: {
+    recurringTemplatesTotal: number;
+    recurringUnassignedCount: number;
+    isPrepared: boolean;
+    preparedAt?: string | null;
+    unassignedRecurringTemplates: Array<{
+      templateId: string;
+      title: string;
+      workstation?: {
+        id: string;
+        name: string;
+      } | null;
+      suggestedEmployees: Array<{
+        id: string;
+        name: string;
+        email: string;
+      }>;
+      defaultEmployeeId?: string | null;
+    }>;
+  };
 }

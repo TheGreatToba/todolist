@@ -73,6 +73,7 @@ model User {
   setPasswordToken  SetPasswordToken?
   passwordResetToken PasswordResetToken?
   assignedTasks   TaskTemplate[] @relation("AssignedTasks")
+  dayPreparations DayPreparation[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -95,6 +96,9 @@ model TaskTemplate {
   createdBy       User     @relation("TaskCreator", fields: [createdById], references: [id], onDelete: Cascade)
 
   isRecurring     Boolean  @default(true)
+  recurrenceType  String   @default("daily") // daily | weekly | x_per_week
+  recurrenceDays  String? // CSV of 0..6 (0=Sunday), e.g. "1,3,5"
+  targetPerWeek   Int?
   notifyEmployee  Boolean  @default(true)
   dailyTasks      DailyTask[]
 
@@ -134,10 +138,11 @@ model DailyTask {
   taskTemplateId  String
   taskTemplate    TaskTemplate @relation(fields: [taskTemplateId], references: [id], onDelete: Cascade)
   
-  employeeId      String
-  employee        User     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId      String?
+  employee        User?    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   
   date            DateTime
+  status          String   @default("ASSIGNED") // UNASSIGNED | ASSIGNED | DONE
   isCompleted     Boolean  @default(false)
   completedAt     DateTime?
   
@@ -147,5 +152,20 @@ model DailyTask {
   @@unique([taskTemplateId, employeeId, date])
   @@index([employeeId])
   @@index([taskTemplateId])
+  @@index([date])
+  @@index([status])
+}
+
+model DayPreparation {
+  id         String   @id @default(cuid())
+  managerId  String
+  manager    User     @relation(fields: [managerId], references: [id], onDelete: Cascade)
+  date       DateTime
+  preparedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([managerId, date])
   @@index([date])
 }
