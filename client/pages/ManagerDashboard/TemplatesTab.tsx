@@ -15,6 +15,9 @@ export function TemplatesTab({
   onDelete,
   onCreateTemplate,
 }: TemplatesTabProps) {
+  const [taskTypeTab, setTaskTypeTab] = React.useState<
+    "recurring" | "one-shot"
+  >("recurring");
   const handleDelete = (templateId: string, title: string) => {
     if (
       !confirm(
@@ -24,6 +27,14 @@ export function TemplatesTab({
       return;
     onDelete(templateId);
   };
+  const recurringTemplates = templates.filter(
+    (template) => template.isRecurring,
+  );
+  const oneShotTemplates = templates.filter(
+    (template) => !template.isRecurring,
+  );
+  const filteredTemplates =
+    taskTypeTab === "recurring" ? recurringTemplates : oneShotTemplates;
 
   return (
     <div>
@@ -42,22 +53,54 @@ export function TemplatesTab({
           Manage your task templates. Templates define recurring tasks that are
           automatically assigned to employees.
         </p>
+        <div className="mb-6">
+          <div className="grid w-full grid-cols-2 rounded-xl border border-border bg-muted/30 p-1">
+            <button
+              type="button"
+              onClick={() => setTaskTypeTab("recurring")}
+              className={`min-h-11 rounded-lg px-3 py-3 text-sm font-medium transition ${
+                taskTypeTab === "recurring"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {`Récurrentes (${recurringTemplates.length})`}
+            </button>
+            <button
+              type="button"
+              onClick={() => setTaskTypeTab("one-shot")}
+              className={`min-h-11 rounded-lg px-3 py-3 text-sm font-medium transition ${
+                taskTypeTab === "one-shot"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {`One-shot (${oneShotTemplates.length})`}
+            </button>
+          </div>
+        </div>
       </div>
 
-      {templates.length === 0 ? (
+      {filteredTemplates.length === 0 ? (
         <div className="text-center py-12 bg-card rounded-xl border border-border">
-          <p className="text-muted-foreground mb-4">No task templates yet.</p>
-          <button
-            type="button"
-            onClick={onCreateTemplate}
-            className="px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-medium transition text-sm"
-          >
-            Create your first template
-          </button>
+          <p className="text-muted-foreground mb-4">
+            {taskTypeTab === "recurring"
+              ? "Aucune tâche récurrente."
+              : "Aucune tâche one-shot."}
+          </p>
+          {templates.length === 0 && (
+            <button
+              type="button"
+              onClick={onCreateTemplate}
+              className="px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-medium transition text-sm"
+            >
+              Create your first template
+            </button>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {templates.map((template) => (
+          {filteredTemplates.map((template) => (
             <div
               key={template.id}
               className="bg-card rounded-xl border border-border p-6 shadow-sm"
