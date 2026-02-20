@@ -24,7 +24,7 @@
     "pretest": "prisma migrate deploy && prisma generate",
     "test": "pnpm run test:client && pnpm run test:server",
     "test:client": "vitest run client/",
-    "test:server": "cross-env VITEST_SERVER=1 vitest run server/",
+    "test:server": "cross-env VITEST_SERVER=1 vitest run server/ --sequence.concurrent false",
     "ci": "pnpm run typecheck && pnpm exec prisma migrate deploy && pnpm run seed && pnpm run test",
     "format.fix": "prettier --write .",
     "format.check": "prettier --check .",

@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import type { TeamMember } from "@shared/api";
+import { Badge } from "@/components/ui/badge";
 import type { TasksByEmployeeGroup } from "./types";
 
 interface EmployeeTaskCardProps {
@@ -91,6 +92,11 @@ export function EmployeeTaskCard({
                 >
                   {task.taskTemplate.title}
                 </p>
+                <div className="mt-1">
+                  <Badge variant="secondary" className="text-[10px] uppercase">
+                    {task.taskTemplate.isRecurring ? "Recurring" : "One-shot"}
+                  </Badge>
+                </div>
                 {task.taskTemplate.description && (
                   <p className="text-xs text-muted-foreground mt-0.5">
                     {task.taskTemplate.description}

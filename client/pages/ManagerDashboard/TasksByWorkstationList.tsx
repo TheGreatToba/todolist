@@ -8,6 +8,7 @@ interface TasksByWorkstationListProps {
   teamMembers: TeamMember[];
   onToggleTask: (taskId: string, isCompleted: boolean) => void;
   onReassignTask: (taskId: string, employeeId: string) => void;
+  emptyMessage?: string;
   pendingTaskId?: string | null;
   isTaskUpdating?: boolean;
 }
@@ -17,6 +18,7 @@ export function TasksByWorkstationList({
   teamMembers,
   onToggleTask,
   onReassignTask,
+  emptyMessage = "No tasks found",
   pendingTaskId,
   isTaskUpdating = false,
 }: TasksByWorkstationListProps) {
@@ -25,7 +27,7 @@ export function TasksByWorkstationList({
   if (values.length === 0) {
     return (
       <div className="text-center py-12 bg-card rounded-xl border border-border">
-        <p className="text-muted-foreground">No tasks found</p>
+        <p className="text-muted-foreground">{emptyMessage}</p>
       </div>
     );
   }

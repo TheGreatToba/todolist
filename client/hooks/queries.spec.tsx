@@ -42,7 +42,7 @@ describe("useUpdateDailyTaskMutation", () => {
           employeeId: "e1",
           date: "2025-02-19",
           isCompleted: true,
-          taskTemplate: { id: "tt1", title: "Task" },
+          taskTemplate: { id: "tt1", title: "Task", isRecurring: true },
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
       ) as Response,

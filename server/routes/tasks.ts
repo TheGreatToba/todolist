@@ -127,6 +127,7 @@ export const handleGetEmployeeDailyTasks: RequestHandler = async (req, res) => {
             id: true,
             title: true,
             description: true,
+            isRecurring: true,
             workstation: {
               select: {
                 id: true,
@@ -269,6 +270,7 @@ export const handleUpdateDailyTask: RequestHandler = async (req, res) => {
             id: true,
             title: true,
             description: true,
+            isRecurring: true,
           },
         },
       },
@@ -1120,6 +1122,7 @@ export const handleGetManagerDashboard: RequestHandler = async (req, res) => {
             id: true,
             title: true,
             description: true,
+            isRecurring: true,
             workstation: {
               select: {
                 id: true,

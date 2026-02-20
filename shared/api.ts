@@ -113,6 +113,7 @@ export interface DailyTask {
     id: string;
     title: string;
     description?: string;
+    isRecurring: boolean;
     workstation?: {
       id: string;
       name: string;

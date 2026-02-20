@@ -3,15 +3,33 @@
  * Prerequisites: DATABASE_URL (and JWT_SECRET for app). Run after seed or on empty DB.
  */
 import "dotenv/config";
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import prisma from "../lib/db";
-import { runBackfill } from "./backfill-workstation-team";
+import type { runBackfill as RunBackfill } from "./backfill-workstation-team";
 
 describe("runBackfill", () => {
   let wsNoTeamId: string;
   let userNoTeamId: string;
+  let runBackfill: typeof RunBackfill;
+
+  it("does not auto-run main or call process.exit when imported", async () => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation((() => {
+      throw new Error("process.exit should not be called on import");
+    }) as never);
+
+    const module = await import("./backfill-workstation-team");
+    runBackfill = module.runBackfill;
+
+    expect(exitSpy).not.toHaveBeenCalled();
+    exitSpy.mockRestore();
+  });
 
   beforeAll(async () => {
+    if (!runBackfill) {
+      const module = await import("./backfill-workstation-team");
+      runBackfill = module.runBackfill;
+    }
+
     const user = await prisma.user.create({
       data: {
         name: "Orphan Employee",

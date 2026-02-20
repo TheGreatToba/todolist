@@ -47,6 +47,7 @@ const mockTasks: Array<{
   taskTemplate: {
     title: string;
     description: string | null;
+    isRecurring: boolean;
     workstation: { name: string } | null;
   };
 }> = [
@@ -57,6 +58,7 @@ const mockTasks: Array<{
     taskTemplate: {
       title: "Morning checklist",
       description: "Complete opening duties",
+      isRecurring: true,
       workstation: { name: "Front Desk" },
     },
   },
@@ -67,6 +69,7 @@ const mockTasks: Array<{
     taskTemplate: {
       title: "Stock inventory",
       description: null,
+      isRecurring: false,
       workstation: { name: "Warehouse" },
     },
   },
@@ -144,6 +147,13 @@ describe("EmployeeDashboard", () => {
 
     expect(view.getByText("Morning checklist")).toBeInTheDocument();
     expect(view.getByText("Stock inventory")).toBeInTheDocument();
+  });
+
+  it("renders recurring/one-shot badges on tasks", () => {
+    const { view } = renderWithProviders(<EmployeeDashboard />);
+
+    expect(view.getByText("Recurring")).toBeInTheDocument();
+    expect(view.getByText("One-shot")).toBeInTheDocument();
   });
 
   it("calls update mutation when task toggle is clicked", async () => {

@@ -13,6 +13,7 @@ import { toastError, toastSuccess } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/get-error-message";
 import { todayLocalISO, isToday, formatTaskDateLabel } from "@/lib/date-utils";
 import { AccountSettingsForm } from "@/components/AccountSettingsForm";
+import { Badge } from "@/components/ui/badge";
 
 export default function EmployeeDashboard() {
   const { user, logout } = useAuth();
@@ -236,6 +237,16 @@ export default function EmployeeDashboard() {
                             >
                               {task.taskTemplate.title}
                             </h3>
+                            <div className="mt-1">
+                              <Badge
+                                variant="secondary"
+                                className="text-[10px] uppercase"
+                              >
+                                {task.taskTemplate.isRecurring
+                                  ? "Recurring"
+                                  : "One-shot"}
+                              </Badge>
+                            </div>
                             {task.taskTemplate.description && (
                               <p
                                 className={`text-sm mt-1 ${

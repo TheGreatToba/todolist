@@ -732,6 +732,64 @@ describe("Permissions - role-based access", () => {
     expect(res.body).toHaveProperty("dailyTasks");
   });
 
+  it("GET /api/manager/dashboard includes taskTemplate.isRecurring on daily tasks", async () => {
+    const manager = await prisma.user.findUnique({
+      where: { email: "mgr@test.com" },
+      select: { id: true, teamId: true },
+    });
+    const employee = await prisma.user.findUnique({
+      where: { email: "emp@test.com" },
+      select: { id: true, teamId: true, role: true },
+    });
+    expect(manager?.id).toBeTruthy();
+    expect(employee?.id).toBeTruthy();
+    expect(employee?.role).toBe("EMPLOYEE");
+    expect(employee?.teamId).toBe(manager?.teamId);
+
+    const targetDate = "2025-02-20";
+    const dateObj = new Date(`${targetDate}T00:00:00.000Z`);
+
+    const template = await prisma.taskTemplate.create({
+      data: {
+        title: `Manager dashboard recurring flag ${Date.now()}`,
+        createdById: manager!.id,
+        assignedToEmployeeId: employee!.id,
+        isRecurring: false,
+      },
+    });
+
+    const createdTask = await prisma.dailyTask.create({
+      data: {
+        taskTemplateId: template.id,
+        employeeId: employee!.id,
+        date: dateObj,
+        isCompleted: false,
+      },
+    });
+
+    try {
+      const agent = request.agent(app);
+      await agent
+        .post("/api/auth/login")
+        .send({ email: "mgr@test.com", password: "password" });
+
+      const res = await agent.get(`/api/manager/dashboard?date=${targetDate}`);
+
+      expect(res.status).toBe(200);
+      const task = (
+        res.body.dailyTasks as Array<{
+          id: string;
+          taskTemplate: { isRecurring?: boolean };
+        }>
+      ).find((candidate) => candidate.id === createdTask.id);
+      expect(task).toBeDefined();
+      expect(task?.taskTemplate.isRecurring).toBe(false);
+    } finally {
+      await prisma.dailyTask.deleteMany({ where: { id: createdTask.id } });
+      await prisma.taskTemplate.deleteMany({ where: { id: template.id } });
+    }
+  });
+
   it("GET /api/manager/dashboard?date=invalid returns 400 with message", async () => {
     const agent = request.agent(app);
     await agent
@@ -1951,6 +2009,64 @@ describe("Daily tasks API", () => {
 
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body)).toBe(true);
+  });
+
+  it("GET /api/tasks/daily includes taskTemplate.isRecurring", async () => {
+    const manager = await prisma.user.findUnique({
+      where: { email: "mgr@test.com" },
+      select: { id: true, teamId: true },
+    });
+    const employee = await prisma.user.findUnique({
+      where: { email: "emp@test.com" },
+      select: { id: true, teamId: true, role: true },
+    });
+    expect(manager?.id).toBeTruthy();
+    expect(employee?.id).toBeTruthy();
+    expect(employee?.role).toBe("EMPLOYEE");
+    expect(employee?.teamId).toBe(manager?.teamId);
+
+    const targetDate = "2025-02-21";
+    const dateObj = new Date(`${targetDate}T00:00:00.000Z`);
+
+    const template = await prisma.taskTemplate.create({
+      data: {
+        title: `Employee daily recurring flag ${Date.now()}`,
+        createdById: manager!.id,
+        assignedToEmployeeId: employee!.id,
+        isRecurring: false,
+      },
+    });
+
+    const createdTask = await prisma.dailyTask.create({
+      data: {
+        taskTemplateId: template.id,
+        employeeId: employee!.id,
+        date: dateObj,
+        isCompleted: false,
+      },
+    });
+
+    try {
+      const agent = request.agent(app);
+      await agent
+        .post("/api/auth/login")
+        .send({ email: "emp@test.com", password: "password" });
+
+      const res = await agent.get(`/api/tasks/daily?date=${targetDate}`);
+
+      expect(res.status).toBe(200);
+      const task = (
+        res.body as Array<{
+          id: string;
+          taskTemplate: { isRecurring?: boolean };
+        }>
+      ).find((candidate) => candidate.id === createdTask.id);
+      expect(task).toBeDefined();
+      expect(task?.taskTemplate.isRecurring).toBe(false);
+    } finally {
+      await prisma.dailyTask.deleteMany({ where: { id: createdTask.id } });
+      await prisma.taskTemplate.deleteMany({ where: { id: template.id } });
+    }
   });
 
   it("GET /api/tasks/daily?date=YYYY-MM-DD returns 200 and array for that date", async () => {

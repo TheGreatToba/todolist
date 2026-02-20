@@ -12,6 +12,7 @@
  *   pnpm backfill:workstation-team --dry-run # log what would be done, no writes
  */
 import "dotenv/config";
+import { pathToFileURL } from "node:url";
 import prisma from "../lib/db";
 
 export interface BackfillResult {
@@ -137,7 +138,15 @@ async function main() {
   await prisma.$disconnect();
 }
 
-main().catch((e) => {
-  console.error(e);
-  process.exit(1);
-});
+function isDirectEntrypoint() {
+  const scriptPath = process.argv[1];
+  if (!scriptPath) return false;
+  return import.meta.url === pathToFileURL(scriptPath).href;
+}
+
+if (isDirectEntrypoint()) {
+  main().catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });
+}
