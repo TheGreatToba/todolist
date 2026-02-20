@@ -1,10 +1,15 @@
 import React, { useRef } from "react";
 import { X } from "lucide-react";
-import type { ManagerDashboard as ManagerDashboardType } from "@shared/api";
+import type {
+  ManagerDashboard as ManagerDashboardType,
+  TaskTemplateWithRelations,
+} from "@shared/api";
 import type { TeamMember } from "./types";
 import { useModalA11y } from "./useModalA11y";
 
 export interface NewTaskFormState {
+  creationMode: "create" | "template";
+  templateId: string;
   title: string;
   description: string;
   workstationId: string;
@@ -21,6 +26,7 @@ interface NewTaskModalProps {
   onFormChange: (next: NewTaskFormState) => void;
   onSubmit: (e: React.FormEvent) => void;
   workstations: ManagerDashboardType["workstations"];
+  templates: TaskTemplateWithRelations[];
   teamMembers: TeamMember[];
   isSubmitting?: boolean;
 }
@@ -32,11 +38,13 @@ export function NewTaskModal({
   onFormChange,
   onSubmit,
   workstations,
+  templates,
   teamMembers,
   isSubmitting = false,
 }: NewTaskModalProps) {
   const modalRef = useRef<HTMLDivElement>(null);
   useModalA11y(modalRef, isOpen, onClose);
+  const selectedTemplate = templates.find((t) => t.id === form.templateId);
 
   if (!isOpen) return null;
 
@@ -75,65 +83,131 @@ export function NewTaskModal({
         <form onSubmit={onSubmit} className="space-y-4">
           <div>
             <label
-              htmlFor="task-title"
+              htmlFor="task-creation-mode"
               className="block text-sm font-medium text-foreground mb-2"
             >
-              Task Title
+              Source
             </label>
-            <input
-              id="task-title"
-              type="text"
-              required
-              value={form.title}
-              onChange={(e) => onFormChange({ ...form, title: e.target.value })}
-              placeholder="e.g., Clean the workstation"
-              className="w-full px-4 py-2 rounded-lg border border-input bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-            />
+            <select
+              id="task-creation-mode"
+              value={form.creationMode}
+              onChange={(e) =>
+                onFormChange({
+                  ...form,
+                  creationMode: e.target.value as "create" | "template",
+                  templateId: "",
+                })
+              }
+              className="w-full px-4 py-2 rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+            >
+              <option value="create">Create new template</option>
+              <option value="template">Use existing template</option>
+            </select>
           </div>
 
-          <div>
-            <span className="block text-sm font-medium text-foreground mb-2">
-              Task Type
-            </span>
-            <div className="flex gap-3">
+          {form.creationMode === "template" && (
+            <div>
               <label
-                className="flex items-center gap-2 cursor-pointer flex-1 p-3 rounded-lg border-2 transition"
-                style={{
-                  borderColor: form.isRecurring
-                    ? "var(--primary)"
-                    : "var(--border)",
-                }}
+                htmlFor="task-template"
+                className="block text-sm font-medium text-foreground mb-2"
               >
-                <input
-                  type="radio"
-                  checked={form.isRecurring}
-                  onChange={() => onFormChange({ ...form, isRecurring: true })}
-                  className="w-4 h-4"
-                />
-                <span className="text-sm font-medium text-foreground">
-                  Recurring
-                </span>
+                Existing template
               </label>
-              <label
-                className="flex items-center gap-2 cursor-pointer flex-1 p-3 rounded-lg border-2 transition"
-                style={{
-                  borderColor: !form.isRecurring
-                    ? "var(--primary)"
-                    : "var(--border)",
-                }}
+              <select
+                id="task-template"
+                required
+                value={form.templateId}
+                onChange={(e) =>
+                  onFormChange({ ...form, templateId: e.target.value })
+                }
+                className="w-full px-4 py-2 rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
               >
-                <input
-                  type="radio"
-                  checked={!form.isRecurring}
-                  onChange={() => onFormChange({ ...form, isRecurring: false })}
-                  className="w-4 h-4"
-                />
-                <span className="text-sm font-medium text-foreground">
-                  One-shot
-                </span>
-              </label>
+                <option value="">Select a template</option>
+                {templates.map((template) => (
+                  <option key={template.id} value={template.id}>
+                    {template.title}
+                  </option>
+                ))}
+              </select>
+              {selectedTemplate && (
+                <p className="text-xs text-muted-foreground mt-2">
+                  {selectedTemplate.description || "No description"}
+                </p>
+              )}
             </div>
-          </div>
+          )}
+
+          {form.creationMode === "create" && (
+            <div>
+              <label
+                htmlFor="task-title"
+                className="block text-sm font-medium text-foreground mb-2"
+              >
+                Task Title
+              </label>
+              <input
+                id="task-title"
+                type="text"
+                required
+                value={form.title}
+                onChange={(e) =>
+                  onFormChange({ ...form, title: e.target.value })
+                }
+                placeholder="e.g., Clean the workstation"
+                className="w-full px-4 py-2 rounded-lg border border-input bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+          )}
+
+          {form.creationMode === "create" && (
+            <div>
+              <span className="block text-sm font-medium text-foreground mb-2">
+                Task Type
+              </span>
+              <div className="flex gap-3">
+                <label
+                  className="flex items-center gap-2 cursor-pointer flex-1 p-3 rounded-lg border-2 transition"
+                  style={{
+                    borderColor: form.isRecurring
+                      ? "var(--primary)"
+                      : "var(--border)",
+                  }}
+                >
+                  <input
+                    type="radio"
+                    checked={form.isRecurring}
+                    onChange={() =>
+                      onFormChange({ ...form, isRecurring: true })
+                    }
+                    className="w-4 h-4"
+                  />
+                  <span className="text-sm font-medium text-foreground">
+                    Recurring
+                  </span>
+                </label>
+                <label
+                  className="flex items-center gap-2 cursor-pointer flex-1 p-3 rounded-lg border-2 transition"
+                  style={{
+                    borderColor: !form.isRecurring
+                      ? "var(--primary)"
+                      : "var(--border)",
+                  }}
+                >
+                  <input
+                    type="radio"
+                    checked={!form.isRecurring}
+                    onChange={() =>
+                      onFormChange({ ...form, isRecurring: false })
+                    }
+                    className="w-4 h-4"
+                  />
+                  <span className="text-sm font-medium text-foreground">
+                    One-shot
+                  </span>
+                </label>
+              </div>
+            </div>
+          )}
 
           <div>
             <span className="block text-sm font-medium text-foreground mb-2">
@@ -250,24 +324,26 @@ export function NewTaskModal({
             </div>
           )}
 
-          <div>
-            <label
-              htmlFor="task-description"
-              className="block text-sm font-medium text-foreground mb-2"
-            >
-              Description (optional)
-            </label>
-            <textarea
-              id="task-description"
-              value={form.description}
-              onChange={(e) =>
-                onFormChange({ ...form, description: e.target.value })
-              }
-              placeholder="Add any additional details..."
-              className="w-full px-4 py-2 rounded-lg border border-input bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary resize-none"
-              rows={3}
-            />
-          </div>
+          {form.creationMode === "create" && (
+            <div>
+              <label
+                htmlFor="task-description"
+                className="block text-sm font-medium text-foreground mb-2"
+              >
+                Description (optional)
+              </label>
+              <textarea
+                id="task-description"
+                value={form.description}
+                onChange={(e) =>
+                  onFormChange({ ...form, description: e.target.value })
+                }
+                placeholder="Add any additional details..."
+                className="w-full px-4 py-2 rounded-lg border border-input bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+                rows={3}
+              />
+            </div>
+          )}
 
           <div className="flex items-center gap-2 p-3 rounded-lg bg-secondary/30 border border-secondary">
             <input
@@ -300,7 +376,7 @@ export function NewTaskModal({
               disabled={isSubmitting}
               className="flex-1 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg transition font-medium disabled:opacity-50"
             >
-              Create Task
+              {form.creationMode === "template" ? "Assign Task" : "Create Task"}
             </button>
           </div>
         </form>

@@ -892,6 +892,132 @@ describe("Permissions - role-based access", () => {
     expect(res.status).toBe(403);
   });
 
+  it("POST /api/tasks/templates creates daily task on requested date", async () => {
+    const bcryptjs = (await import("bcryptjs")).default;
+    const agent = request.agent(app);
+    const loginRes = await agent
+      .post("/api/auth/login")
+      .send({ email: "mgr@test.com", password: "password" });
+    const cookie = await assertLoggedIn(agent, "mgr@test.com", loginRes);
+    const auth = withAuthCookie(agent, cookie);
+
+    const manager = await prisma.user.findUnique({
+      where: { email: "mgr@test.com" },
+      select: { id: true, teamId: true },
+    });
+    expect(manager?.teamId).toBeTruthy();
+
+    const ws = await prisma.workstation.create({
+      data: { name: `WS DATE ${Date.now()}`, teamId: manager!.teamId! },
+    });
+    const employee = await prisma.user.create({
+      data: {
+        name: "Date Target Employee",
+        email: `date-target-${Date.now()}@test.com`,
+        passwordHash: await bcryptjs.hash("password", 10),
+        role: "EMPLOYEE",
+        teamId: manager!.teamId!,
+        workstations: { create: [{ workstationId: ws.id }] },
+      },
+    });
+
+    const targetDate = "2026-02-20";
+    let templateId: string | null = null;
+    try {
+      const res = await auth.post("/api/tasks/templates").send({
+        title: "Date-specific task",
+        workstationId: ws.id,
+        isRecurring: false,
+        notifyEmployee: false,
+        date: targetDate,
+      });
+      expect(res.status).toBe(201);
+      templateId = res.body.id;
+
+      const dayStart = new Date(`${targetDate}T00:00:00`);
+      const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+      const task = await prisma.dailyTask.findFirst({
+        where: {
+          taskTemplateId: templateId!,
+          employeeId: employee.id,
+          date: { gte: dayStart, lt: dayEnd },
+        },
+      });
+      expect(task).toBeTruthy();
+    } finally {
+      if (templateId) {
+        await prisma.taskTemplate.delete({ where: { id: templateId } });
+      }
+      await prisma.employeeWorkstation.deleteMany({
+        where: { employeeId: employee.id },
+      });
+      await prisma.user.delete({ where: { id: employee.id } });
+      await prisma.workstation.delete({ where: { id: ws.id } });
+    }
+  });
+
+  it("POST /api/tasks/assign-from-template assigns existing template without creating a new one", async () => {
+    const bcryptjs = (await import("bcryptjs")).default;
+    const agent = request.agent(app);
+    const loginRes = await agent
+      .post("/api/auth/login")
+      .send({ email: "mgr@test.com", password: "password" });
+    const cookie = await assertLoggedIn(agent, "mgr@test.com", loginRes);
+    const auth = withAuthCookie(agent, cookie);
+
+    const manager = await prisma.user.findUnique({
+      where: { email: "mgr@test.com" },
+      select: { id: true, teamId: true },
+    });
+    expect(manager?.teamId).toBeTruthy();
+
+    const employee = await prisma.user.create({
+      data: {
+        name: "Template Assign Employee",
+        email: `tpl-assign-${Date.now()}@test.com`,
+        passwordHash: await bcryptjs.hash("password", 10),
+        role: "EMPLOYEE",
+        teamId: manager!.teamId!,
+      },
+    });
+
+    const template = await prisma.taskTemplate.create({
+      data: {
+        title: "Reusable template",
+        createdById: manager!.id,
+        isRecurring: false,
+        notifyEmployee: false,
+        assignedToEmployeeId: employee.id,
+      },
+    });
+
+    const targetDate = "2026-02-20";
+    try {
+      const first = await auth.post("/api/tasks/assign-from-template").send({
+        templateId: template.id,
+        assignmentType: "employee",
+        assignedToEmployeeId: employee.id,
+        notifyEmployee: false,
+        date: targetDate,
+      });
+      expect(first.status).toBe(201);
+      expect(first.body).toMatchObject({ createdCount: 1, skippedCount: 0 });
+
+      const second = await auth.post("/api/tasks/assign-from-template").send({
+        templateId: template.id,
+        assignmentType: "employee",
+        assignedToEmployeeId: employee.id,
+        notifyEmployee: false,
+        date: targetDate,
+      });
+      expect(second.status).toBe(201);
+      expect(second.body).toMatchObject({ createdCount: 0, skippedCount: 1 });
+    } finally {
+      await prisma.taskTemplate.delete({ where: { id: template.id } });
+      await prisma.user.delete({ where: { id: employee.id } });
+    }
+  });
+
   it("POST /api/tasks/templates with workstation not in manager teams returns 404", async () => {
     const bcryptjs = (await import("bcryptjs")).default;
     const otherManager = await prisma.user.create({

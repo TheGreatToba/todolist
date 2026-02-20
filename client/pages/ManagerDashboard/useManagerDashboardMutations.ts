@@ -7,6 +7,7 @@ import {
   useCreateEmployeeMutation,
   useUpdateEmployeeWorkstationsMutation,
   useCreateTaskTemplateMutation,
+  useAssignTaskFromTemplateMutation,
   useUpdateTaskTemplateMutation,
   useDeleteTaskTemplateMutation,
   queryKeys,
@@ -25,6 +26,8 @@ const FALLBACK = {
 } as const;
 
 export const initialNewTask = {
+  creationMode: "create" as "create" | "template",
+  templateId: "",
   title: "",
   description: "",
   workstationId: "",
@@ -104,6 +107,15 @@ export function useManagerDashboardMutations(
       toastError(getErrorMessage(err, FALLBACK.createTask));
     },
   });
+  const assignTaskFromTemplate = useAssignTaskFromTemplateMutation({
+    onSuccess: () => {
+      setNewTask(initialNewTask);
+      onTaskTemplateCreated?.();
+    },
+    onError: (err) => {
+      toastError(getErrorMessage(err, FALLBACK.createTask));
+    },
+  });
   const updateTaskTemplate = useUpdateTaskTemplateMutation({
     onSuccess: () => {
       toastSuccess("Template updated successfully!");
@@ -141,6 +153,7 @@ export function useManagerDashboardMutations(
     createEmployee,
     updateEmployeeWorkstations,
     createTaskTemplate,
+    assignTaskFromTemplate,
     updateTaskTemplate,
     deleteTaskTemplate,
   };

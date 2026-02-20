@@ -9,6 +9,7 @@ import { logger } from "../lib/logger";
 import { getManagerTeamIds, getManagerTeams } from "../lib/manager-teams";
 import { paramString } from "../lib/params";
 import { sendTaskAssignmentEmail } from "../lib/email";
+import { parseDateQuery } from "../lib/parse-date-query";
 import {
   parseDateQueryParam,
   parseManagerDashboardQuery,
@@ -22,6 +23,7 @@ const CreateTaskTemplateSchema = z
     assignedToEmployeeId: z.string().optional(),
     isRecurring: z.boolean().default(true),
     notifyEmployee: z.boolean().default(true),
+    date: z.string().optional(),
   })
   .refine(
     (data) => data.workstationId || data.assignedToEmployeeId,
@@ -54,6 +56,33 @@ const UpdateTaskTemplateSchema = z
     return true;
   }, "Either workstationId or assignedToEmployeeId must be provided");
 
+const AssignTaskFromTemplateSchema = z
+  .object({
+    templateId: z.string().min(1),
+    assignmentType: z.enum(["workstation", "employee"]),
+    workstationId: z.string().optional(),
+    assignedToEmployeeId: z.string().optional(),
+    notifyEmployee: z.boolean().optional(),
+    date: z.string().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.assignmentType === "workstation" && !data.workstationId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "workstationId is required when assignmentType is workstation",
+        path: ["workstationId"],
+      });
+    }
+    if (data.assignmentType === "employee" && !data.assignedToEmployeeId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "assignedToEmployeeId is required when assignmentType is employee",
+        path: ["assignedToEmployeeId"],
+      });
+    }
+  });
+
 const UpdateDailyTaskSchema = z
   .object({
     isCompleted: z.boolean().optional(),
@@ -63,6 +92,13 @@ const UpdateDailyTaskSchema = z
     (data) => data.isCompleted !== undefined || data.employeeId !== undefined,
     "Either isCompleted or employeeId must be provided",
   );
+
+function formatDateYmd(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
 
 // Get all daily tasks for an employee on a specific date
 export const handleGetEmployeeDailyTasks: RequestHandler = async (req, res) => {
@@ -350,8 +386,12 @@ export const handleCreateTaskTemplate: RequestHandler = async (req, res) => {
     });
 
     // Create today's daily tasks immediately for recurring and one-shot templates.
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const taskDate = parseDateQuery(body.date);
+    if (!taskDate) {
+      res.status(400).json({ error: "Invalid date. Use YYYY-MM-DD." });
+      return;
+    }
+    const taskDateYmd = formatDateYmd(taskDate);
     const employees: string[] = [];
 
     // If assigned to specific employee, create task only for them
@@ -377,8 +417,8 @@ export const handleCreateTaskTemplate: RequestHandler = async (req, res) => {
           taskTemplateId: taskTemplate.id,
           employeeId,
           date: {
-            gte: today,
-            lt: new Date(today.getTime() + 24 * 60 * 60 * 1000),
+            gte: taskDate,
+            lt: new Date(taskDate.getTime() + 24 * 60 * 60 * 1000),
           },
         },
         select: { id: true },
@@ -389,7 +429,7 @@ export const handleCreateTaskTemplate: RequestHandler = async (req, res) => {
         data: {
           taskTemplateId: taskTemplate.id,
           employeeId,
-          date: today,
+          date: taskDate,
           isCompleted: false,
         },
       });
@@ -408,6 +448,7 @@ export const handleCreateTaskTemplate: RequestHandler = async (req, res) => {
             io.to(`user:${employeeId}`).emit("task:assigned", {
               taskId: taskTemplate.id,
               employeeId,
+              taskDate: taskDateYmd,
               employeeName: employee.name,
               taskTitle: body.title,
               taskDescription: body.description,
@@ -432,6 +473,161 @@ export const handleCreateTaskTemplate: RequestHandler = async (req, res) => {
     }
 
     res.status(201).json(taskTemplate);
+  } catch (error) {
+    sendErrorResponse(res, error, req);
+  }
+};
+
+/** Assign a daily task from an existing template without creating a new template. */
+export const handleAssignTaskFromTemplate: RequestHandler = async (
+  req,
+  res,
+) => {
+  try {
+    const payload = getAuthOrThrow(req, res);
+    if (!payload) return;
+    const body = AssignTaskFromTemplateSchema.parse(req.body);
+
+    const managerTeamIds = new Set(await getManagerTeamIds(payload.userId));
+    const template = await prisma.taskTemplate.findUnique({
+      where: { id: body.templateId },
+      include: {
+        workstation: { select: { id: true, teamId: true } },
+        assignedToEmployee: { select: { id: true, teamId: true, role: true } },
+      },
+    });
+
+    if (!template) {
+      res.status(404).json({ error: "Template not found" });
+      return;
+    }
+
+    const templateTeamId =
+      template.workstation?.teamId ??
+      template.assignedToEmployee?.teamId ??
+      null;
+    if (!templateTeamId || !managerTeamIds.has(templateTeamId)) {
+      res.status(404).json({ error: "Template not found" });
+      return;
+    }
+
+    const taskDate = parseDateQuery(body.date);
+    if (!taskDate) {
+      res.status(400).json({ error: "Invalid date. Use YYYY-MM-DD." });
+      return;
+    }
+    const taskDateYmd = formatDateYmd(taskDate);
+
+    let targetEmployeeIds: string[] = [];
+    if (body.assignmentType === "employee") {
+      const employee = await prisma.user.findUnique({
+        where: { id: body.assignedToEmployeeId },
+        select: { id: true, role: true, teamId: true, email: true, name: true },
+      });
+      if (
+        !employee ||
+        employee.role !== "EMPLOYEE" ||
+        !employee.teamId ||
+        !managerTeamIds.has(employee.teamId)
+      ) {
+        res.status(404).json({ error: "Employee not found" });
+        return;
+      }
+      targetEmployeeIds = [employee.id];
+    } else {
+      const workstation = await prisma.workstation.findUnique({
+        where: { id: body.workstationId },
+        select: { id: true, teamId: true },
+      });
+      if (
+        !workstation ||
+        !workstation.teamId ||
+        !managerTeamIds.has(workstation.teamId)
+      ) {
+        res.status(404).json({ error: "Workstation not found" });
+        return;
+      }
+      const employeeLinks = await prisma.employeeWorkstation.findMany({
+        where: {
+          workstationId: workstation.id,
+          employee: {
+            role: "EMPLOYEE",
+            teamId: workstation.teamId,
+          },
+        },
+        select: { employeeId: true },
+      });
+      targetEmployeeIds = employeeLinks.map((link) => link.employeeId);
+    }
+
+    let createdCount = 0;
+    let skippedCount = 0;
+    const notifyEmployee = body.notifyEmployee ?? template.notifyEmployee;
+    for (const employeeId of targetEmployeeIds) {
+      const existing = await prisma.dailyTask.findFirst({
+        where: {
+          taskTemplateId: template.id,
+          employeeId,
+          date: {
+            gte: taskDate,
+            lt: new Date(taskDate.getTime() + 24 * 60 * 60 * 1000),
+          },
+        },
+        select: { id: true },
+      });
+      if (existing) {
+        skippedCount += 1;
+        continue;
+      }
+
+      const createdTask = await prisma.dailyTask.create({
+        data: {
+          taskTemplateId: template.id,
+          employeeId,
+          date: taskDate,
+          isCompleted: false,
+        },
+      });
+      createdCount += 1;
+
+      if (!notifyEmployee) continue;
+      const employee = await prisma.user.findUnique({
+        where: { id: employeeId },
+        select: { email: true, name: true },
+      });
+      if (!employee) continue;
+
+      const io = getIO();
+      if (io) {
+        io.to(`user:${employeeId}`).emit("task:assigned", {
+          taskId: createdTask.id,
+          employeeId,
+          taskDate: taskDateYmd,
+          employeeName: employee.name,
+          taskTitle: template.title,
+          taskDescription: template.description,
+        });
+      }
+
+      try {
+        await sendTaskAssignmentEmail(
+          employee.email,
+          employee.name,
+          template.title,
+          template.description || undefined,
+        );
+      } catch {
+        logger.info("Email notification skipped (email service not available)");
+      }
+    }
+
+    res.status(201).json({
+      success: true,
+      templateId: template.id,
+      date: taskDateYmd,
+      createdCount,
+      skippedCount,
+    });
   } catch (error) {
     sendErrorResponse(res, error, req);
   }

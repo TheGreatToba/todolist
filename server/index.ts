@@ -43,6 +43,7 @@ import {
   handleDeleteTaskTemplate,
   handleGetManagerDashboard,
   handleDailyTaskAssignment,
+  handleAssignTaskFromTemplate,
 } from "./routes/tasks";
 import {
   handleGetWorkstations,
@@ -216,6 +217,12 @@ export function createApp(): Express {
     requireAuth,
     requireRole("MANAGER"),
     handleCreateTaskTemplate,
+  );
+  app.post(
+    "/api/tasks/assign-from-template",
+    requireAuth,
+    requireRole("MANAGER"),
+    handleAssignTaskFromTemplate,
   );
   app.get(
     "/api/tasks/templates",

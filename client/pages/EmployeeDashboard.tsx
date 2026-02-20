@@ -42,7 +42,7 @@ export default function EmployeeDashboard() {
         const title = (data.taskTitle ?? "").trim() || "New task assigned";
         const description = (data.taskDescription ?? "").trim() || undefined;
         toastSuccess(title, description);
-        if (isToday(selectedDate)) {
+        if (!data.taskDate || data.taskDate === selectedDate) {
           setTimeout(() => {
             queryClient.invalidateQueries({
               queryKey: queryKeys.tasks.daily(selectedDate),

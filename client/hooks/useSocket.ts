@@ -13,6 +13,7 @@ type SocketEventMap = {
   "task:assigned": {
     taskId: string;
     employeeId: string;
+    taskDate?: string;
     employeeName: string;
     taskTitle: string;
     taskDescription?: string;

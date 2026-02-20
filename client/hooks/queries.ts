@@ -22,6 +22,7 @@ import type {
   ForgotPasswordResponse,
   ResetPasswordResponse,
   TaskTemplateWithRelations,
+  AssignTaskFromTemplateRequest,
   UpdateTaskTemplateRequest,
   UpdateWorkstationEmployeesRequest,
 } from "@shared/api";
@@ -560,6 +561,7 @@ export function useCreateTaskTemplateMutation(
       assignmentType: "workstation" | "employee";
       notifyEmployee: boolean;
       isRecurring?: boolean;
+      date?: string;
     }
   >,
 ) {
@@ -573,12 +575,14 @@ export function useCreateTaskTemplateMutation(
       assignmentType: "workstation" | "employee";
       notifyEmployee: boolean;
       isRecurring?: boolean;
+      date?: string;
     }) => {
       const body = {
         title: payload.title,
         description: payload.description,
         notifyEmployee: payload.notifyEmployee,
         isRecurring: payload.isRecurring,
+        date: payload.date,
         ...(payload.assignmentType === "workstation" && {
           workstationId: payload.workstationId,
         }),
@@ -604,6 +608,34 @@ export function useCreateTaskTemplateMutation(
         queryKey: queryKeys.manager.taskTemplates,
       });
       queryClient.invalidateQueries({ queryKey: queryKeys.tasks.dailyPrefix });
+      options?.onSuccess?.(data, variables, ctx);
+    },
+  });
+}
+
+export function useAssignTaskFromTemplateMutation(
+  options?: UseMutationOptions<unknown, Error, AssignTaskFromTemplateRequest>,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: AssignTaskFromTemplateRequest) => {
+      const res = await fetchWithCsrf("/api/tasks/assign-from-template", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to assign task");
+      return data;
+    },
+    ...options,
+    onSuccess: (data, variables, ctx) => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.manager.dashboardPrefix,
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.tasks.dailyPrefix,
+      });
       options?.onSuccess?.(data, variables, ctx);
     },
   });

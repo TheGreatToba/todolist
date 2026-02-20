@@ -127,6 +127,16 @@ export interface CreateTaskTemplateRequest {
   assignedToEmployeeId?: string;
   isRecurring?: boolean;
   notifyEmployee?: boolean;
+  date?: string;
+}
+
+export interface AssignTaskFromTemplateRequest {
+  templateId: string;
+  assignmentType: "workstation" | "employee";
+  workstationId?: string;
+  assignedToEmployeeId?: string;
+  notifyEmployee?: boolean;
+  date?: string;
 }
 
 export interface UpdateTaskTemplateRequest {

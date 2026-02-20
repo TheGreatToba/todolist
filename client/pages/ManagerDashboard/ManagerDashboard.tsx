@@ -98,8 +98,18 @@ export default function ManagerDashboard() {
 
   const handleCreateTask = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!mutations.newTask.title) {
+    if (
+      mutations.newTask.creationMode === "create" &&
+      !mutations.newTask.title
+    ) {
       toastError("Please fill in the task title");
+      return;
+    }
+    if (
+      mutations.newTask.creationMode === "template" &&
+      !mutations.newTask.templateId
+    ) {
+      toastError("Please select a template");
       return;
     }
     if (
@@ -116,6 +126,24 @@ export default function ManagerDashboard() {
       toastError("Please select an employee");
       return;
     }
+    if (mutations.newTask.creationMode === "template") {
+      mutations.assignTaskFromTemplate.mutate({
+        templateId: mutations.newTask.templateId,
+        assignmentType: mutations.newTask.assignmentType,
+        workstationId:
+          mutations.newTask.assignmentType === "workstation"
+            ? mutations.newTask.workstationId
+            : undefined,
+        assignedToEmployeeId:
+          mutations.newTask.assignmentType === "employee"
+            ? mutations.newTask.assignedToEmployeeId
+            : undefined,
+        notifyEmployee: mutations.newTask.notifyEmployee,
+        date: filters.selectedDate,
+      });
+      return;
+    }
+
     mutations.createTaskTemplate.mutate({
       title: mutations.newTask.title,
       description: mutations.newTask.description,
@@ -124,6 +152,7 @@ export default function ManagerDashboard() {
       assignmentType: mutations.newTask.assignmentType,
       notifyEmployee: mutations.newTask.notifyEmployee,
       isRecurring: mutations.newTask.isRecurring,
+      date: filters.selectedDate,
     });
   };
 
@@ -395,8 +424,12 @@ export default function ManagerDashboard() {
         onFormChange={mutations.setNewTask}
         onSubmit={handleCreateTask}
         workstations={dashboard.workstations}
+        templates={templates}
         teamMembers={teamMembers}
-        isSubmitting={mutations.createTaskTemplate.isPending}
+        isSubmitting={
+          mutations.createTaskTemplate.isPending ||
+          mutations.assignTaskFromTemplate.isPending
+        }
       />
 
       <EditTaskTemplateModal
