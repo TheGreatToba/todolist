@@ -558,7 +558,7 @@ export function useCreateTaskTemplateMutation(
       description?: string;
       workstationId?: string;
       assignedToEmployeeId?: string;
-      assignmentType: "workstation" | "employee";
+      assignmentType: "workstation" | "employee" | "none";
       notifyEmployee: boolean;
       isRecurring?: boolean;
       date?: string;
@@ -572,7 +572,7 @@ export function useCreateTaskTemplateMutation(
       description?: string;
       workstationId?: string;
       assignedToEmployeeId?: string;
-      assignmentType: "workstation" | "employee";
+      assignmentType: "workstation" | "employee" | "none";
       notifyEmployee: boolean;
       isRecurring?: boolean;
       date?: string;

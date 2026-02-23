@@ -9,7 +9,7 @@ export interface EditTaskTemplateFormState {
   description: string;
   workstationId: string;
   assignedToEmployeeId: string;
-  assignmentType: "workstation" | "employee";
+  assignmentType: "workstation" | "employee" | "none";
   isRecurring: boolean;
   notifyEmployee: boolean;
 }
@@ -39,6 +39,7 @@ export function EditTaskTemplateModal({
 }: EditTaskTemplateModalProps) {
   const modalRef = useRef<HTMLDivElement>(null);
   useModalA11y(modalRef, isOpen, onClose);
+  const canStayUnassigned = form.isRecurring;
 
   if (!isOpen || !template) return null;
 
@@ -97,7 +98,7 @@ export function EditTaskTemplateModal({
             <span className="block text-sm font-medium text-foreground mb-2">
               Assign To
             </span>
-            <div className="flex gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <label
                 className="flex items-center gap-2 cursor-pointer flex-1 p-3 rounded-lg border-2 transition"
                 style={{
@@ -148,6 +149,34 @@ export function EditTaskTemplateModal({
                   Employee
                 </span>
               </label>
+              {canStayUnassigned && (
+                <label
+                  className="flex items-center gap-2 cursor-pointer flex-1 p-3 rounded-lg border-2 transition"
+                  style={{
+                    borderColor:
+                      form.assignmentType === "none"
+                        ? "var(--primary)"
+                        : "var(--border)",
+                  }}
+                >
+                  <input
+                    type="radio"
+                    checked={form.assignmentType === "none"}
+                    onChange={() => {
+                      onFormChange({
+                        ...form,
+                        assignmentType: "none",
+                        workstationId: "",
+                        assignedToEmployeeId: "",
+                      });
+                    }}
+                    className="w-4 h-4"
+                  />
+                  <span className="text-sm font-medium text-foreground">
+                    Unassigned
+                  </span>
+                </label>
+              )}
             </div>
           </div>
 
@@ -233,7 +262,14 @@ export function EditTaskTemplateModal({
               id="edit-template-recurring"
               checked={form.isRecurring}
               onChange={(e) =>
-                onFormChange({ ...form, isRecurring: e.target.checked })
+                onFormChange({
+                  ...form,
+                  isRecurring: e.target.checked,
+                  assignmentType:
+                    !e.target.checked && form.assignmentType === "none"
+                      ? "workstation"
+                      : form.assignmentType,
+                })
               }
               className="w-4 h-4 rounded"
             />

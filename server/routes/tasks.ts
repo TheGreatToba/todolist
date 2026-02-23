@@ -32,42 +32,32 @@ const CreateTaskTemplateSchema = z
     notifyEmployee: z.boolean().default(true),
     date: z.string().optional(),
   })
-  .refine(
-    (data) => data.workstationId || data.assignedToEmployeeId,
-    "Either workstationId or assignedToEmployeeId must be provided",
-  );
-
-const UpdateTaskTemplateSchema = z
-  .object({
-    title: z.string().min(1).optional(),
-    description: z.string().optional().nullable(),
-    workstationId: z.string().optional().nullable(),
-    assignedToEmployeeId: z.string().optional().nullable(),
-    isRecurring: z.boolean().optional(),
-    recurrenceType: z.enum(["daily", "weekly", "x_per_week"]).optional(),
-    recurrenceDays: z
-      .array(z.number().int().min(0).max(6))
-      .optional()
-      .nullable(),
-    targetPerWeek: z.number().int().min(1).max(7).optional().nullable(),
-    notifyEmployee: z.boolean().optional(),
-  })
-  .refine((data) => {
-    // If updating assignments (at least one field is not undefined),
-    // we cannot allow both to be explicitly null
-    const updatingAssignments =
-      data.workstationId !== undefined ||
-      data.assignedToEmployeeId !== undefined;
-
-    if (updatingAssignments) {
-      // If both are explicitly set to null, that's invalid
-      // (The handler will verify final state after merging with existing values)
-      if (data.workstationId === null && data.assignedToEmployeeId === null) {
-        return false;
-      }
+  .superRefine((data, ctx) => {
+    if (
+      !data.isRecurring &&
+      !data.workstationId &&
+      !data.assignedToEmployeeId
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "Either workstationId or assignedToEmployeeId must be provided for one-shot templates",
+        path: ["workstationId"],
+      });
     }
-    return true;
-  }, "Either workstationId or assignedToEmployeeId must be provided");
+  });
+
+const UpdateTaskTemplateSchema = z.object({
+  title: z.string().min(1).optional(),
+  description: z.string().optional().nullable(),
+  workstationId: z.string().optional().nullable(),
+  assignedToEmployeeId: z.string().optional().nullable(),
+  isRecurring: z.boolean().optional(),
+  recurrenceType: z.enum(["daily", "weekly", "x_per_week"]).optional(),
+  recurrenceDays: z.array(z.number().int().min(0).max(6)).optional().nullable(),
+  targetPerWeek: z.number().int().min(1).max(7).optional().nullable(),
+  notifyEmployee: z.boolean().optional(),
+});
 
 const AssignTaskFromTemplateSchema = z
   .object({
@@ -530,6 +520,7 @@ export const handleAssignTaskFromTemplate: RequestHandler = async (
     const template = await prisma.taskTemplate.findUnique({
       where: { id: body.templateId },
       include: {
+        createdBy: { select: { id: true } },
         workstation: { select: { id: true, teamId: true } },
         assignedToEmployee: { select: { id: true, teamId: true, role: true } },
       },
@@ -544,7 +535,12 @@ export const handleAssignTaskFromTemplate: RequestHandler = async (
       template.workstation?.teamId ??
       template.assignedToEmployee?.teamId ??
       null;
-    if (!templateTeamId || !managerTeamIds.has(templateTeamId)) {
+    const canAccessUnassignedTemplate =
+      templateTeamId === null && template.createdBy.id === payload.userId;
+    if (
+      (templateTeamId === null && !canAccessUnassignedTemplate) ||
+      (templateTeamId !== null && !managerTeamIds.has(templateTeamId))
+    ) {
       res.status(404).json({ error: "Template not found" });
       return;
     }
@@ -769,6 +765,32 @@ export const handleGetTaskTemplates: RequestHandler = async (req, res) => {
       },
     });
 
+    const unassignedTemplatesOwnedByManager =
+      await prisma.taskTemplate.findMany({
+        where: {
+          createdById: payload.userId,
+          workstationId: null,
+          assignedToEmployeeId: null,
+        },
+        include: {
+          workstation: {
+            select: {
+              id: true,
+              name: true,
+              teamId: true,
+            },
+          },
+          assignedToEmployee: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              teamId: true,
+            },
+          },
+        },
+      });
+
     // Combine and deduplicate, ensuring all belong to managed teams
     // Also filter out cross-team relationships (e.g., template with workstation in managed team
     // but assignedToEmployee in another team should not expose that employee)
@@ -829,6 +851,12 @@ export const handleGetTaskTemplates: RequestHandler = async (req, res) => {
             templateMap.set(template.id, template);
           }
         }
+      }
+    }
+
+    for (const template of unassignedTemplatesOwnedByManager) {
+      if (!templateMap.has(template.id)) {
+        templateMap.set(template.id, template);
       }
     }
 
@@ -898,6 +926,9 @@ export const handleUpdateTaskTemplate: RequestHandler = async (req, res) => {
     const existingTemplate = await prisma.taskTemplate.findUnique({
       where: { id: templateId },
       include: {
+        createdBy: {
+          select: { id: true },
+        },
         workstation: {
           select: { teamId: true },
         },
@@ -918,8 +949,12 @@ export const handleUpdateTaskTemplate: RequestHandler = async (req, res) => {
     const templateTeamId =
       existingTemplate.workstation?.teamId ||
       existingTemplate.assignedToEmployee?.teamId;
-
-    if (!templateTeamId || !managerTeamIds.has(templateTeamId)) {
+    const canAccessUnassignedTemplate =
+      !templateTeamId && existingTemplate.createdBy.id === payload.userId;
+    if (
+      (!templateTeamId && !canAccessUnassignedTemplate) ||
+      (templateTeamId && !managerTeamIds.has(templateTeamId))
+    ) {
       res.status(404).json({ error: "Template not found" });
       return;
     }
@@ -986,10 +1021,16 @@ export const handleUpdateTaskTemplate: RequestHandler = async (req, res) => {
       return;
     }
 
-    // Final validation: after resolving all values, at least one assignment must be non-null
-    if (workstationTeamId === null && employeeTeamId === null) {
+    // One-shot templates must keep an assignment. Recurring templates can remain unassigned.
+    const nextIsRecurring = body.isRecurring ?? existingTemplate.isRecurring;
+    if (
+      !nextIsRecurring &&
+      workstationTeamId === null &&
+      employeeTeamId === null
+    ) {
       res.status(400).json({
-        error: "Either workstationId or assignedToEmployeeId must be provided",
+        error:
+          "Either workstationId or assignedToEmployeeId must be provided for one-shot templates",
       });
       return;
     }
@@ -1065,6 +1106,9 @@ export const handleDeleteTaskTemplate: RequestHandler = async (req, res) => {
     const template = await prisma.taskTemplate.findUnique({
       where: { id: templateId },
       include: {
+        createdBy: {
+          select: { id: true },
+        },
         workstation: {
           select: { teamId: true },
         },
@@ -1083,8 +1127,12 @@ export const handleDeleteTaskTemplate: RequestHandler = async (req, res) => {
 
     const templateTeamId =
       template.workstation?.teamId || template.assignedToEmployee?.teamId;
-
-    if (!templateTeamId || !managerTeamIds.has(templateTeamId)) {
+    const canAccessUnassignedTemplate =
+      !templateTeamId && template.createdBy.id === payload.userId;
+    if (
+      (!templateTeamId && !canAccessUnassignedTemplate) ||
+      (templateTeamId && !managerTeamIds.has(templateTeamId))
+    ) {
       res.status(404).json({ error: "Template not found" });
       return;
     }
@@ -1244,6 +1292,11 @@ export const handleGetManagerDashboard: RequestHandler = async (req, res) => {
               role: "EMPLOYEE",
               teamId: { in: teamIds },
             },
+          },
+          {
+            createdById: payload.userId,
+            workstationId: null,
+            assignedToEmployeeId: null,
           },
         ],
       },

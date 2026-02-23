@@ -32,7 +32,7 @@ export const initialNewTask = {
   description: "",
   workstationId: "",
   assignedToEmployeeId: "",
-  assignmentType: "workstation" as "workstation" | "employee",
+  assignmentType: "none" as "workstation" | "employee" | "none",
   notifyEmployee: true,
   isRecurring: true,
 };

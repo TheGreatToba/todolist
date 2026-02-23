@@ -113,6 +113,16 @@ export default function ManagerDashboard() {
       return;
     }
     if (
+      (mutations.newTask.creationMode === "template" ||
+        !mutations.newTask.isRecurring) &&
+      mutations.newTask.assignmentType === "none"
+    ) {
+      toastError("Please select where to assign this task");
+      return;
+    }
+    if (
+      (mutations.newTask.creationMode === "template" ||
+        !mutations.newTask.isRecurring) &&
       mutations.newTask.assignmentType === "workstation" &&
       !mutations.newTask.workstationId
     ) {
@@ -120,6 +130,8 @@ export default function ManagerDashboard() {
       return;
     }
     if (
+      (mutations.newTask.creationMode === "template" ||
+        !mutations.newTask.isRecurring) &&
       mutations.newTask.assignmentType === "employee" &&
       !mutations.newTask.assignedToEmployeeId
     ) {
@@ -127,6 +139,10 @@ export default function ManagerDashboard() {
       return;
     }
     if (mutations.newTask.creationMode === "template") {
+      if (mutations.newTask.assignmentType === "none") {
+        toastError("Please select where to assign this task");
+        return;
+      }
       mutations.assignTaskFromTemplate.mutate({
         templateId: mutations.newTask.templateId,
         assignmentType: mutations.newTask.assignmentType,
@@ -206,7 +222,11 @@ export default function ManagerDashboard() {
       description: template.description || "",
       workstationId: template.workstationId || "",
       assignedToEmployeeId: template.assignedToEmployeeId || "",
-      assignmentType: template.workstationId ? "workstation" : "employee",
+      assignmentType: template.workstationId
+        ? "workstation"
+        : template.assignedToEmployeeId
+          ? "employee"
+          : "none",
       isRecurring: template.isRecurring,
       notifyEmployee: template.notifyEmployee,
     });
@@ -222,6 +242,14 @@ export default function ManagerDashboard() {
       return;
     }
     if (
+      !editTemplateForm.isRecurring &&
+      editTemplateForm.assignmentType === "none"
+    ) {
+      toastError("Please select where to assign this task");
+      return;
+    }
+    if (
+      !editTemplateForm.isRecurring &&
       editTemplateForm.assignmentType === "workstation" &&
       !editTemplateForm.workstationId
     ) {
@@ -229,6 +257,7 @@ export default function ManagerDashboard() {
       return;
     }
     if (
+      !editTemplateForm.isRecurring &&
       editTemplateForm.assignmentType === "employee" &&
       !editTemplateForm.assignedToEmployeeId
     ) {
@@ -467,7 +496,7 @@ export default function ManagerDashboard() {
             description: "",
             workstationId: "",
             assignedToEmployeeId: "",
-            assignmentType: "workstation",
+            assignmentType: "none",
             isRecurring: true,
             notifyEmployee: true,
           }

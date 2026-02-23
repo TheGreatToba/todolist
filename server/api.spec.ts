@@ -1089,6 +1089,52 @@ describe("Permissions - role-based access", () => {
     expect(res.status).toBe(403);
   });
 
+  it("POST /api/tasks/templates allows recurring template without assignment", async () => {
+    const agent = request.agent(app);
+    const loginRes = await agent
+      .post("/api/auth/login")
+      .send({ email: "mgr@test.com", password: "password" });
+    const cookie = await assertLoggedIn(agent, "mgr@test.com", loginRes);
+    const auth = withAuthCookie(agent, cookie);
+
+    const targetDate = "2026-02-20";
+    let templateId: string | null = null;
+    try {
+      const res = await auth.post("/api/tasks/templates").send({
+        title: "Recurring Unassigned Template",
+        isRecurring: true,
+        notifyEmployee: false,
+        date: targetDate,
+      });
+      expect(res.status).toBe(201);
+      templateId = res.body.id;
+      expect(res.body.workstationId).toBeNull();
+      expect(res.body.assignedToEmployeeId).toBeNull();
+    } finally {
+      if (templateId) {
+        await prisma.dailyTask.deleteMany({
+          where: { taskTemplateId: templateId },
+        });
+        await prisma.taskTemplate.deleteMany({ where: { id: templateId } });
+      }
+    }
+  });
+
+  it("POST /api/tasks/templates rejects one-shot template without assignment", async () => {
+    const agent = request.agent(app);
+    await agent
+      .post("/api/auth/login")
+      .send({ email: "mgr@test.com", password: "password" });
+
+    const res = await agent.post("/api/tasks/templates").send({
+      title: "One-shot without assignment",
+      isRecurring: false,
+      notifyEmployee: false,
+    });
+    expect(res.status).toBe(400);
+    expect(typeof res.body.error).toBe("string");
+  });
+
   it("POST /api/tasks/templates creates daily task on requested date", async () => {
     const bcryptjs = (await import("bcryptjs")).default;
     const agent = request.agent(app);
@@ -1434,7 +1480,7 @@ describe("Permissions - role-based access", () => {
     }
   });
 
-  it("PATCH /api/tasks/templates/:id rejects update with both assignments null", async () => {
+  it("PATCH /api/tasks/templates/:id rejects one-shot update with both assignments null", async () => {
     const agent = request.agent(app);
     const loginRes = await agent
       .post("/api/auth/login")
@@ -1459,6 +1505,7 @@ describe("Permissions - role-based access", () => {
           title: "Test Template",
           workstationId: ws.id,
           createdById: manager!.id,
+          isRecurring: false,
         },
       });
       templateId = template.id;
@@ -1475,6 +1522,52 @@ describe("Permissions - role-based access", () => {
           (typeof res.body.error === "string" &&
             res.body.error.includes("must be provided")),
       ).toBe(true);
+    } finally {
+      if (templateId) {
+        await prisma.taskTemplate.delete({ where: { id: templateId } });
+      }
+      await prisma.workstation.delete({ where: { id: ws.id } });
+    }
+  });
+
+  it("PATCH /api/tasks/templates/:id allows recurring update with both assignments null", async () => {
+    const agent = request.agent(app);
+    const loginRes = await agent
+      .post("/api/auth/login")
+      .send({ email: "mgr@test.com", password: "password" });
+    const cookie = await assertLoggedIn(agent, "mgr@test.com", loginRes);
+    const auth = withAuthCookie(agent, cookie);
+
+    const manager = await prisma.user.findUnique({
+      where: { email: "mgr@test.com" },
+      select: { id: true, teamId: true },
+    });
+    expect(manager?.teamId).toBeTruthy();
+
+    const ws = await prisma.workstation.create({
+      data: { name: `WS PATCH RECUR ${Date.now()}`, teamId: manager!.teamId! },
+    });
+
+    let templateId: string | null = null;
+    try {
+      const template = await prisma.taskTemplate.create({
+        data: {
+          title: "Recurring Template",
+          workstationId: ws.id,
+          createdById: manager!.id,
+          isRecurring: true,
+        },
+      });
+      templateId = template.id;
+
+      const res = await auth.patch(`/api/tasks/templates/${templateId}`).send({
+        workstationId: null,
+        assignedToEmployeeId: null,
+      });
+
+      expect(res.status).toBe(200);
+      expect(res.body.workstationId).toBeNull();
+      expect(res.body.assignedToEmployeeId).toBeNull();
     } finally {
       if (templateId) {
         await prisma.taskTemplate.delete({ where: { id: templateId } });

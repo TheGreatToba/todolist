@@ -14,7 +14,7 @@ export interface NewTaskFormState {
   description: string;
   workstationId: string;
   assignedToEmployeeId: string;
-  assignmentType: "workstation" | "employee";
+  assignmentType: "workstation" | "employee" | "none";
   notifyEmployee: boolean;
   isRecurring: boolean;
 }
@@ -45,6 +45,7 @@ export function NewTaskModal({
   const modalRef = useRef<HTMLDivElement>(null);
   useModalA11y(modalRef, isOpen, onClose);
   const selectedTemplate = templates.find((t) => t.id === form.templateId);
+  const canStayUnassigned = form.creationMode === "create" && form.isRecurring;
 
   if (!isOpen) return null;
 
@@ -96,6 +97,11 @@ export function NewTaskModal({
                   ...form,
                   creationMode: e.target.value as "create" | "template",
                   templateId: "",
+                  assignmentType:
+                    e.target.value === "template" &&
+                    form.assignmentType === "none"
+                      ? "workstation"
+                      : form.assignmentType,
                 })
               }
               className="w-full px-4 py-2 rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
@@ -196,9 +202,16 @@ export function NewTaskModal({
                   <input
                     type="radio"
                     checked={!form.isRecurring}
-                    onChange={() =>
-                      onFormChange({ ...form, isRecurring: false })
-                    }
+                    onChange={() => {
+                      onFormChange({
+                        ...form,
+                        isRecurring: false,
+                        assignmentType:
+                          form.assignmentType === "none"
+                            ? "workstation"
+                            : form.assignmentType,
+                      });
+                    }}
                     className="w-4 h-4"
                   />
                   <span className="text-sm font-medium text-foreground">
@@ -213,7 +226,7 @@ export function NewTaskModal({
             <span className="block text-sm font-medium text-foreground mb-2">
               Assign To
             </span>
-            <div className="flex gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <label
                 className="flex items-center gap-2 cursor-pointer flex-1 p-3 rounded-lg border-2 transition"
                 style={{
@@ -264,6 +277,34 @@ export function NewTaskModal({
                   Employee
                 </span>
               </label>
+              {canStayUnassigned && (
+                <label
+                  className="flex items-center gap-2 cursor-pointer flex-1 p-3 rounded-lg border-2 transition"
+                  style={{
+                    borderColor:
+                      form.assignmentType === "none"
+                        ? "var(--primary)"
+                        : "var(--border)",
+                  }}
+                >
+                  <input
+                    type="radio"
+                    checked={form.assignmentType === "none"}
+                    onChange={() => {
+                      onFormChange({
+                        ...form,
+                        assignmentType: "none",
+                        workstationId: "",
+                        assignedToEmployeeId: "",
+                      });
+                    }}
+                    className="w-4 h-4"
+                  />
+                  <span className="text-sm font-medium text-foreground">
+                    Unassigned
+                  </span>
+                </label>
+              )}
             </div>
           </div>
 
