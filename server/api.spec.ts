@@ -1390,6 +1390,75 @@ describe("Permissions - role-based access", () => {
     expect(res.status).toBe(403);
   });
 
+  it("non-owner manager cannot access unassigned recurring template (GET/PATCH/DELETE/assign)", async () => {
+    const bcryptjs = (await import("bcryptjs")).default;
+    const ownerManager = await prisma.user.create({
+      data: {
+        name: "Owner Manager",
+        email: `owner-mgr-${Date.now()}@test.com`,
+        passwordHash: await bcryptjs.hash("password", 10),
+        role: "MANAGER",
+      },
+    });
+
+    let templateId: string | null = null;
+    try {
+      const template = await prisma.taskTemplate.create({
+        data: {
+          title: "Owner-only unassigned recurring",
+          createdById: ownerManager.id,
+          isRecurring: true,
+          notifyEmployee: false,
+        },
+      });
+      templateId = template.id;
+
+      const agent = request.agent(app);
+      const loginRes = await agent
+        .post("/api/auth/login")
+        .send({ email: "mgr@test.com", password: "password" });
+      const cookie = await assertLoggedIn(agent, "mgr@test.com", loginRes);
+      const auth = withAuthCookie(agent, cookie);
+
+      const listRes = await auth.get("/api/tasks/templates");
+      expect(listRes.status).toBe(200);
+      expect(
+        (listRes.body as Array<{ id: string }>).some(
+          (t) => t.id === templateId,
+        ),
+      ).toBe(false);
+
+      const patchRes = await auth
+        .patch(`/api/tasks/templates/${templateId}`)
+        .send({
+          title: "Should not update",
+        });
+      expect(patchRes.status).toBe(404);
+
+      const assignRes = await auth
+        .post("/api/tasks/assign-from-template")
+        .send({
+          templateId,
+          assignmentType: "employee",
+          assignedToEmployeeId: "any-id",
+          notifyEmployee: false,
+          date: "2026-02-20",
+        });
+      expect(assignRes.status).toBe(404);
+
+      const deleteRes = await auth.delete(`/api/tasks/templates/${templateId}`);
+      expect(deleteRes.status).toBe(404);
+    } finally {
+      if (templateId) {
+        await prisma.dailyTask.deleteMany({
+          where: { taskTemplateId: templateId },
+        });
+        await prisma.taskTemplate.deleteMany({ where: { id: templateId } });
+      }
+      await prisma.user.delete({ where: { id: ownerManager.id } });
+    }
+  });
+
   it("PATCH /api/tasks/templates/:id updates template", async () => {
     const agent = request.agent(app);
     const loginRes = await agent

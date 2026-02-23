@@ -769,6 +769,7 @@ export const handleGetTaskTemplates: RequestHandler = async (req, res) => {
       await prisma.taskTemplate.findMany({
         where: {
           createdById: payload.userId,
+          isRecurring: true,
           workstationId: null,
           assignedToEmployeeId: null,
         },

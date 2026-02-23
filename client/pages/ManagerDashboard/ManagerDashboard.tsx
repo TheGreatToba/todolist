@@ -139,19 +139,20 @@ export default function ManagerDashboard() {
       return;
     }
     if (mutations.newTask.creationMode === "template") {
-      if (mutations.newTask.assignmentType === "none") {
+      const assignmentType = mutations.newTask.assignmentType;
+      if (assignmentType === "none") {
         toastError("Please select where to assign this task");
         return;
       }
       mutations.assignTaskFromTemplate.mutate({
         templateId: mutations.newTask.templateId,
-        assignmentType: mutations.newTask.assignmentType,
+        assignmentType,
         workstationId:
-          mutations.newTask.assignmentType === "workstation"
+          assignmentType === "workstation"
             ? mutations.newTask.workstationId
             : undefined,
         assignedToEmployeeId:
-          mutations.newTask.assignmentType === "employee"
+          assignmentType === "employee"
             ? mutations.newTask.assignedToEmployeeId
             : undefined,
         notifyEmployee: mutations.newTask.notifyEmployee,
