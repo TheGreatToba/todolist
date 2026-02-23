@@ -850,7 +850,8 @@ describe("Permissions - role-based access", () => {
       },
     });
 
-    const targetDate = "2026-03-01";
+    const now = new Date();
+    const targetDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
     try {
       const agent = request.agent(app);
       await agent

@@ -458,8 +458,6 @@ export const handleCreateTaskTemplate: RequestHandler = async (req, res) => {
             gte: taskDate,
             lt: new Date(taskDate.getTime() + 24 * 60 * 60 * 1000),
           },
-          status: "UNASSIGNED",
-          employeeId: null,
         },
         select: { id: true },
       });

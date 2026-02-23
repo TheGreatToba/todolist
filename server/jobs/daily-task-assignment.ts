@@ -43,8 +43,6 @@ export async function assignDailyTasksForDate(date: Date): Promise<{
       const existing = await prisma.dailyTask.findFirst({
         where: {
           taskTemplateId: template.id,
-          employeeId: null,
-          status: "UNASSIGNED",
           date: {
             gte: targetDate,
             lt: new Date(targetDate.getTime() + 24 * 60 * 60 * 1000),
