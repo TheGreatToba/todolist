@@ -1392,12 +1392,26 @@ describe("Permissions - role-based access", () => {
 
   it("non-owner manager cannot access unassigned recurring template (GET/PATCH/DELETE/assign)", async () => {
     const bcryptjs = (await import("bcryptjs")).default;
+    const manager = await prisma.user.findUnique({
+      where: { email: "mgr@test.com" },
+      select: { teamId: true },
+    });
+    expect(manager?.teamId).toBeTruthy();
     const ownerManager = await prisma.user.create({
       data: {
         name: "Owner Manager",
         email: `owner-mgr-${Date.now()}@test.com`,
         passwordHash: await bcryptjs.hash("password", 10),
         role: "MANAGER",
+      },
+    });
+    const validEmployee = await prisma.user.create({
+      data: {
+        name: "Valid Employee For Ownership Test",
+        email: `ownership-valid-emp-${Date.now()}@test.com`,
+        passwordHash: await bcryptjs.hash("password", 10),
+        role: "EMPLOYEE",
+        teamId: manager!.teamId!,
       },
     });
 
@@ -1440,7 +1454,7 @@ describe("Permissions - role-based access", () => {
         .send({
           templateId,
           assignmentType: "employee",
-          assignedToEmployeeId: "any-id",
+          assignedToEmployeeId: validEmployee.id,
           notifyEmployee: false,
           date: "2026-02-20",
         });
@@ -1455,6 +1469,7 @@ describe("Permissions - role-based access", () => {
         });
         await prisma.taskTemplate.deleteMany({ where: { id: templateId } });
       }
+      await prisma.user.delete({ where: { id: validEmployee.id } });
       await prisma.user.delete({ where: { id: ownerManager.id } });
     }
   });
