@@ -80,6 +80,13 @@ export function sendErrorResponse(
       });
       return;
     }
+    if (code === "P2034") {
+      res.status(409).json({
+        error: "Transaction conflict. Please retry.",
+        code: "CONFLICT",
+      });
+      return;
+    }
     if (code === "P2025") {
       res.status(404).json({ error: "Record not found.", code: "NOT_FOUND" });
       return;

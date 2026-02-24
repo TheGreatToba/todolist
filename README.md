@@ -24,9 +24,9 @@ cp .env.example .env
 
 ## Base de données
 
-### Développement (SQLite)
+### Développement (PostgreSQL)
 
-Par défaut, le projet utilise SQLite. Aucune configuration supplémentaire nécessaire.
+Le projet utilise PostgreSQL avec un schéma Prisma unique (`prisma/schema.prisma`) dans tous les environnements.
 
 ```bash
 # Créer les tables et appliquer les migrations
@@ -44,29 +44,40 @@ pnpm backfill:workstation-team           # applique les mises à jour
 pnpm backfill:workstation-team --dry-run # simule et affiche ce qui serait fait (aucune écriture)
 ```
 
+**Base existante (DailyTask sans snapshot immuable)**  
+Pour les environnements historiques qui ont des `DailyTask` liées à un template mais sans snapshot (`templateSourceId`/`templateTitle` vides), exécuter le backfill :
+
+```bash
+pnpm backfill:dailytask-snapshots           # applique le backfill
+pnpm backfill:dailytask-snapshots --dry-run # simule sans écriture
+```
+
+**Audit avant contrainte d'unicité historique (concurrence)**  
+Avant d'appliquer la contrainte DB partielle sur les tâches historiques (`taskTemplateId IS NULL`), exécuter l'audit :
+
+```bash
+pnpm audit:historical-task-conflicts
+```
+
+S'il y a des conflits, la commande sort avec un code non-zéro et liste les groupes en doublon à corriger.
+
 ### Production (PostgreSQL)
 
-Pour la production, utilisez PostgreSQL :
+Pour tous les environnements, utilisez le schema Prisma unifie `prisma/schema.prisma` (PostgreSQL).
 
-1. Copier le schéma PostgreSQL :
-
-   ```bash
-   cp prisma/schema.postgresql.prisma prisma/schema.prisma
-   ```
-
-2. Configurer `DATABASE_URL` dans `.env` :
+1. Configurer `DATABASE_URL` dans `.env` :
 
    ```
    DATABASE_URL="postgresql://user:password@host:5432/taskflow?schema=public"
    ```
 
-3. Lancer les migrations :
+2. Lancer les migrations :
 
    ```bash
    pnpm exec prisma migrate deploy
    ```
 
-4. (Optionnel) Seed initial :
+3. (Optionnel) Seed initial :
    ```bash
    pnpm seed
    ```
@@ -101,14 +112,15 @@ Le serveur écoute sur le port 3000 (ou `PORT` si défini).
 
 ## Variables d'environnement
 
-| Variable     | Description                                                                                     | Défaut                    |
-| ------------ | ----------------------------------------------------------------------------------------------- | ------------------------- |
-| DATABASE_URL | URL de connexion à la base                                                                      | `file:./dev.db` (SQLite)  |
-| JWT_SECRET   | Clé secrète pour les tokens JWT                                                                 | (à changer en production) |
-| CRON_SECRET  | Secret requis pour activer et appeler l'endpoint cron (`X-Cron-Secret`)                         | -                         |
-| NODE_ENV     | Environnement (development/production)                                                          | development               |
-| TRUST_PROXY  | `true` si derrière reverse proxy (nginx, load balancer) — requis pour un rate-limit IP correct  | -                         |
-| DISABLE_CSRF | `true` pour désactiver la validation CSRF (dev/staging uniquement — **interdit en production**) | -                         |
+| Variable      | Description                                                                                     | Défaut                                                                 |
+| ------------- | ----------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| DATABASE_URL  | URL de connexion à la base                                                                      | `postgresql://postgres:postgres@localhost:5432/todolist?schema=public` |
+| JWT_SECRET    | Clé secrète pour les tokens JWT                                                                 | (à changer en production)                                              |
+| CRON_SECRET   | Secret requis pour activer et appeler l'endpoint cron (`X-Cron-Secret`)                         | -                                                                      |
+| NODE_ENV      | Environnement (development/production)                                                          | development                                                            |
+| TRUST_PROXY   | `true` si derrière reverse proxy (nginx, load balancer) — requis pour un rate-limit IP correct  | -                                                                      |
+| DISABLE_CSRF  | `true` pour désactiver la validation CSRF (dev/staging uniquement — **interdit en production**) | -                                                                      |
+| COOKIE_SECURE | `true` en production HTTPS; `false` uniquement en HTTP local                                    | -                                                                      |
 
 ## Runbook exploitation
 
@@ -186,6 +198,12 @@ curl -X POST "http://localhost:8080/api/cron/daily-tasks?date=2025-02-15" \
 Configurez un cron (cron-job.org, GitHub Actions, ou crontab) pour appeler cet endpoint chaque matin (ex. 6h00).
 
 Sans `CRON_SECRET` configuré, l'endpoint retourne `503` (désactivé). Avec un secret invalide ou absent, il retourne `401`.
+
+### Suppression de template (confirmation explicite)
+
+L'endpoint `DELETE /api/tasks/templates/:templateId` exige une confirmation explicite via `?confirm=true`.
+Sans ce paramètre, l'API retourne `400`.
+Cette protection évite une suppression accidentelle de template.
 
 ## Tests
 

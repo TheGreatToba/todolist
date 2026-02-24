@@ -9,6 +9,20 @@ on:
 jobs:
   typecheck-and-test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: todolist_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d todolist_ci"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
     steps:
       - uses: actions/checkout@v4
 
@@ -31,7 +45,7 @@ jobs:
         run: pnpm run ci
         env:
           NODE_ENV: test
-          DATABASE_URL: "file:./prisma/dev.db"
+          DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/todolist_ci?schema=public"
           JWT_SECRET: "ci-test-secret"
 
   test-client:
@@ -84,6 +98,20 @@ jobs:
 
   smoke-prod-server:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: todolist_ci_smoke
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d todolist_ci_smoke"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
     steps:
       - uses: actions/checkout@v4
 
@@ -110,5 +138,5 @@ jobs:
         env:
           NODE_ENV: production
           PORT: "34567"
-          DATABASE_URL: "file:./prisma/dev.db"
+          DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/todolist_ci_smoke?schema=public"
           JWT_SECRET: "ci-smoke-secret"

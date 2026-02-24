@@ -92,6 +92,9 @@ describe("SaaS evolutions API", () => {
       expect(res.body.isCompleted).toBe(false);
       expect(res.body.completedAt).toBeNull();
     } finally {
+      await prisma.dailyTask
+        .deleteMany({ where: { taskTemplateId: template.id } })
+        .catch(() => {});
       await prisma.taskTemplate.delete({ where: { id: template.id } });
     }
   });
@@ -148,6 +151,9 @@ describe("SaaS evolutions API", () => {
 
       expect(res.status).toBe(409);
     } finally {
+      await prisma.dailyTask
+        .deleteMany({ where: { taskTemplateId: template.id } })
+        .catch(() => {});
       await prisma.taskTemplate.delete({ where: { id: template.id } });
     }
   });

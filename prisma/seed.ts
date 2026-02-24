@@ -3,6 +3,27 @@ import bcryptjs from "bcryptjs";
 
 const prisma = new PrismaClient();
 
+function buildDailyTaskSnapshot(
+  template: {
+    id: string;
+    title: string;
+    description: string | null;
+    recurrenceType: string;
+    isRecurring: boolean;
+  },
+  workstation: { id: string; name: string } | null,
+) {
+  return {
+    templateSourceId: template.id,
+    templateTitle: template.title,
+    templateDescription: template.description,
+    templateRecurrenceType: template.recurrenceType,
+    templateIsRecurring: template.isRecurring,
+    templateWorkstationId: workstation?.id ?? null,
+    templateWorkstationName: workstation?.name ?? null,
+  };
+}
+
 async function main() {
   console.log("🌱 Starting seed...");
 
@@ -162,8 +183,10 @@ async function main() {
   await prisma.dailyTask.create({
     data: {
       taskTemplateId: taskTemplate1.id,
+      ...buildDailyTaskSnapshot(taskTemplate1, checkoutWorkstation),
       employeeId: employee1.id,
       date: today,
+      status: "DONE",
       isCompleted: true,
       completedAt: new Date(),
     },
@@ -172,8 +195,10 @@ async function main() {
   await prisma.dailyTask.create({
     data: {
       taskTemplateId: taskTemplate2.id,
+      ...buildDailyTaskSnapshot(taskTemplate2, checkoutWorkstation),
       employeeId: employee1.id,
       date: today,
+      status: "ASSIGNED",
       isCompleted: false,
     },
   });
@@ -181,8 +206,10 @@ async function main() {
   await prisma.dailyTask.create({
     data: {
       taskTemplateId: taskTemplate3.id,
+      ...buildDailyTaskSnapshot(taskTemplate3, kitchenWorkstation),
       employeeId: employee2.id,
       date: today,
+      status: "DONE",
       isCompleted: true,
       completedAt: new Date(),
     },
@@ -191,8 +218,10 @@ async function main() {
   await prisma.dailyTask.create({
     data: {
       taskTemplateId: taskTemplate4.id,
+      ...buildDailyTaskSnapshot(taskTemplate4, receptionWorkstation),
       employeeId: employee3.id,
       date: today,
+      status: "ASSIGNED",
       isCompleted: false,
     },
   });

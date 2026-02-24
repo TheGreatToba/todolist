@@ -32,7 +32,13 @@
     "typecheck": "tsc",
     "preseed": "prisma migrate deploy",
     "seed": "pnpm exec tsx prisma/seed.ts",
-    "backfill:workstation-team": "tsx server/scripts/backfill-workstation-team.ts"
+    "db:migrate:dev": "pnpm exec prisma migrate dev",
+    "db:migrate:deploy": "pnpm exec prisma migrate deploy",
+    "db:backup:nightly": "bash scripts/db-backup-nightly.sh",
+    "db:restore:drill": "bash scripts/db-restore-drill.sh",
+    "backfill:workstation-team": "tsx server/scripts/backfill-workstation-team.ts",
+    "backfill:dailytask-snapshots": "tsx server/scripts/backfill-dailytask-snapshots.ts",
+    "audit:historical-task-conflicts": "tsx server/scripts/audit-historical-dailytask-conflicts.ts"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx}": [

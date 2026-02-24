@@ -58,6 +58,13 @@ export async function assignDailyTasksForDate(date: Date): Promise<{
       await prisma.dailyTask.create({
         data: {
           taskTemplateId: template.id,
+          templateSourceId: template.id,
+          templateTitle: template.title,
+          templateDescription: template.description,
+          templateRecurrenceType: template.recurrenceType,
+          templateIsRecurring: template.isRecurring,
+          templateWorkstationId: template.workstation?.id ?? null,
+          templateWorkstationName: template.workstation?.name ?? null,
           employeeId: null,
           date: targetDate,
           status: "UNASSIGNED",

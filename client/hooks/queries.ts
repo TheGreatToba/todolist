@@ -687,9 +687,12 @@ export function useDeleteTaskTemplateMutation(
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (templateId: string) => {
-      const res = await fetchWithCsrf(`/api/tasks/templates/${templateId}`, {
-        method: "DELETE",
-      });
+      const res = await fetchWithCsrf(
+        `/api/tasks/templates/${templateId}?confirm=true`,
+        {
+          method: "DELETE",
+        },
+      );
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.error || "Failed to delete template");

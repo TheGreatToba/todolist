@@ -197,6 +197,37 @@ export function createApp(): Express {
     res.json({ message: ping });
   });
 
+  app.get("/health/live", (_req, res) => {
+    res.status(200).json({
+      status: "ok",
+      checks: {
+        server: "up",
+      },
+    });
+  });
+
+  app.get("/health/ready", async (_req, res) => {
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+      res.status(200).json({
+        status: "ok",
+        checks: {
+          server: "up",
+          database: "up",
+        },
+      });
+    } catch (error) {
+      logger.error("Readiness check failed", error);
+      res.status(503).json({
+        status: "error",
+        checks: {
+          server: "up",
+          database: "down",
+        },
+      });
+    }
+  });
+
   app.get("/api/demo", handleDemo);
 
   // Auth routes (rate-limited)

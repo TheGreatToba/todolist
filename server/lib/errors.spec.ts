@@ -1,5 +1,5 @@
 /**
- * Unit tests for sendErrorResponse: AppError, ZodError, Prisma-like errors (P2002, P2003, P2025), and fallback 500.
+ * Unit tests for sendErrorResponse: AppError, ZodError, Prisma-like errors (P2002, P2003, P2025, P2034), and fallback 500.
  */
 import { describe, it, expect, vi } from "vitest";
 import { ZodError } from "zod";
@@ -48,6 +48,19 @@ describe("sendErrorResponse", () => {
       expect(res.json).toHaveBeenCalledWith({
         error: "Record not found.",
         code: "NOT_FOUND",
+      });
+    });
+
+    it("P2034 returns 409 and CONFLICT", () => {
+      const res = mockRes() as unknown as Response;
+      sendErrorResponse(res, {
+        code: "P2034",
+        clientVersion: "5.22.0",
+      });
+      expect(res.status).toHaveBeenCalledWith(409);
+      expect(res.json).toHaveBeenCalledWith({
+        error: "Transaction conflict. Please retry.",
+        code: "CONFLICT",
       });
     });
 

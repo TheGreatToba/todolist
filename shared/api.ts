@@ -107,16 +107,16 @@ export interface TaskTemplate {
 
 export interface DailyTask {
   id: string;
-  taskTemplateId: string;
+  taskTemplateId?: string | null;
   employeeId?: string | null;
   date: string;
   status?: "UNASSIGNED" | "ASSIGNED" | "DONE";
   isCompleted: boolean;
-  completedAt?: string;
+  completedAt?: string | null;
   taskTemplate: {
     id: string;
     title: string;
-    description?: string;
+    description?: string | null;
     isRecurring: boolean;
     workstation?: {
       id: string;

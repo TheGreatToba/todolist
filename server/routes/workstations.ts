@@ -251,12 +251,27 @@ export const handleCreateEmployee: RequestHandler = async (req, res) => {
 
       const taskTemplates = await tx.taskTemplate.findMany({
         where: { workstationId: { in: body.workstationIds } },
+        include: {
+          workstation: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
       });
 
       if (taskTemplates.length > 0) {
         await tx.dailyTask.createMany({
           data: taskTemplates.map((template) => ({
             taskTemplateId: template.id,
+            templateSourceId: template.id,
+            templateTitle: template.title,
+            templateDescription: template.description,
+            templateRecurrenceType: template.recurrenceType,
+            templateIsRecurring: template.isRecurring,
+            templateWorkstationId: template.workstation?.id ?? null,
+            templateWorkstationName: template.workstation?.name ?? null,
             employeeId: employee.id,
             date: today,
             status: "ASSIGNED",

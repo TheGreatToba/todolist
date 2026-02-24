@@ -21,7 +21,7 @@ export function TemplatesTab({
   const handleDelete = (templateId: string, title: string) => {
     if (
       !confirm(
-        `Are you sure you want to delete the template "${title}"? This will also delete all associated daily tasks.`,
+        `Are you sure you want to permanently delete the template "${title}"? Existing generated tasks will be kept as historical records.`,
       )
     )
       return;

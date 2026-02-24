@@ -102,6 +102,29 @@ async function assertLoggedIn(
 }
 
 describe("Auth API", () => {
+  it("GET /health/live returns server up", async () => {
+    const res = await request(app).get("/health/live");
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      status: "ok",
+      checks: {
+        server: "up",
+      },
+    });
+  });
+
+  it("GET /health/ready returns server and database up", async () => {
+    const res = await request(app).get("/health/ready");
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      status: "ok",
+      checks: {
+        server: "up",
+        database: "up",
+      },
+    });
+  });
+
   it("POST /api/auth/signup with MANAGER returns 201 and user", async () => {
     const email = `mgr-${Date.now()}@test.com`;
     const res = await request(app).post("/api/auth/signup").send({
@@ -1187,6 +1210,11 @@ describe("Permissions - role-based access", () => {
         },
       });
       expect(task).toBeTruthy();
+      expect(task?.templateSourceId).toBe(templateId);
+      expect(task?.templateTitle).toBe("Date-specific task");
+      expect(task?.templateRecurrenceType).toBe("daily");
+      expect(task?.templateWorkstationId).toBe(ws.id);
+      expect(task?.templateWorkstationName).toBe(ws.name);
     } finally {
       if (templateId) {
         await prisma.taskTemplate.delete({ where: { id: templateId } });
@@ -1198,6 +1226,233 @@ describe("Permissions - role-based access", () => {
       await prisma.workstation.delete({ where: { id: ws.id } });
     }
   });
+
+  it("POST /api/tasks/templates transactional success persists template", async () => {
+    const agent = request.agent(app);
+    const loginRes = await agent
+      .post("/api/auth/login")
+      .send({ email: "mgr@test.com", password: "password" });
+    const cookie = await assertLoggedIn(agent, "mgr@test.com", loginRes);
+    const auth = withAuthCookie(agent, cookie);
+
+    const manager = await prisma.user.findUnique({
+      where: { email: "mgr@test.com" },
+      select: { id: true },
+    });
+    expect(manager).not.toBeNull();
+
+    const title = `Transactional success ${Date.now()}`;
+    let templateId: string | null = null;
+    try {
+      const res = await auth.post("/api/tasks/templates").send({
+        title,
+        isRecurring: true,
+        notifyEmployee: false,
+        date: "2026-02-20",
+      });
+
+      expect(res.status).toBe(201);
+      templateId = res.body.id;
+      expect(typeof templateId).toBe("string");
+
+      const persistedTemplate = await prisma.taskTemplate.findUnique({
+        where: { id: templateId! },
+        select: { id: true, title: true, createdById: true },
+      });
+      expect(persistedTemplate).toMatchObject({
+        id: templateId,
+        title,
+        createdById: manager!.id,
+      });
+    } finally {
+      if (templateId) {
+        await prisma.dailyTask.deleteMany({
+          where: { taskTemplateId: templateId },
+        });
+        await prisma.taskTemplate.deleteMany({ where: { id: templateId } });
+      }
+    }
+  });
+
+  it("POST /api/tasks/templates with invalid date leaves no template persisted", async () => {
+    const agent = request.agent(app);
+    const loginRes = await agent
+      .post("/api/auth/login")
+      .send({ email: "mgr@test.com", password: "password" });
+    const cookie = await assertLoggedIn(agent, "mgr@test.com", loginRes);
+    const auth = withAuthCookie(agent, cookie);
+
+    const manager = await prisma.user.findUnique({
+      where: { email: "mgr@test.com" },
+      select: { id: true },
+    });
+    expect(manager).not.toBeNull();
+
+    const title = `Invalid date atomic guard ${Date.now()}`;
+    try {
+      const res = await auth.post("/api/tasks/templates").send({
+        title,
+        isRecurring: true,
+        notifyEmployee: false,
+        date: "2026-02-31",
+      });
+
+      expect(res.status).toBe(400);
+      expect(res.body).toMatchObject({
+        error: "Invalid date. Use YYYY-MM-DD.",
+      });
+
+      const leakedTemplate = await prisma.taskTemplate.findFirst({
+        where: { title, createdById: manager!.id },
+        select: { id: true },
+      });
+      expect(leakedTemplate).toBeNull();
+    } finally {
+      await prisma.dailyTask.deleteMany({
+        where: {
+          taskTemplate: {
+            is: {
+              title,
+              createdById: manager!.id,
+            },
+          },
+        },
+      });
+      await prisma.taskTemplate.deleteMany({
+        where: { title, createdById: manager!.id },
+      });
+    }
+  });
+
+  it.sequential(
+    "POST /api/tasks/templates rolls back template when dependent DB write fails",
+    async () => {
+      const bcryptjs = (await import("bcryptjs")).default;
+      const agent = request.agent(app);
+      const loginRes = await agent
+        .post("/api/auth/login")
+        .send({ email: "mgr@test.com", password: "password" });
+      const cookie = await assertLoggedIn(agent, "mgr@test.com", loginRes);
+      const auth = withAuthCookie(agent, cookie);
+
+      const manager = await prisma.user.findUnique({
+        where: { email: "mgr@test.com" },
+        select: { id: true, teamId: true },
+      });
+      expect(manager?.teamId).toBeTruthy();
+
+      const workstation = await prisma.workstation.create({
+        data: { name: `TX Fail WS ${Date.now()}`, teamId: manager!.teamId! },
+      });
+      const employee = await prisma.user.create({
+        data: {
+          name: "TX Fail Employee",
+          email: `tx-fail-${Date.now()}@test.com`,
+          passwordHash: await bcryptjs.hash("password", 10),
+          role: "EMPLOYEE",
+          teamId: manager!.teamId!,
+          workstations: { create: [{ workstationId: workstation.id }] },
+        },
+      });
+
+      const title = `Forced db failure ${Date.now()}`;
+      const triggerName = `fail_daily_task_insert_${Date.now()}`;
+      const functionName = `fail_daily_task_insert_fn_${Date.now()}`;
+      const dbUrl = process.env.DATABASE_URL ?? "";
+      const isPostgres = /^postgres(ql)?:\/\//i.test(dbUrl);
+      const isSqlite =
+        dbUrl.startsWith("file:") || dbUrl.toLowerCase().includes("sqlite");
+      try {
+        if (!isPostgres && !isSqlite) {
+          // Keep this test non-blocking on unexpected providers in CI matrices.
+          expect(true).toBe(true);
+          return;
+        }
+
+        if (isPostgres) {
+          await prisma.$executeRawUnsafe(
+            `DROP TRIGGER IF EXISTS "${triggerName}" ON "DailyTask";`,
+          );
+          await prisma.$executeRawUnsafe(
+            `DROP FUNCTION IF EXISTS "${functionName}"();`,
+          );
+          await prisma.$executeRawUnsafe(
+            `CREATE FUNCTION "${functionName}"() RETURNS trigger AS $$
+           BEGIN
+             RAISE EXCEPTION 'forced DailyTask insert failure';
+           END;
+           $$ LANGUAGE plpgsql;`,
+          );
+          await prisma.$executeRawUnsafe(
+            `CREATE TRIGGER "${triggerName}"
+           BEFORE INSERT ON "DailyTask"
+           FOR EACH ROW
+           EXECUTE FUNCTION "${functionName}"();`,
+          );
+        } else if (isSqlite) {
+          await prisma.$executeRawUnsafe(
+            `DROP TRIGGER IF EXISTS ${triggerName}`,
+          );
+          await prisma.$executeRawUnsafe(
+            `CREATE TRIGGER ${triggerName}
+           BEFORE INSERT ON "DailyTask"
+           BEGIN
+             SELECT RAISE(ABORT, 'forced DailyTask insert failure');
+           END;`,
+          );
+        }
+
+        const res = await auth.post("/api/tasks/templates").send({
+          title,
+          workstationId: workstation.id,
+          isRecurring: false,
+          notifyEmployee: false,
+          date: "2026-02-20",
+        });
+
+        expect(res.status).toBeGreaterThanOrEqual(400);
+        expect(res.status).not.toBe(201);
+        expect(typeof res.body.error).toBe("string");
+
+        const leakedTemplate = await prisma.taskTemplate.findFirst({
+          where: { title, createdById: manager!.id },
+          select: { id: true },
+        });
+        expect(leakedTemplate).toBeNull();
+      } finally {
+        if (isPostgres) {
+          await prisma.$executeRawUnsafe(
+            `DROP TRIGGER IF EXISTS "${triggerName}" ON "DailyTask";`,
+          );
+          await prisma.$executeRawUnsafe(
+            `DROP FUNCTION IF EXISTS "${functionName}"();`,
+          );
+        } else if (isSqlite) {
+          await prisma.$executeRawUnsafe(
+            `DROP TRIGGER IF EXISTS ${triggerName}`,
+          );
+        }
+        await prisma.dailyTask.deleteMany({
+          where: {
+            taskTemplate: {
+              is: {
+                title,
+                createdById: manager!.id,
+              },
+            },
+          },
+        });
+        await prisma.taskTemplate.deleteMany({
+          where: { title, createdById: manager!.id },
+        });
+        await prisma.employeeWorkstation.deleteMany({
+          where: { employeeId: employee.id },
+        });
+        await prisma.user.delete({ where: { id: employee.id } });
+        await prisma.workstation.delete({ where: { id: workstation.id } });
+      }
+    },
+  );
 
   it("POST /api/tasks/assign-from-template assigns existing template without creating a new one", async () => {
     const bcryptjs = (await import("bcryptjs")).default;
@@ -1460,7 +1715,9 @@ describe("Permissions - role-based access", () => {
         });
       expect(assignRes.status).toBe(404);
 
-      const deleteRes = await auth.delete(`/api/tasks/templates/${templateId}`);
+      const deleteRes = await auth.delete(
+        `/api/tasks/templates/${templateId}?confirm=true`,
+      );
       expect(deleteRes.status).toBe(404);
     } finally {
       if (templateId) {
@@ -1689,7 +1946,9 @@ describe("Permissions - role-based access", () => {
       });
       templateId = template.id;
 
-      const res = await auth.delete(`/api/tasks/templates/${templateId}`);
+      const res = await auth.delete(
+        `/api/tasks/templates/${templateId}?confirm=true`,
+      );
       expect(res.status).toBe(204);
 
       const deleted = await prisma.taskTemplate.findUnique({
@@ -1702,6 +1961,238 @@ describe("Permissions - role-based access", () => {
         await prisma.taskTemplate.deleteMany({ where: { id: templateId } });
       }
       await prisma.workstation.delete({ where: { id: ws.id } });
+    }
+  });
+
+  it("DELETE /api/tasks/templates/:id requires explicit confirmation", async () => {
+    const agent = request.agent(app);
+    const loginRes = await agent
+      .post("/api/auth/login")
+      .send({ email: "mgr@test.com", password: "password" });
+    const cookie = await assertLoggedIn(agent, "mgr@test.com", loginRes);
+    const auth = withAuthCookie(agent, cookie);
+
+    const manager = await prisma.user.findUnique({
+      where: { email: "mgr@test.com" },
+      select: { id: true, teamId: true },
+    });
+    expect(manager?.teamId).toBeTruthy();
+
+    const ws = await prisma.workstation.create({
+      data: {
+        name: `WS DELETE CONFIRM ${Date.now()}`,
+        teamId: manager!.teamId!,
+      },
+    });
+
+    let templateId: string | null = null;
+    try {
+      templateId = (
+        await prisma.taskTemplate.create({
+          data: {
+            title: "Template requiring confirmation",
+            workstationId: ws.id,
+            createdById: manager!.id,
+          },
+        })
+      ).id;
+
+      const res = await auth.delete(`/api/tasks/templates/${templateId}`);
+      expect(res.status).toBe(400);
+      expect(String(res.body.error ?? "")).toContain("confirmation");
+
+      const stillThere = await prisma.taskTemplate.findUnique({
+        where: { id: templateId },
+      });
+      expect(stillThere).not.toBeNull();
+    } finally {
+      if (templateId) {
+        await prisma.taskTemplate.deleteMany({ where: { id: templateId } });
+      }
+      await prisma.workstation.delete({ where: { id: ws.id } });
+    }
+  });
+
+  it("DELETE /api/tasks/templates/:id preserves generated tasks and historical snapshot data", async () => {
+    const agent = request.agent(app);
+    const loginRes = await agent
+      .post("/api/auth/login")
+      .send({ email: "mgr@test.com", password: "password" });
+    const cookie = await assertLoggedIn(agent, "mgr@test.com", loginRes);
+    const auth = withAuthCookie(agent, cookie);
+
+    const manager = await prisma.user.findUnique({
+      where: { email: "mgr@test.com" },
+      select: { id: true, teamId: true },
+    });
+    const employee = await prisma.user.findUnique({
+      where: { email: "emp@test.com" },
+      select: { id: true, teamId: true, role: true },
+    });
+    expect(manager?.id).toBeTruthy();
+    expect(employee?.id).toBeTruthy();
+    expect(employee?.role).toBe("EMPLOYEE");
+    expect(employee?.teamId).toBe(manager?.teamId);
+
+    const targetDate = "2026-02-20";
+    const dateObj = new Date(`${targetDate}T00:00:00.000Z`);
+    const completedAt = new Date(`${targetDate}T10:30:00.000Z`);
+
+    let templateId: string | null = null;
+    let taskId: string | null = null;
+    try {
+      const template = await prisma.taskTemplate.create({
+        data: {
+          title: `Historical record template ${Date.now()}`,
+          description: "Snapshot should survive template deletion",
+          createdById: manager!.id,
+          assignedToEmployeeId: employee!.id,
+          isRecurring: false,
+          notifyEmployee: false,
+        },
+      });
+      templateId = template.id;
+
+      const task = await prisma.dailyTask.create({
+        data: {
+          taskTemplateId: template.id,
+          templateSourceId: template.id,
+          templateTitle: template.title,
+          templateDescription: template.description,
+          templateRecurrenceType: template.recurrenceType,
+          templateIsRecurring: template.isRecurring,
+          templateWorkstationId: template.workstationId,
+          templateWorkstationName: null,
+          employeeId: employee!.id,
+          date: dateObj,
+          status: "DONE",
+          isCompleted: true,
+          completedAt,
+        },
+      });
+      taskId = task.id;
+
+      const deleteRes = await auth.delete(
+        `/api/tasks/templates/${template.id}?confirm=true`,
+      );
+      expect(deleteRes.status).toBe(204);
+
+      const keptTask = await prisma.dailyTask.findUnique({
+        where: { id: task.id },
+      });
+      expect(keptTask).not.toBeNull();
+      expect(keptTask?.taskTemplateId).toBeNull();
+      expect(keptTask?.templateTitle).toBe(template.title);
+      expect(keptTask?.templateDescription).toBe(template.description);
+      expect(keptTask?.isCompleted).toBe(true);
+      expect(keptTask?.status).toBe("DONE");
+
+      const employeeAgent = request.agent(app);
+      await employeeAgent
+        .post("/api/auth/login")
+        .send({ email: "emp@test.com", password: "password" });
+      const dailyRes = await employeeAgent.get(
+        `/api/tasks/daily?date=${targetDate}`,
+      );
+      expect(dailyRes.status).toBe(200);
+
+      const apiTask = (
+        dailyRes.body as Array<{
+          id: string;
+          taskTemplate: { title: string; description?: string | null };
+        }>
+      ).find((candidate) => candidate.id === task.id);
+      expect(apiTask).toBeDefined();
+      expect(apiTask?.taskTemplate.title).toBe(template.title);
+      expect(apiTask?.taskTemplate.description).toBe(template.description);
+    } finally {
+      if (taskId) {
+        await prisma.dailyTask.deleteMany({ where: { id: taskId } });
+      }
+      if (templateId) {
+        await prisma.taskTemplate.deleteMany({ where: { id: templateId } });
+      }
+    }
+  });
+
+  it("PATCH /api/tasks/templates/:id does not modify past generated task snapshots", async () => {
+    const agent = request.agent(app);
+    const loginRes = await agent
+      .post("/api/auth/login")
+      .send({ email: "mgr@test.com", password: "password" });
+    const cookie = await assertLoggedIn(agent, "mgr@test.com", loginRes);
+    const auth = withAuthCookie(agent, cookie);
+
+    const manager = await prisma.user.findUnique({
+      where: { email: "mgr@test.com" },
+      select: { id: true, teamId: true },
+    });
+    const employee = await prisma.user.findUnique({
+      where: { email: "emp@test.com" },
+      select: { id: true, teamId: true, role: true },
+    });
+    expect(manager?.id).toBeTruthy();
+    expect(employee?.id).toBeTruthy();
+    expect(employee?.role).toBe("EMPLOYEE");
+    expect(employee?.teamId).toBe(manager?.teamId);
+
+    const targetDate = "2026-02-21";
+    const dateObj = new Date(`${targetDate}T00:00:00.000Z`);
+
+    let templateId: string | null = null;
+    let taskId: string | null = null;
+    try {
+      const template = await prisma.taskTemplate.create({
+        data: {
+          title: `Immutable snapshot source ${Date.now()}`,
+          description: "Original description",
+          createdById: manager!.id,
+          assignedToEmployeeId: employee!.id,
+          isRecurring: true,
+          notifyEmployee: false,
+        },
+      });
+      templateId = template.id;
+
+      const task = await prisma.dailyTask.create({
+        data: {
+          taskTemplateId: template.id,
+          templateSourceId: template.id,
+          templateTitle: template.title,
+          templateDescription: template.description,
+          templateRecurrenceType: template.recurrenceType,
+          templateIsRecurring: template.isRecurring,
+          templateWorkstationId: template.workstationId,
+          templateWorkstationName: null,
+          employeeId: employee!.id,
+          date: dateObj,
+          status: "ASSIGNED",
+          isCompleted: false,
+        },
+      });
+      taskId = task.id;
+
+      const patchRes = await auth
+        .patch(`/api/tasks/templates/${template.id}`)
+        .send({
+          title: "Updated template title",
+          description: "Updated template description",
+        });
+      expect(patchRes.status).toBe(200);
+
+      const keptTask = await prisma.dailyTask.findUnique({
+        where: { id: task.id },
+      });
+      expect(keptTask).not.toBeNull();
+      expect(keptTask?.templateTitle).toBe(template.title);
+      expect(keptTask?.templateDescription).toBe(template.description);
+    } finally {
+      if (taskId) {
+        await prisma.dailyTask.deleteMany({ where: { id: taskId } });
+      }
+      if (templateId) {
+        await prisma.taskTemplate.deleteMany({ where: { id: templateId } });
+      }
     }
   });
 
@@ -1740,7 +2231,9 @@ describe("Permissions - role-based access", () => {
       const cookie = await assertLoggedIn(agent, "mgr@test.com", loginRes);
       const auth = withAuthCookie(agent, cookie);
 
-      const res = await auth.delete(`/api/tasks/templates/${templateId}`);
+      const res = await auth.delete(
+        `/api/tasks/templates/${templateId}?confirm=true`,
+      );
       expect(res.status).toBe(404);
     } finally {
       if (templateId) {
@@ -1804,18 +2297,30 @@ describe("Permissions - role-based access", () => {
       // Prisma invariants and create data that the app would never create. Do not use in application
       // code; restrict to tests that explicitly need inconsistent/legacy data.
       templateId = `legacy-template-${Date.now()}`;
-      // SQLite stores booleans as integers (0/1)
-      await prisma.$executeRawUnsafe(
-        `INSERT INTO TaskTemplate (id, title, "workstationId", "assignedToEmployeeId", "createdById", "isRecurring", "notifyEmployee", "createdAt", "updatedAt")
-         VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
-        templateId,
-        "Cross-team Template",
-        ws.id,
-        otherEmployee.id,
-        manager!.id,
-        0, // false as integer for SQLite
-        0, // false as integer for SQLite
-      );
+      await prisma.$executeRaw`
+        INSERT INTO "TaskTemplate" (
+          "id",
+          "title",
+          "workstationId",
+          "assignedToEmployeeId",
+          "createdById",
+          "isRecurring",
+          "notifyEmployee",
+          "createdAt",
+          "updatedAt"
+        )
+        VALUES (
+          ${templateId},
+          ${"Cross-team Template"},
+          ${ws.id},
+          ${otherEmployee.id},
+          ${manager!.id},
+          ${false},
+          ${false},
+          CURRENT_TIMESTAMP,
+          CURRENT_TIMESTAMP
+        )
+      `;
 
       // Verify authentication still works after DB operations
       const profileCheckRes = await auth.get("/api/auth/profile");
@@ -2631,6 +3136,119 @@ describe("Daily tasks API", () => {
     expect(after!.completedAt?.getTime() ?? null).toBe(
       otherTask!.completedAt?.getTime() ?? null,
     );
+  });
+
+  it("PATCH /api/tasks/daily/:taskId returns 409 after template deletion when target already has same historical template/date", async () => {
+    const manager = await prisma.user.findUnique({
+      where: { email: "mgr@test.com" },
+      select: { id: true, teamId: true },
+    });
+    const source = await prisma.user.findUnique({
+      where: { email: "emp@test.com" },
+      select: { id: true, teamId: true, role: true },
+    });
+    const target = await prisma.user.findUnique({
+      where: { email: "carol@test.com" },
+      select: { id: true, teamId: true, role: true },
+    });
+    expect(manager?.id).toBeTruthy();
+    expect(source?.role).toBe("EMPLOYEE");
+    expect(target?.role).toBe("EMPLOYEE");
+    expect(source?.teamId).toBe(manager?.teamId);
+    expect(target?.teamId).toBe(manager?.teamId);
+
+    const targetDate = "2026-02-22";
+    const dateObj = new Date(`${targetDate}T00:00:00.000Z`);
+
+    let templateId: string | null = null;
+    let taskAId: string | null = null;
+    let taskBId: string | null = null;
+    try {
+      const template = await prisma.taskTemplate.create({
+        data: {
+          title: `Historical conflict source ${Date.now()}`,
+          description: "Conflict test",
+          createdById: manager!.id,
+          assignedToEmployeeId: source!.id,
+          isRecurring: false,
+          notifyEmployee: false,
+        },
+      });
+      templateId = template.id;
+
+      const taskA = await prisma.dailyTask.create({
+        data: {
+          taskTemplateId: template.id,
+          templateSourceId: template.id,
+          templateTitle: template.title,
+          templateDescription: template.description,
+          templateRecurrenceType: template.recurrenceType,
+          templateIsRecurring: template.isRecurring,
+          templateWorkstationId: template.workstationId,
+          templateWorkstationName: null,
+          employeeId: source!.id,
+          date: dateObj,
+          status: "ASSIGNED",
+          isCompleted: false,
+        },
+      });
+      taskAId = taskA.id;
+
+      const taskB = await prisma.dailyTask.create({
+        data: {
+          taskTemplateId: template.id,
+          templateSourceId: template.id,
+          templateTitle: template.title,
+          templateDescription: template.description,
+          templateRecurrenceType: template.recurrenceType,
+          templateIsRecurring: template.isRecurring,
+          templateWorkstationId: template.workstationId,
+          templateWorkstationName: null,
+          employeeId: target!.id,
+          date: dateObj,
+          status: "ASSIGNED",
+          isCompleted: false,
+        },
+      });
+      taskBId = taskB.id;
+
+      const agent = request.agent(app);
+      await agent
+        .post("/api/auth/login")
+        .send({ email: "mgr@test.com", password: "password" });
+
+      const deleteRes = await agent.delete(
+        `/api/tasks/templates/${template.id}?confirm=true`,
+      );
+      expect(deleteRes.status).toBe(204);
+
+      const reassignRes = await agent
+        .patch(`/api/tasks/daily/${taskA.id}`)
+        .send({ employeeId: target!.id });
+      expect(reassignRes.status).toBe(409);
+      expect(reassignRes.body.code).toBe("CONFLICT");
+
+      const unchanged = await prisma.dailyTask.findUnique({
+        where: { id: taskA.id },
+        select: {
+          employeeId: true,
+          taskTemplateId: true,
+          templateSourceId: true,
+        },
+      });
+      expect(unchanged?.employeeId).toBe(source!.id);
+      expect(unchanged?.taskTemplateId).toBeNull();
+      expect(unchanged?.templateSourceId).toBe(template.id);
+    } finally {
+      if (taskAId || taskBId) {
+        await prisma.dailyTask.deleteMany({
+          where: { id: { in: [taskAId, taskBId].filter(Boolean) as string[] } },
+        });
+      }
+      if (templateId) {
+        await prisma.taskTemplate.deleteMany({ where: { id: templateId } });
+      }
+    }
   });
 });
 

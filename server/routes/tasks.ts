@@ -18,34 +18,7 @@ import {
   parseRecurrenceDaysCsv,
   shouldTemplateAppearOnDate,
 } from "../lib/recurrence";
-
-const CreateTaskTemplateSchema = z
-  .object({
-    title: z.string().min(1),
-    description: z.string().optional(),
-    workstationId: z.string().optional(),
-    assignedToEmployeeId: z.string().optional(),
-    isRecurring: z.boolean().default(true),
-    recurrenceType: z.enum(["daily", "weekly", "x_per_week"]).optional(),
-    recurrenceDays: z.array(z.number().int().min(0).max(6)).optional(),
-    targetPerWeek: z.number().int().min(1).max(7).optional(),
-    notifyEmployee: z.boolean().default(true),
-    date: z.string().optional(),
-  })
-  .superRefine((data, ctx) => {
-    if (
-      !data.isRecurring &&
-      !data.workstationId &&
-      !data.assignedToEmployeeId
-    ) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message:
-          "Either workstationId or assignedToEmployeeId must be provided for one-shot templates",
-        path: ["workstationId"],
-      });
-    }
-  });
+import { createTaskTemplateTransactional } from "../services/task-template.service";
 
 const UpdateTaskTemplateSchema = z.object({
   title: z.string().min(1).optional(),
@@ -127,6 +100,157 @@ function serializeTemplateResponse(template: {
   };
 }
 
+type DailyTaskTemplateProjection = {
+  taskTemplateId: string | null;
+  templateSourceId: string;
+  templateTitle: string;
+  templateDescription: string | null;
+  templateRecurrenceType: string | null;
+  templateIsRecurring: boolean;
+  templateWorkstationId: string | null;
+  templateWorkstationName: string | null;
+  taskTemplate?: {
+    id: string;
+    title: string;
+    description: string | null;
+    isRecurring: boolean;
+    recurrenceType?: string;
+    workstation?: {
+      id: string;
+      name: string;
+    } | null;
+  } | null;
+};
+
+type DailyTaskWithSnapshotProjection = DailyTaskTemplateProjection & {
+  id: string;
+  employeeId: string | null;
+  date: Date;
+  status: string;
+  isCompleted: boolean;
+  completedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+  employee?: {
+    id: string;
+    name: string;
+    email: string;
+  } | null;
+};
+
+function normalizeSnapshotValue(
+  value: string | null | undefined,
+): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function serializeDailyTaskTemplate(task: DailyTaskTemplateProjection) {
+  const snapshotSourceId = normalizeSnapshotValue(task.templateSourceId);
+  const snapshotTitle = normalizeSnapshotValue(task.templateTitle);
+  const hasSnapshot = snapshotSourceId !== null || snapshotTitle !== null;
+  const title =
+    snapshotTitle ??
+    normalizeSnapshotValue(task.taskTemplate?.title) ??
+    "Deleted template";
+  const description = hasSnapshot
+    ? task.templateDescription
+    : (task.taskTemplate?.description ?? task.templateDescription);
+  const isRecurring = hasSnapshot
+    ? task.templateIsRecurring
+    : (task.taskTemplate?.isRecurring ?? task.templateIsRecurring ?? true);
+  const workstationName = hasSnapshot
+    ? normalizeSnapshotValue(task.templateWorkstationName)
+    : (normalizeSnapshotValue(task.taskTemplate?.workstation?.name) ??
+      normalizeSnapshotValue(task.templateWorkstationName));
+  const workstationId = hasSnapshot
+    ? task.templateWorkstationId
+    : (task.taskTemplate?.workstation?.id ?? task.templateWorkstationId);
+  const templateId =
+    normalizeSnapshotValue(task.taskTemplateId) ??
+    snapshotSourceId ??
+    normalizeSnapshotValue(task.taskTemplate?.id) ??
+    "";
+
+  return {
+    id: templateId,
+    title,
+    description,
+    isRecurring,
+    ...(workstationName
+      ? {
+          workstation: {
+            id: workstationId ?? "",
+            name: workstationName,
+          },
+        }
+      : {}),
+  };
+}
+
+function serializeDailyTaskResponse(task: DailyTaskWithSnapshotProjection) {
+  const response: {
+    id: string;
+    taskTemplateId: string | null;
+    employeeId: string | null;
+    date: string;
+    status: string;
+    isCompleted: boolean;
+    completedAt: string | null;
+    createdAt: string;
+    updatedAt: string;
+    taskTemplate: ReturnType<typeof serializeDailyTaskTemplate>;
+    employee?: {
+      id: string;
+      name: string;
+      email: string;
+    };
+  } = {
+    id: task.id,
+    taskTemplateId: task.taskTemplateId,
+    employeeId: task.employeeId,
+    date: task.date.toISOString(),
+    status: task.status,
+    isCompleted: task.isCompleted,
+    completedAt: task.completedAt ? task.completedAt.toISOString() : null,
+    createdAt: task.createdAt.toISOString(),
+    updatedAt: task.updatedAt.toISOString(),
+    taskTemplate: serializeDailyTaskTemplate(task),
+  };
+
+  if (task.employee) {
+    response.employee = task.employee;
+  }
+
+  return response;
+}
+
+function buildDailyTaskSnapshot(template: {
+  id: string;
+  title: string;
+  description: string | null;
+  recurrenceType: string;
+  isRecurring: boolean;
+  workstation?: { id: string; name: string } | null;
+}) {
+  return {
+    templateSourceId: template.id,
+    templateTitle: template.title,
+    templateDescription: template.description,
+    templateRecurrenceType: template.recurrenceType,
+    templateIsRecurring: template.isRecurring,
+    templateWorkstationId: template.workstation?.id ?? null,
+    templateWorkstationName: template.workstation?.name ?? null,
+  };
+}
+
+function hasDeleteConfirmation(confirm: unknown): boolean {
+  if (typeof confirm !== "string") return false;
+  const normalized = confirm.trim().toLowerCase();
+  return normalized === "true" || normalized === "1";
+}
+
 // Get all daily tasks for an employee on a specific date
 export const handleGetEmployeeDailyTasks: RequestHandler = async (req, res) => {
   try {
@@ -156,6 +280,7 @@ export const handleGetEmployeeDailyTasks: RequestHandler = async (req, res) => {
             title: true,
             description: true,
             isRecurring: true,
+            recurrenceType: true,
             workstation: {
               select: {
                 id: true,
@@ -168,7 +293,7 @@ export const handleGetEmployeeDailyTasks: RequestHandler = async (req, res) => {
       orderBy: { createdAt: "asc" },
     });
 
-    res.json(tasks);
+    res.json(tasks.map((task) => serializeDailyTaskResponse(task)));
   } catch (error) {
     sendErrorResponse(res, error, req);
   }
@@ -249,25 +374,34 @@ export const handleUpdateDailyTask: RequestHandler = async (req, res) => {
       }
 
       if (body.employeeId !== task.employeeId) {
-        const existing = await prisma.dailyTask.findFirst({
-          where: {
-            id: { not: task.id },
-            taskTemplateId: task.taskTemplateId,
-            employeeId: body.employeeId,
-            date: {
-              gte: new Date(new Date(task.date).setHours(0, 0, 0, 0)),
-              lt: new Date(new Date(task.date).setHours(24, 0, 0, 0)),
+        const snapshotSourceId = normalizeSnapshotValue(task.templateSourceId);
+        const duplicateScopeWhere = task.taskTemplateId
+          ? { taskTemplateId: task.taskTemplateId }
+          : snapshotSourceId
+            ? { templateSourceId: snapshotSourceId }
+            : null;
+
+        if (duplicateScopeWhere) {
+          const existing = await prisma.dailyTask.findFirst({
+            where: {
+              id: { not: task.id },
+              ...duplicateScopeWhere,
+              employeeId: body.employeeId,
+              date: {
+                gte: new Date(new Date(task.date).setHours(0, 0, 0, 0)),
+                lt: new Date(new Date(task.date).setHours(24, 0, 0, 0)),
+              },
             },
-          },
-          select: { id: true },
-        });
-        if (existing) {
-          res.status(409).json({
-            error:
-              "This employee already has this task template assigned for the same date.",
-            code: "CONFLICT",
+            select: { id: true },
           });
-          return;
+          if (existing) {
+            res.status(409).json({
+              error:
+                "This employee already has this task template assigned for the same date.",
+              code: "CONFLICT",
+            });
+            return;
+          }
         }
       }
     }
@@ -305,10 +439,18 @@ export const handleUpdateDailyTask: RequestHandler = async (req, res) => {
             title: true,
             description: true,
             isRecurring: true,
+            recurrenceType: true,
+            workstation: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
           },
         },
       },
     });
+    const serializedTask = serializeDailyTaskResponse(updatedTask);
 
     // Emit socket.io event to notify manager (team room only)
     const io = getIO();
@@ -318,10 +460,7 @@ export const handleUpdateDailyTask: RequestHandler = async (req, res) => {
         select: { teamId: true },
       });
       if (employee?.teamId) {
-        const taskTemplate = (
-          updatedTask as { taskTemplate?: { title: string } }
-        ).taskTemplate;
-        const taskTitle = taskTemplate?.title ?? "Task";
+        const taskTitle = serializedTask.taskTemplate.title || "Task";
         io.to(`team:${employee.teamId}`).emit("task:updated", {
           taskId: updatedTask.id,
           employeeId: updatedTask.employeeId,
@@ -331,7 +470,7 @@ export const handleUpdateDailyTask: RequestHandler = async (req, res) => {
       }
     }
 
-    res.json(updatedTask);
+    res.json(serializedTask);
   } catch (error) {
     sendErrorResponse(res, error, req);
   }
@@ -342,163 +481,10 @@ export const handleCreateTaskTemplate: RequestHandler = async (req, res) => {
   try {
     const payload = getAuthOrThrow(req, res);
     if (!payload) return;
-    const body = CreateTaskTemplateSchema.parse(req.body);
-
-    // Load managed team IDs once for authz checks (Set for O(1) .has() when many teams)
-    const managerTeamIds = new Set(await getManagerTeamIds(payload.userId));
-
-    let workstationTeamId: string | null = null;
-    if (body.workstationId) {
-      const workstation = await prisma.workstation.findUnique({
-        where: { id: body.workstationId },
-        select: { teamId: true },
-      });
-      if (
-        !workstation ||
-        !workstation.teamId ||
-        !managerTeamIds.has(workstation.teamId)
-      ) {
-        res.status(404).json({ error: "Not found" });
-        return;
-      }
-      workstationTeamId = workstation.teamId;
-    }
-
-    let employeeTeamId: string | null = null;
-    if (body.assignedToEmployeeId) {
-      const user = await prisma.user.findUnique({
-        where: { id: body.assignedToEmployeeId },
-        select: { teamId: true, role: true },
-      });
-      if (
-        !user ||
-        user.role !== "EMPLOYEE" ||
-        !user.teamId ||
-        !managerTeamIds.has(user.teamId)
-      ) {
-        res.status(404).json({ error: "Not found" });
-        return;
-      }
-      employeeTeamId = user.teamId;
-    }
-
-    // When both are provided, they must belong to the same team (no cross-team mixed template)
-    if (
-      workstationTeamId !== null &&
-      employeeTeamId !== null &&
-      workstationTeamId !== employeeTeamId
-    ) {
-      res.status(400).json({
-        error: "Workstation and employee must belong to the same team",
-      });
-      return;
-    }
-
-    const taskTemplate = await prisma.taskTemplate.create({
-      data: {
-        title: body.title,
-        description: body.description,
-        workstationId: body.workstationId || null,
-        assignedToEmployeeId: body.assignedToEmployeeId || null,
-        createdById: payload.userId,
-        isRecurring: body.isRecurring,
-        recurrenceType: body.recurrenceType ?? "daily",
-        recurrenceDays: body.recurrenceDays?.length
-          ? body.recurrenceDays.join(",")
-          : null,
-        targetPerWeek: body.targetPerWeek ?? null,
-        notifyEmployee: body.notifyEmployee,
-      },
-      include: {
-        workstation: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-        assignedToEmployee: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
-      },
+    const taskTemplate = await createTaskTemplateTransactional({
+      userId: payload.userId,
+      body: req.body,
     });
-
-    // Create today's daily task immediately.
-    const taskDate = parseDateQuery(body.date);
-    if (!taskDate) {
-      res.status(400).json({ error: "Invalid date. Use YYYY-MM-DD." });
-      return;
-    }
-    const shouldAppearToday = shouldTemplateAppearOnDate(
-      {
-        isRecurring: taskTemplate.isRecurring,
-        recurrenceType: taskTemplate.recurrenceType,
-        recurrenceDays: taskTemplate.recurrenceDays,
-      },
-      taskDate,
-    );
-    if (shouldAppearToday || !taskTemplate.isRecurring) {
-      const existing = await prisma.dailyTask.findFirst({
-        where: {
-          taskTemplateId: taskTemplate.id,
-          date: {
-            gte: taskDate,
-            lt: new Date(taskDate.getTime() + 24 * 60 * 60 * 1000),
-          },
-        },
-        select: { id: true },
-      });
-
-      if (!existing && taskTemplate.isRecurring) {
-        await prisma.dailyTask.create({
-          data: {
-            taskTemplateId: taskTemplate.id,
-            employeeId: null,
-            date: taskDate,
-            status: "UNASSIGNED",
-            isCompleted: false,
-          },
-        });
-      } else if (!taskTemplate.isRecurring) {
-        const assigneeIds: string[] = [];
-        if (body.assignedToEmployeeId) {
-          assigneeIds.push(body.assignedToEmployeeId);
-        } else if (body.workstationId) {
-          const links = await prisma.employeeWorkstation.findMany({
-            where: { workstationId: body.workstationId },
-            select: { employeeId: true },
-          });
-          assigneeIds.push(...links.map((link) => link.employeeId));
-        }
-
-        for (const assigneeId of assigneeIds) {
-          const existingAssigned = await prisma.dailyTask.findFirst({
-            where: {
-              taskTemplateId: taskTemplate.id,
-              employeeId: assigneeId,
-              date: {
-                gte: taskDate,
-                lt: new Date(taskDate.getTime() + 24 * 60 * 60 * 1000),
-              },
-            },
-            select: { id: true },
-          });
-          if (existingAssigned) continue;
-          await prisma.dailyTask.create({
-            data: {
-              taskTemplateId: taskTemplate.id,
-              employeeId: assigneeId,
-              date: taskDate,
-              status: "ASSIGNED",
-              isCompleted: false,
-            },
-          });
-        }
-      }
-    }
 
     res.status(201).json(serializeTemplateResponse(taskTemplate));
   } catch (error) {
@@ -521,7 +507,7 @@ export const handleAssignTaskFromTemplate: RequestHandler = async (
       where: { id: body.templateId },
       include: {
         createdBy: { select: { id: true } },
-        workstation: { select: { id: true, teamId: true } },
+        workstation: { select: { id: true, name: true, teamId: true } },
         assignedToEmployee: { select: { id: true, teamId: true, role: true } },
       },
     });
@@ -597,6 +583,7 @@ export const handleAssignTaskFromTemplate: RequestHandler = async (
     let createdCount = 0;
     let skippedCount = 0;
     const notifyEmployee = body.notifyEmployee ?? template.notifyEmployee;
+    const taskSnapshot = buildDailyTaskSnapshot(template);
     for (const employeeId of targetEmployeeIds) {
       const existing = await prisma.dailyTask.findFirst({
         where: {
@@ -645,6 +632,7 @@ export const handleAssignTaskFromTemplate: RequestHandler = async (
         createdTask = await prisma.dailyTask.create({
           data: {
             taskTemplateId: template.id,
+            ...taskSnapshot,
             employeeId,
             date: taskDate,
             status: "ASSIGNED",
@@ -1102,6 +1090,15 @@ export const handleDeleteTaskTemplate: RequestHandler = async (req, res) => {
       res.status(400).json({ error: "Invalid template ID" });
       return;
     }
+    if (
+      !hasDeleteConfirmation((req.query as Record<string, unknown>).confirm)
+    ) {
+      res.status(400).json({
+        error:
+          "Explicit confirmation is required to delete a template. Pass ?confirm=true.",
+      });
+      return;
+    }
 
     // Verify the template exists and belongs to a managed team
     const template = await prisma.taskTemplate.findUnique({
@@ -1138,7 +1135,7 @@ export const handleDeleteTaskTemplate: RequestHandler = async (req, res) => {
       return;
     }
 
-    // Delete the template (cascade will handle daily tasks)
+    // Hard delete template while preserving execution history via SET NULL + snapshots.
     await prisma.taskTemplate.delete({
       where: { id: templateId },
     });
@@ -1244,13 +1241,11 @@ export const handleGetManagerDashboard: RequestHandler = async (req, res) => {
       },
     };
     if (workstationId) {
-      taskWhere.taskTemplate =
-        workstationId === "__direct__"
-          ? { workstationId: null }
-          : { workstationId };
+      taskWhere.templateWorkstationId =
+        workstationId === "__direct__" ? null : workstationId;
     }
 
-    const dailyTasks = await prisma.dailyTask.findMany({
+    const dailyTaskRows = await prisma.dailyTask.findMany({
       where: taskWhere,
       include: {
         employee: {
@@ -1266,6 +1261,7 @@ export const handleGetManagerDashboard: RequestHandler = async (req, res) => {
             title: true,
             description: true,
             isRecurring: true,
+            recurrenceType: true,
             workstation: {
               select: {
                 id: true,
@@ -1277,6 +1273,9 @@ export const handleGetManagerDashboard: RequestHandler = async (req, res) => {
       },
       orderBy: [{ employee: { name: "asc" } }, { createdAt: "asc" }],
     });
+    const dailyTasks = dailyTaskRows.map((task) =>
+      serializeDailyTaskResponse(task),
+    );
 
     // Day preparation summary: recurring templates expected today and those still unassigned.
     const recurringTemplates = await prisma.taskTemplate.findMany({
