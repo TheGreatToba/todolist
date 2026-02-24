@@ -477,10 +477,14 @@ describe("Auth API", () => {
         ]);
 
         successfulRes = [res1, res2].find((r) => r.status === 200);
-        failedRes = [res1, res2].find(
-          (r) =>
-            r.status === 400 && r.body.error?.includes("already been used"),
-        );
+        failedRes = [res1, res2].find((r) => {
+          if (r.status !== 400) return false;
+          const message = typeof r.body?.error === "string" ? r.body.error : "";
+          return (
+            message.includes("already been used") ||
+            message.includes("Invalid or expired reset link")
+          );
+        });
 
         expect(successfulRes).toBeDefined();
         expect(failedRes).toBeDefined();
@@ -604,11 +608,11 @@ describe("Auth API", () => {
     const userId = signupRes.body.user.id as string;
 
     // BYPASS_PATTERN: raw SQL only to set invalid role for this test; see legacy template test.
-    await prisma.$executeRawUnsafe(
-      "UPDATE User SET role = ? WHERE id = ?",
-      "INVALID",
-      userId,
-    );
+    await prisma.$executeRaw`
+      UPDATE "User"
+      SET "role" = ${"INVALID"}
+      WHERE "id" = ${userId}
+    `;
 
     const warnCalls: unknown[] = [];
     const warnSpy = vi
@@ -1145,17 +1149,38 @@ describe("Permissions - role-based access", () => {
 
   it("POST /api/tasks/templates rejects one-shot template without assignment", async () => {
     const agent = request.agent(app);
-    await agent
+    const loginRes = await agent
       .post("/api/auth/login")
       .send({ email: "mgr@test.com", password: "password" });
+    const cookie = await assertLoggedIn(agent, "mgr@test.com", loginRes);
+    const auth = withAuthCookie(agent, cookie);
 
-    const res = await agent.post("/api/tasks/templates").send({
-      title: "One-shot without assignment",
-      isRecurring: false,
-      notifyEmployee: false,
+    const manager = await prisma.user.findUnique({
+      where: { email: "mgr@test.com" },
+      select: { id: true },
     });
-    expect(res.status).toBe(400);
-    expect(typeof res.body.error).toBe("string");
+    expect(manager).not.toBeNull();
+
+    const title = `One-shot without assignment ${Date.now()}`;
+    const txSpy = vi.spyOn(prisma, "$transaction");
+    try {
+      const res = await auth.post("/api/tasks/templates").send({
+        title,
+        isRecurring: false,
+        notifyEmployee: false,
+      });
+      expect(res.status).toBe(400);
+      expect(typeof res.body.error).toBe("string");
+      expect(txSpy).not.toHaveBeenCalled();
+
+      const leakedTemplate = await prisma.taskTemplate.findFirst({
+        where: { title, createdById: manager!.id },
+        select: { id: true },
+      });
+      expect(leakedTemplate).toBeNull();
+    } finally {
+      txSpy.mockRestore();
+    }
   });
 
   it("POST /api/tasks/templates creates daily task on requested date", async () => {
@@ -1264,6 +1289,31 @@ describe("Permissions - role-based access", () => {
         title,
         createdById: manager!.id,
       });
+
+      const dayStart = new Date("2026-02-20T00:00:00");
+      const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+      const relatedTasks = await prisma.dailyTask.findMany({
+        where: {
+          taskTemplateId: templateId!,
+          date: { gte: dayStart, lt: dayEnd },
+        },
+        select: {
+          id: true,
+          status: true,
+          employeeId: true,
+          templateSourceId: true,
+          templateTitle: true,
+          templateIsRecurring: true,
+        },
+      });
+      expect(relatedTasks).toHaveLength(1);
+      expect(relatedTasks[0]).toMatchObject({
+        status: "UNASSIGNED",
+        employeeId: null,
+        templateSourceId: templateId,
+        templateTitle: title,
+        templateIsRecurring: true,
+      });
     } finally {
       if (templateId) {
         await prisma.dailyTask.deleteMany({
@@ -1289,6 +1339,7 @@ describe("Permissions - role-based access", () => {
     expect(manager).not.toBeNull();
 
     const title = `Invalid date atomic guard ${Date.now()}`;
+    const txSpy = vi.spyOn(prisma, "$transaction");
     try {
       const res = await auth.post("/api/tasks/templates").send({
         title,
@@ -1301,12 +1352,18 @@ describe("Permissions - role-based access", () => {
       expect(res.body).toMatchObject({
         error: "Invalid date. Use YYYY-MM-DD.",
       });
+      expect(txSpy).not.toHaveBeenCalled();
 
       const leakedTemplate = await prisma.taskTemplate.findFirst({
         where: { title, createdById: manager!.id },
         select: { id: true },
       });
       expect(leakedTemplate).toBeNull();
+      const leakedTasks = await prisma.dailyTask.findMany({
+        where: { templateTitle: title },
+        select: { id: true },
+      });
+      expect(leakedTasks).toHaveLength(0);
     } finally {
       await prisma.dailyTask.deleteMany({
         where: {
@@ -1321,6 +1378,7 @@ describe("Permissions - role-based access", () => {
       await prisma.taskTemplate.deleteMany({
         where: { title, createdById: manager!.id },
       });
+      txSpy.mockRestore();
     }
   });
 
@@ -1419,6 +1477,11 @@ describe("Permissions - role-based access", () => {
           select: { id: true },
         });
         expect(leakedTemplate).toBeNull();
+        const leakedTasks = await prisma.dailyTask.findMany({
+          where: { templateTitle: title },
+          select: { id: true },
+        });
+        expect(leakedTasks).toHaveLength(0);
       } finally {
         if (isPostgres) {
           await prisma.$executeRawUnsafe(
