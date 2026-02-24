@@ -12,6 +12,7 @@ import {
 } from "@tanstack/react-query";
 import type {
   ManagerDashboard as ManagerDashboardType,
+  ManagerTodayBoard as ManagerTodayBoardType,
   DailyTask,
   ProfileResponse,
   UpdateProfileRequest,
@@ -23,6 +24,7 @@ import type {
   ResetPasswordResponse,
   TaskTemplateWithRelations,
   AssignTaskFromTemplateRequest,
+  CreateTodayBoardTaskRequest,
   UpdateTaskTemplateRequest,
   UpdateWorkstationEmployeesRequest,
 } from "@shared/api";
@@ -41,6 +43,8 @@ export const queryKeys = {
       workstationId?: string | null;
     }) => ["manager", "dashboard", params] as const,
     dashboardPrefix: ["manager", "dashboard"] as const,
+    todayBoard: ["manager", "todayBoard"] as const,
+    todayBoardPrefix: ["manager", "todayBoard"] as const,
     workstations: ["manager", "workstations"] as const,
     teamMembers: ["manager", "teamMembers"] as const,
     taskTemplates: ["manager", "taskTemplates"] as const,
@@ -84,6 +88,15 @@ export async function fetchManagerDashboard(params: {
     throw new Error(await parseApiError(res));
   }
   return res.json() as Promise<ManagerDashboardType>;
+}
+
+export async function fetchManagerTodayBoard(): Promise<ManagerTodayBoardType | null> {
+  const res = await api.get("/api/manager/today-board");
+  if (!res.ok) {
+    if (res.status === 404) return null;
+    throw new Error(await parseApiError(res));
+  }
+  return res.json() as Promise<ManagerTodayBoardType>;
 }
 
 export interface WorkstationEmployeeSummary {
@@ -148,6 +161,19 @@ export function useManagerDashboardQuery(
   });
 }
 
+export function useManagerTodayBoardQuery(
+  options?: Omit<
+    UseQueryOptions<ManagerTodayBoardType | null, Error>,
+    "queryKey" | "queryFn"
+  >,
+) {
+  return useQuery({
+    queryKey: queryKeys.manager.todayBoard,
+    queryFn: fetchManagerTodayBoard,
+    ...options,
+  });
+}
+
 export function useWorkstationsQuery(
   options?: Omit<
     UseQueryOptions<WorkstationWithEmployees[], Error>,
@@ -206,6 +232,7 @@ export function useUpdateDailyTaskMutation(
     {
       previousDaily: [QueryKey, DailyTask[] | undefined][];
       previousManager: [QueryKey, ManagerDashboardType | null | undefined][];
+      previousToday: [QueryKey, ManagerTodayBoardType | null | undefined][];
     }
   >,
 ) {
@@ -239,6 +266,9 @@ export function useUpdateDailyTaskMutation(
         queryClient.cancelQueries({
           queryKey: queryKeys.manager.dashboardPrefix,
         }),
+        queryClient.cancelQueries({
+          queryKey: queryKeys.manager.todayBoardPrefix,
+        }),
       ]);
 
       const previousDaily = queryClient.getQueriesData<DailyTask[]>({
@@ -247,6 +277,10 @@ export function useUpdateDailyTaskMutation(
       const previousManager =
         queryClient.getQueriesData<ManagerDashboardType | null>({
           queryKey: queryKeys.manager.dashboardPrefix,
+        });
+      const previousToday =
+        queryClient.getQueriesData<ManagerTodayBoardType | null>({
+          queryKey: queryKeys.manager.todayBoardPrefix,
         });
 
       for (const [key, data] of previousDaily) {
@@ -267,7 +301,15 @@ export function useUpdateDailyTaskMutation(
         });
       }
 
-      return { previousDaily, previousManager };
+      for (const [key, data] of previousToday) {
+        if (!data) continue;
+        queryClient.setQueryData(
+          key,
+          applyOptimisticTodayBoardUpdate(data, variables),
+        );
+      }
+
+      return { previousDaily, previousManager, previousToday };
     },
     onError: (error, variables, ctx) => {
       if (ctx?.previousDaily) {
@@ -280,6 +322,11 @@ export function useUpdateDailyTaskMutation(
           queryClient.setQueryData(key, data);
         }
       }
+      if (ctx?.previousToday) {
+        for (const [key, data] of ctx.previousToday) {
+          queryClient.setQueryData(key, data);
+        }
+      }
       options?.onError?.(error, variables, ctx);
     },
     onSuccess: (data, variables, ctx) => {
@@ -287,6 +334,39 @@ export function useUpdateDailyTaskMutation(
       queryClient.invalidateQueries({
         queryKey: queryKeys.manager.dashboardPrefix,
       });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.manager.todayBoardPrefix,
+      });
+      options?.onSuccess?.(data, variables, ctx);
+    },
+  });
+}
+
+export function useCreateTodayBoardTaskMutation(
+  options?: UseMutationOptions<DailyTask, Error, CreateTodayBoardTaskRequest>,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: CreateTodayBoardTaskRequest) => {
+      const res = await fetchWithCsrf("/api/manager/today-board/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        throw new Error(await parseApiError(res));
+      }
+      return res.json() as Promise<DailyTask>;
+    },
+    ...options,
+    onSuccess: (data, variables, ctx) => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.manager.todayBoardPrefix,
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.manager.dashboardPrefix,
+      });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tasks.dailyPrefix });
       options?.onSuccess?.(data, variables, ctx);
     },
   });
@@ -334,6 +414,121 @@ function applyOptimisticTaskUpdate<
   }
 
   return next;
+}
+
+function toDateYmd(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const ymdPrefixMatch = value.match(/^\d{4}-\d{2}-\d{2}/);
+  if (ymdPrefixMatch) return ymdPrefixMatch[0];
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  const y = parsed.getFullYear();
+  const m = String(parsed.getMonth() + 1).padStart(2, "0");
+  const d = String(parsed.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function applyOptimisticTodayBoardUpdate(
+  board: ManagerTodayBoardType,
+  variables: { taskId: string; isCompleted?: boolean; employeeId?: string },
+): ManagerTodayBoardType {
+  const overdue = [...board.overdue];
+  const today = [...board.today];
+  const completedToday = [...board.completedToday];
+  const sections = [overdue, today, completedToday];
+  const allTasks = [...overdue, ...today, ...completedToday];
+
+  let currentTask: ManagerTodayBoardType["today"][number] | null = null;
+  let currentSectionIndex = -1;
+  let currentItemIndex = -1;
+
+  for (
+    let sectionIndex = 0;
+    sectionIndex < sections.length;
+    sectionIndex += 1
+  ) {
+    const itemIndex = sections[sectionIndex].findIndex(
+      (task) => task.id === variables.taskId,
+    );
+    if (itemIndex >= 0) {
+      currentTask = sections[sectionIndex][itemIndex];
+      currentSectionIndex = sectionIndex;
+      currentItemIndex = itemIndex;
+      break;
+    }
+  }
+
+  if (!currentTask) return board;
+
+  const nextTask = { ...currentTask };
+  if (variables.employeeId !== undefined) {
+    nextTask.employeeId = variables.employeeId;
+    const targetEmployee = allTasks.find(
+      (task) => task.employee?.id === variables.employeeId,
+    )?.employee;
+    if (targetEmployee) {
+      nextTask.employee = targetEmployee;
+    }
+  }
+
+  if (variables.isCompleted === undefined) {
+    sections[currentSectionIndex][currentItemIndex] = nextTask;
+    return {
+      ...board,
+      overdue,
+      today,
+      completedToday,
+    };
+  }
+
+  nextTask.isCompleted = variables.isCompleted;
+  nextTask.completedAt = variables.isCompleted
+    ? new Date().toISOString()
+    : null;
+
+  const filteredOverdue = overdue.filter((task) => task.id !== nextTask.id);
+  const filteredToday = today.filter((task) => task.id !== nextTask.id);
+  const filteredCompleted = completedToday.filter(
+    (task) => task.id !== nextTask.id,
+  );
+
+  if (variables.isCompleted) {
+    return {
+      ...board,
+      overdue: filteredOverdue,
+      today: filteredToday,
+      completedToday: [nextTask, ...filteredCompleted],
+    };
+  }
+
+  const boardDateYmd = toDateYmd(board.date);
+  const taskDateYmd = toDateYmd(nextTask.date);
+
+  if (boardDateYmd && taskDateYmd && taskDateYmd < boardDateYmd) {
+    return {
+      ...board,
+      overdue: [nextTask, ...filteredOverdue],
+      today: filteredToday,
+      completedToday: filteredCompleted,
+    };
+  }
+
+  if (boardDateYmd && taskDateYmd && taskDateYmd === boardDateYmd) {
+    return {
+      ...board,
+      overdue: filteredOverdue,
+      today: [nextTask, ...filteredToday],
+      completedToday: filteredCompleted,
+    };
+  }
+
+  return {
+    ...board,
+    overdue: filteredOverdue,
+    today: filteredToday,
+    completedToday: filteredCompleted,
+  };
 }
 
 export function useUpdateProfileMutation(
@@ -605,6 +800,9 @@ export function useCreateTaskTemplateMutation(
         queryKey: queryKeys.manager.dashboardPrefix,
       });
       queryClient.invalidateQueries({
+        queryKey: queryKeys.manager.todayBoardPrefix,
+      });
+      queryClient.invalidateQueries({
         queryKey: queryKeys.manager.taskTemplates,
       });
       queryClient.invalidateQueries({ queryKey: queryKeys.tasks.dailyPrefix });
@@ -632,6 +830,9 @@ export function useAssignTaskFromTemplateMutation(
     onSuccess: (data, variables, ctx) => {
       queryClient.invalidateQueries({
         queryKey: queryKeys.manager.dashboardPrefix,
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.manager.todayBoardPrefix,
       });
       queryClient.invalidateQueries({
         queryKey: queryKeys.tasks.dailyPrefix,
@@ -675,6 +876,9 @@ export function useUpdateTaskTemplateMutation(
       queryClient.invalidateQueries({
         queryKey: queryKeys.manager.dashboardPrefix,
       });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.manager.todayBoardPrefix,
+      });
       queryClient.invalidateQueries({ queryKey: queryKeys.tasks.dailyPrefix });
       options?.onSuccess?.(data, variables, ctx);
     },
@@ -705,6 +909,9 @@ export function useDeleteTaskTemplateMutation(
       });
       queryClient.invalidateQueries({
         queryKey: queryKeys.manager.dashboardPrefix,
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.manager.todayBoardPrefix,
       });
       queryClient.invalidateQueries({ queryKey: queryKeys.tasks.dailyPrefix });
       options?.onSuccess?.(data, variables, ctx);

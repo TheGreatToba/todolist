@@ -15,10 +15,24 @@ import {
   parseManagerDashboardQuery,
 } from "../lib/query-schemas";
 import {
+  normalizeRecurrenceMode,
   parseRecurrenceDaysCsv,
   shouldTemplateAppearOnDate,
 } from "../lib/recurrence";
 import { createTaskTemplateTransactional } from "../services/task-template.service";
+
+const RecurrenceModeSchema = z.enum([
+  "schedule_based",
+  "after_completion",
+  "manual_trigger",
+]);
+const ScheduleRecurrenceTypeSchema = z.enum([
+  "daily",
+  "weekly",
+  "x_per_week",
+  "monthly",
+]);
+const RecurrenceIntervalUnitSchema = z.enum(["day", "week", "month"]);
 
 const UpdateTaskTemplateSchema = z.object({
   title: z.string().min(1).optional(),
@@ -26,8 +40,12 @@ const UpdateTaskTemplateSchema = z.object({
   workstationId: z.string().optional().nullable(),
   assignedToEmployeeId: z.string().optional().nullable(),
   isRecurring: z.boolean().optional(),
-  recurrenceType: z.enum(["daily", "weekly", "x_per_week"]).optional(),
+  recurrenceMode: RecurrenceModeSchema.optional(),
+  recurrenceType: ScheduleRecurrenceTypeSchema.optional(),
   recurrenceDays: z.array(z.number().int().min(0).max(6)).optional().nullable(),
+  recurrenceDayOfMonth: z.number().int().min(1).max(31).optional().nullable(),
+  recurrenceInterval: z.number().int().min(1).optional().nullable(),
+  recurrenceIntervalUnit: RecurrenceIntervalUnitSchema.optional().nullable(),
   targetPerWeek: z.number().int().min(1).max(7).optional().nullable(),
   notifyEmployee: z.boolean().optional(),
 });
@@ -69,11 +87,222 @@ const UpdateDailyTaskSchema = z
     "Either isCompleted or employeeId must be provided",
   );
 
+const CreateTodayBoardTaskSchema = z.object({
+  title: z.string().trim().min(1),
+  assignedToEmployeeId: z.string().min(1).optional(),
+  dueDate: z.string().optional(),
+});
+
+const QUICK_TASK_TEMPLATE_SOURCE_PREFIX = "quick";
+const DATE_YMD_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
+function resolveOperationalTimeZone(): string {
+  const configured = process.env.OPERATIONAL_TIME_ZONE?.trim();
+  if (configured) {
+    try {
+      new Intl.DateTimeFormat("en-US", { timeZone: configured }).format(
+        new Date(),
+      );
+      return configured;
+    } catch {
+      logger.warn(
+        { configuredTimeZone: configured },
+        "Invalid OPERATIONAL_TIME_ZONE, falling back to server timezone",
+      );
+    }
+  }
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+}
+
+const OPERATIONAL_TIME_ZONE = resolveOperationalTimeZone();
+
 function formatDateYmd(date: Date): string {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
+}
+
+function parseDateYmd(
+  value: string,
+): { year: number; month: number; day: number } | null {
+  if (!DATE_YMD_REGEX.test(value)) return null;
+  const [yearRaw, monthRaw, dayRaw] = value.split("-");
+  const year = Number(yearRaw);
+  const month = Number(monthRaw);
+  const day = Number(dayRaw);
+  if (
+    !Number.isInteger(year) ||
+    !Number.isInteger(month) ||
+    !Number.isInteger(day)
+  ) {
+    return null;
+  }
+
+  const roundTrip = new Date(Date.UTC(year, month - 1, day));
+  if (
+    roundTrip.getUTCFullYear() !== year ||
+    roundTrip.getUTCMonth() + 1 !== month ||
+    roundTrip.getUTCDate() !== day
+  ) {
+    return null;
+  }
+
+  return { year, month, day };
+}
+
+function getDatePartsInTimeZone(
+  date: Date,
+  timeZone: string,
+): { year: number; month: number; day: number } {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+
+  const year = Number(parts.find((part) => part.type === "year")?.value);
+  const month = Number(parts.find((part) => part.type === "month")?.value);
+  const day = Number(parts.find((part) => part.type === "day")?.value);
+
+  if (
+    !Number.isInteger(year) ||
+    !Number.isInteger(month) ||
+    !Number.isInteger(day)
+  ) {
+    throw new Error("Failed to resolve date parts in operational timezone");
+  }
+
+  return { year, month, day };
+}
+
+function formatDateYmdInTimeZone(date: Date, timeZone: string): string {
+  const { year, month, day } = getDatePartsInTimeZone(date, timeZone);
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function getTimeZoneOffsetMs(date: Date, timeZone: string): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+
+  const year = Number(parts.find((part) => part.type === "year")?.value);
+  const month = Number(parts.find((part) => part.type === "month")?.value);
+  const day = Number(parts.find((part) => part.type === "day")?.value);
+  const hour = Number(parts.find((part) => part.type === "hour")?.value);
+  const minute = Number(parts.find((part) => part.type === "minute")?.value);
+  const second = Number(parts.find((part) => part.type === "second")?.value);
+
+  const asUtc = Date.UTC(year, month - 1, day, hour, minute, second, 0);
+  return asUtc - date.getTime();
+}
+
+function zonedDateTimeToUtc(
+  year: number,
+  month: number,
+  day: number,
+  hour: number,
+  minute: number,
+  second: number,
+  millisecond: number,
+  timeZone: string,
+): Date {
+  const utcGuess = Date.UTC(
+    year,
+    month - 1,
+    day,
+    hour,
+    minute,
+    second,
+    millisecond,
+  );
+  let current = new Date(utcGuess);
+
+  for (let i = 0; i < 3; i += 1) {
+    const offset = getTimeZoneOffsetMs(current, timeZone);
+    const adjusted = new Date(utcGuess - offset);
+    if (adjusted.getTime() === current.getTime()) break;
+    current = adjusted;
+  }
+
+  return current;
+}
+
+function getOperationalTodayWindow(referenceDate = new Date()): {
+  todayYmd: string;
+  todayStart: Date;
+  tomorrowStart: Date;
+} {
+  const todayYmd = formatDateYmdInTimeZone(
+    referenceDate,
+    OPERATIONAL_TIME_ZONE,
+  );
+  const parsed = parseDateYmd(todayYmd);
+  if (!parsed) {
+    throw new Error("Failed to parse operational date");
+  }
+
+  const todayStart = zonedDateTimeToUtc(
+    parsed.year,
+    parsed.month,
+    parsed.day,
+    0,
+    0,
+    0,
+    0,
+    OPERATIONAL_TIME_ZONE,
+  );
+  const tomorrowStart = zonedDateTimeToUtc(
+    parsed.year,
+    parsed.month,
+    parsed.day + 1,
+    0,
+    0,
+    0,
+    0,
+    OPERATIONAL_TIME_ZONE,
+  );
+
+  return { todayYmd, todayStart, tomorrowStart };
+}
+
+function parseOperationalDueDate(
+  dueDateRaw: string,
+  timeZone: string,
+): Date | null {
+  const normalized = dueDateRaw.trim();
+  if (!normalized) return null;
+  const parsed = parseDateYmd(normalized);
+  if (!parsed) return null;
+  return zonedDateTimeToUtc(
+    parsed.year,
+    parsed.month,
+    parsed.day,
+    0,
+    0,
+    0,
+    0,
+    timeZone,
+  );
+}
+
+function quickTaskSourcePrefixForManager(managerId: string): string {
+  return `${QUICK_TASK_TEMPLATE_SOURCE_PREFIX}:${managerId}:`;
+}
+
+function buildQuickTaskSourceId(managerId: string): string {
+  const uniqueSuffix = `${Date.now().toString(36)}-${Math.random()
+    .toString(36)
+    .slice(2, 10)}`;
+  return `${quickTaskSourcePrefixForManager(managerId)}${uniqueSuffix}`;
 }
 
 function serializeTemplateResponse(template: {
@@ -93,10 +322,20 @@ function serializeTemplateResponse(template: {
   assignedToEmployee?: { id: string; name: string; email: string } | null;
 }) {
   return {
-    ...template,
+    id: template.id,
+    title: template.title,
+    description: template.description,
+    workstationId: template.workstationId,
+    assignedToEmployeeId: template.assignedToEmployeeId,
+    isRecurring: template.isRecurring,
+    recurrenceType: template.recurrenceType,
     recurrenceDays: parseRecurrenceDaysCsv(template.recurrenceDays),
+    targetPerWeek: template.targetPerWeek,
+    notifyEmployee: template.notifyEmployee,
     createdAt: template.createdAt.toISOString(),
     updatedAt: template.updatedAt.toISOString(),
+    workstation: template.workstation,
+    assignedToEmployee: template.assignedToEmployee,
   };
 }
 
@@ -321,34 +560,83 @@ export const handleUpdateDailyTask: RequestHandler = async (req, res) => {
       return;
     }
 
-    const taskEmployee = await prisma.user.findUnique({
-      where: { id: task.employeeId ?? "" },
-      select: { teamId: true },
-    });
-    if (!task.employeeId || !taskEmployee?.teamId) {
+    const managerTeamIds =
+      payload.role === "MANAGER"
+        ? new Set(await getManagerTeamIds(payload.userId))
+        : new Set<string>();
+
+    const taskEmployee = task.employeeId
+      ? await prisma.user.findUnique({
+          where: { id: task.employeeId },
+          select: { id: true, teamId: true },
+        })
+      : null;
+    if (task.employeeId && !taskEmployee?.teamId) {
       res.status(404).json({ error: "Task employee not found" });
       return;
     }
 
-    let managerTeamIds = new Set<string>();
-    let isManagerOfTaskTeam = false;
-    if (payload.role === "MANAGER") {
-      managerTeamIds = new Set(await getManagerTeamIds(payload.userId));
-      isManagerOfTaskTeam = managerTeamIds.has(taskEmployee.teamId);
+    let taskScopeTeamId = taskEmployee?.teamId ?? null;
+    if (!taskScopeTeamId && task.templateWorkstationId) {
+      const taskWorkstation = await prisma.workstation.findUnique({
+        where: { id: task.templateWorkstationId },
+        select: { teamId: true },
+      });
+      taskScopeTeamId = taskWorkstation?.teamId ?? null;
     }
+    if (!taskScopeTeamId && task.taskTemplateId) {
+      const templateScope = await prisma.taskTemplate.findUnique({
+        where: { id: task.taskTemplateId },
+        select: {
+          createdById: true,
+          workstation: {
+            select: { teamId: true },
+          },
+          assignedToEmployee: {
+            select: { teamId: true, role: true },
+          },
+        },
+      });
+      taskScopeTeamId =
+        templateScope?.workstation?.teamId ??
+        (templateScope?.assignedToEmployee?.role === "EMPLOYEE"
+          ? (templateScope.assignedToEmployee.teamId ?? null)
+          : null);
+      if (
+        !taskScopeTeamId &&
+        payload.role === "MANAGER" &&
+        templateScope?.createdById === payload.userId
+      ) {
+        taskScopeTeamId = null;
+      }
+    }
+
+    const isQuickTaskOwnedByManager =
+      payload.role === "MANAGER" &&
+      task.employeeId === null &&
+      task.templateSourceId.startsWith(
+        quickTaskSourcePrefixForManager(payload.userId),
+      );
+    const isManagerOfTaskTeam =
+      payload.role === "MANAGER" &&
+      taskScopeTeamId !== null &&
+      managerTeamIds.has(taskScopeTeamId);
+    const canManagerAccessTaskScope =
+      payload.role === "MANAGER" &&
+      (isManagerOfTaskTeam || isQuickTaskOwnedByManager);
     const isTaskOwner = task.employeeId === payload.userId;
 
     if (
       body.isCompleted !== undefined &&
       !isTaskOwner &&
-      !isManagerOfTaskTeam
+      !canManagerAccessTaskScope
     ) {
       res.status(403).json({ error: "Forbidden" });
       return;
     }
 
     if (body.employeeId !== undefined) {
-      if (!isManagerOfTaskTeam) {
+      if (!canManagerAccessTaskScope) {
         res.status(403).json({ error: "Forbidden" });
         return;
       }
@@ -367,7 +655,7 @@ export const handleUpdateDailyTask: RequestHandler = async (req, res) => {
       }
       if (
         !managerTeamIds.has(targetEmployee.teamId) ||
-        targetEmployee.teamId !== taskEmployee.teamId
+        (taskScopeTeamId !== null && targetEmployee.teamId !== taskScopeTeamId)
       ) {
         res.status(403).json({ error: "Forbidden" });
         return;
@@ -410,22 +698,28 @@ export const handleUpdateDailyTask: RequestHandler = async (req, res) => {
       isCompleted?: boolean;
       completedAt?: Date | null;
       employeeId?: string;
+      status?: "UNASSIGNED" | "ASSIGNED" | "DONE";
     } = {};
+    const nextEmployeeId = body.employeeId ?? task.employeeId;
     if (body.isCompleted !== undefined) {
       updateData.isCompleted = body.isCompleted;
       updateData.completedAt = body.isCompleted ? new Date() : null;
       // Keep explicit status aligned with completion state.
-      (updateData as { status?: string }).status = body.isCompleted
+      updateData.status = body.isCompleted
         ? "DONE"
-        : "ASSIGNED";
+        : nextEmployeeId
+          ? "ASSIGNED"
+          : "UNASSIGNED";
     }
     if (body.employeeId !== undefined) {
       updateData.employeeId = body.employeeId;
-      (updateData as { status?: string }).status = "ASSIGNED";
+      if (updateData.status !== "DONE") {
+        updateData.status = "ASSIGNED";
+      }
       if (body.employeeId !== task.employeeId && task.isCompleted) {
         updateData.isCompleted = false;
         updateData.completedAt = null;
-        (updateData as { status?: string }).status = "ASSIGNED";
+        updateData.status = "ASSIGNED";
       }
     }
 
@@ -448,29 +742,285 @@ export const handleUpdateDailyTask: RequestHandler = async (req, res) => {
             },
           },
         },
+        employee: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            teamId: true,
+          },
+        },
       },
     });
     const serializedTask = serializeDailyTaskResponse(updatedTask);
 
     // Emit socket.io event to notify manager (team room only)
     const io = getIO();
-    if (io) {
-      const employee = await prisma.user.findUnique({
-        where: { id: updatedTask.employeeId },
-        select: { teamId: true },
+    const socketTeamId = updatedTask.employee?.teamId ?? taskScopeTeamId;
+    if (io && socketTeamId) {
+      const taskTitle = serializedTask.taskTemplate.title || "Task";
+      io.to(`team:${socketTeamId}`).emit("task:updated", {
+        taskId: updatedTask.id,
+        employeeId: updatedTask.employeeId,
+        isCompleted: updatedTask.isCompleted,
+        taskTitle,
       });
-      if (employee?.teamId) {
-        const taskTitle = serializedTask.taskTemplate.title || "Task";
-        io.to(`team:${employee.teamId}`).emit("task:updated", {
-          taskId: updatedTask.id,
-          employeeId: updatedTask.employeeId,
-          isCompleted: updatedTask.isCompleted,
-          taskTitle,
-        });
-      }
     }
 
     res.json(serializedTask);
+  } catch (error) {
+    sendErrorResponse(res, error, req);
+  }
+};
+
+export const handleGetManagerTodayBoard: RequestHandler = async (req, res) => {
+  try {
+    const payload = getAuthOrThrow(req, res);
+    if (!payload) return;
+
+    const { todayYmd, todayStart, tomorrowStart } = getOperationalTodayWindow();
+
+    // Ensure recurring tasks for today exist before assembling operational board data.
+    await assignDailyTasksForDate(todayStart);
+
+    const teamIds = await getManagerTeamIds(payload.userId);
+    if (teamIds.length === 0) {
+      res.status(404).json({ error: "Team not found" });
+      return;
+    }
+
+    const workstationRows = await prisma.workstation.findMany({
+      where: {
+        teamId: { in: teamIds },
+      },
+      select: { id: true },
+    });
+    const workstationIds = workstationRows.map((row) => row.id);
+
+    const taskVisibilityScopes: Array<Record<string, unknown>> = [
+      {
+        employee: {
+          role: "EMPLOYEE",
+          teamId: { in: teamIds },
+        },
+      },
+      {
+        employeeId: null,
+        taskTemplate: {
+          workstation: {
+            teamId: { in: teamIds },
+          },
+        },
+      },
+      {
+        employeeId: null,
+        taskTemplate: {
+          assignedToEmployee: {
+            role: "EMPLOYEE",
+            teamId: { in: teamIds },
+          },
+        },
+      },
+      {
+        employeeId: null,
+        templateSourceId: {
+          startsWith: quickTaskSourcePrefixForManager(payload.userId),
+        },
+      },
+    ];
+    if (workstationIds.length > 0) {
+      taskVisibilityScopes.push({
+        employeeId: null,
+        templateWorkstationId: { in: workstationIds },
+      });
+    }
+
+    const rows = await prisma.dailyTask.findMany({
+      where: {
+        AND: [
+          { OR: taskVisibilityScopes },
+          {
+            OR: [
+              {
+                completedAt: null,
+                date: { lt: todayStart },
+              },
+              {
+                completedAt: null,
+                date: { gte: todayStart, lt: tomorrowStart },
+              },
+              {
+                completedAt: { gte: todayStart, lt: tomorrowStart },
+              },
+            ],
+          },
+        ],
+      },
+      include: {
+        employee: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        taskTemplate: {
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            isRecurring: true,
+            recurrenceType: true,
+            workstation: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: [{ date: "asc" }, { createdAt: "asc" }],
+    });
+
+    const seenTaskIds = new Set<string>();
+    const overdue: Array<ReturnType<typeof serializeDailyTaskResponse>> = [];
+    const today: Array<ReturnType<typeof serializeDailyTaskResponse>> = [];
+    const completedToday: Array<ReturnType<typeof serializeDailyTaskResponse>> =
+      [];
+
+    for (const row of rows) {
+      if (seenTaskIds.has(row.id)) continue;
+      seenTaskIds.add(row.id);
+
+      const task = serializeDailyTaskResponse(row);
+      const completedAt = row.completedAt;
+      if (
+        completedAt &&
+        completedAt >= todayStart &&
+        completedAt < tomorrowStart
+      ) {
+        completedToday.push(task);
+        continue;
+      }
+
+      if (!completedAt && row.date < todayStart) {
+        overdue.push(task);
+        continue;
+      }
+
+      if (!completedAt && row.date >= todayStart && row.date < tomorrowStart) {
+        today.push(task);
+      }
+    }
+
+    res.json({
+      date: todayYmd,
+      overdue,
+      today,
+      completedToday,
+    });
+  } catch (error) {
+    sendErrorResponse(res, error, req);
+  }
+};
+
+export const handleCreateManagerTodayBoardTask: RequestHandler = async (
+  req,
+  res,
+) => {
+  try {
+    const payload = getAuthOrThrow(req, res);
+    if (!payload) return;
+
+    const body = CreateTodayBoardTaskSchema.parse(req.body);
+    const { todayStart } = getOperationalTodayWindow();
+    let dueDate = todayStart;
+    if (body.dueDate !== undefined) {
+      if (body.dueDate.trim().length > 0) {
+        const parsedDueDate = parseOperationalDueDate(
+          body.dueDate,
+          OPERATIONAL_TIME_ZONE,
+        );
+        if (!parsedDueDate) {
+          res.status(400).json({ error: "Invalid date. Use YYYY-MM-DD." });
+          return;
+        }
+        dueDate = parsedDueDate;
+      }
+    }
+
+    const managerTeamIds = new Set(await getManagerTeamIds(payload.userId));
+    if (managerTeamIds.size === 0) {
+      res.status(404).json({ error: "Team not found" });
+      return;
+    }
+
+    let assignedEmployeeId: string | null = null;
+    if (body.assignedToEmployeeId) {
+      const employee = await prisma.user.findUnique({
+        where: { id: body.assignedToEmployeeId },
+        select: {
+          id: true,
+          role: true,
+          teamId: true,
+        },
+      });
+      if (
+        !employee ||
+        employee.role !== "EMPLOYEE" ||
+        !employee.teamId ||
+        !managerTeamIds.has(employee.teamId)
+      ) {
+        res.status(404).json({ error: "Employee not found" });
+        return;
+      }
+      assignedEmployeeId = employee.id;
+    }
+
+    const createdTask = await prisma.dailyTask.create({
+      data: {
+        taskTemplateId: null,
+        templateSourceId: buildQuickTaskSourceId(payload.userId),
+        templateTitle: body.title,
+        templateDescription: null,
+        templateRecurrenceType: null,
+        templateIsRecurring: false,
+        templateWorkstationId: null,
+        templateWorkstationName: null,
+        employeeId: assignedEmployeeId,
+        date: dueDate,
+        status: assignedEmployeeId ? "ASSIGNED" : "UNASSIGNED",
+        isCompleted: false,
+        completedAt: null,
+      },
+      include: {
+        employee: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        taskTemplate: {
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            isRecurring: true,
+            recurrenceType: true,
+            workstation: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    res.status(201).json(serializeDailyTaskResponse(createdTask));
   } catch (error) {
     sendErrorResponse(res, error, req);
   }
@@ -1023,6 +1573,72 @@ export const handleUpdateTaskTemplate: RequestHandler = async (req, res) => {
       });
       return;
     }
+    const nextRecurrenceMode = nextIsRecurring
+      ? (body.recurrenceMode ??
+        normalizeRecurrenceMode(existingTemplate.recurrenceMode))
+      : "schedule_based";
+    const nextRecurrenceType =
+      body.recurrenceType ?? existingTemplate.recurrenceType;
+    const nextRecurrenceDayOfMonth =
+      body.recurrenceDayOfMonth !== undefined
+        ? body.recurrenceDayOfMonth
+        : existingTemplate.recurrenceDayOfMonth;
+    const nextRecurrenceInterval =
+      body.recurrenceInterval !== undefined
+        ? body.recurrenceInterval
+        : existingTemplate.recurrenceInterval;
+    const nextRecurrenceIntervalUnit =
+      body.recurrenceIntervalUnit !== undefined
+        ? body.recurrenceIntervalUnit
+        : existingTemplate.recurrenceIntervalUnit;
+
+    if (
+      nextIsRecurring &&
+      nextRecurrenceMode === "schedule_based" &&
+      nextRecurrenceType === "monthly" &&
+      !nextRecurrenceDayOfMonth
+    ) {
+      res.status(400).json({
+        error:
+          "recurrenceDayOfMonth is required for monthly schedule-based templates",
+      });
+      return;
+    }
+
+    if (nextIsRecurring && nextRecurrenceMode === "after_completion") {
+      if (!nextRecurrenceInterval || !nextRecurrenceIntervalUnit) {
+        res.status(400).json({
+          error:
+            "recurrenceInterval and recurrenceIntervalUnit are required for after_completion mode",
+        });
+        return;
+      }
+    }
+
+    const shouldSetRecurrenceDayOfMonth =
+      body.recurrenceDayOfMonth !== undefined ||
+      body.recurrenceType !== undefined ||
+      body.recurrenceMode !== undefined ||
+      body.isRecurring !== undefined;
+    const shouldSetAfterCompletionConfig =
+      body.recurrenceInterval !== undefined ||
+      body.recurrenceIntervalUnit !== undefined ||
+      body.recurrenceMode !== undefined ||
+      body.isRecurring !== undefined;
+    const resolvedRecurrenceDayOfMonth =
+      nextIsRecurring &&
+      nextRecurrenceMode === "schedule_based" &&
+      nextRecurrenceType === "monthly"
+        ? (nextRecurrenceDayOfMonth ?? null)
+        : null;
+    const resolvedRecurrenceInterval =
+      nextIsRecurring && nextRecurrenceMode === "after_completion"
+        ? (nextRecurrenceInterval ?? null)
+        : null;
+    const resolvedRecurrenceIntervalUnit =
+      nextIsRecurring && nextRecurrenceMode === "after_completion"
+        ? (nextRecurrenceIntervalUnit ?? null)
+        : null;
 
     // Update the template
     const updatedTemplate = await prisma.taskTemplate.update({
@@ -1041,6 +1657,9 @@ export const handleUpdateTaskTemplate: RequestHandler = async (req, res) => {
         ...(body.isRecurring !== undefined && {
           isRecurring: body.isRecurring,
         }),
+        ...(body.recurrenceMode !== undefined && {
+          recurrenceMode: body.recurrenceMode,
+        }),
         ...(body.recurrenceType !== undefined && {
           recurrenceType: body.recurrenceType,
         }),
@@ -1052,6 +1671,13 @@ export const handleUpdateTaskTemplate: RequestHandler = async (req, res) => {
         }),
         ...(body.targetPerWeek !== undefined && {
           targetPerWeek: body.targetPerWeek,
+        }),
+        ...(shouldSetRecurrenceDayOfMonth && {
+          recurrenceDayOfMonth: resolvedRecurrenceDayOfMonth,
+        }),
+        ...(shouldSetAfterCompletionConfig && {
+          recurrenceInterval: resolvedRecurrenceInterval,
+          recurrenceIntervalUnit: resolvedRecurrenceIntervalUnit,
         }),
         ...(body.notifyEmployee !== undefined && {
           notifyEmployee: body.notifyEmployee,

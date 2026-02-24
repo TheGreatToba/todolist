@@ -9,6 +9,7 @@ import { getAuthOrThrow } from "../middleware/requireAuth";
 import { sendSetPasswordEmail } from "../lib/email";
 import { getSetPasswordTokenExpiryHours } from "../lib/set-password-expiry";
 import { getFrontendBaseUrl } from "../lib/app-url";
+import { isTemplateDueOnDate } from "../jobs/daily-task-assignment";
 import {
   getManagerTeamIds,
   getManagerFirstTeam,
@@ -250,7 +251,10 @@ export const handleCreateEmployee: RequestHandler = async (req, res) => {
       today.setHours(0, 0, 0, 0);
 
       const taskTemplates = await tx.taskTemplate.findMany({
-        where: { workstationId: { in: body.workstationIds } },
+        where: {
+          workstationId: { in: body.workstationIds },
+          isRecurring: true,
+        },
         include: {
           workstation: {
             select: {
@@ -261,9 +265,20 @@ export const handleCreateEmployee: RequestHandler = async (req, res) => {
         },
       });
 
-      if (taskTemplates.length > 0) {
+      const dueTaskTemplates = (
+        await Promise.all(
+          taskTemplates.map(async (template) => ({
+            template,
+            due: await isTemplateDueOnDate(template, today),
+          })),
+        )
+      )
+        .filter((item) => item.due)
+        .map((item) => item.template);
+
+      if (dueTaskTemplates.length > 0) {
         await tx.dailyTask.createMany({
-          data: taskTemplates.map((template) => ({
+          data: dueTaskTemplates.map((template) => ({
             taskTemplateId: template.id,
             templateSourceId: template.id,
             templateTitle: template.title,

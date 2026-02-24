@@ -14,6 +14,7 @@ const SetPassword = React.lazy(() => import("./pages/SetPassword"));
 const ForgotPassword = React.lazy(() => import("./pages/ForgotPassword"));
 const ResetPassword = React.lazy(() => import("./pages/ResetPassword"));
 const EmployeeDashboard = React.lazy(() => import("./pages/EmployeeDashboard"));
+const TodayBoard = React.lazy(() => import("./pages/TodayBoard"));
 const ManagerDashboard = React.lazy(() => import("./pages/ManagerDashboard"));
 const NotFound = React.lazy(() => import("./pages/NotFound"));
 
@@ -91,10 +92,7 @@ function ProtectedRoute({
 
   if (requiredRole && user.role !== requiredRole) {
     return (
-      <Navigate
-        to={user.role === "MANAGER" ? "/manager" : "/employee"}
-        replace
-      />
+      <Navigate to={user.role === "MANAGER" ? "/today" : "/employee"} replace />
     );
   }
 
@@ -121,6 +119,14 @@ const App = () => (
                   element={
                     <ProtectedRoute requiredRole="EMPLOYEE">
                       <EmployeeDashboard />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/today"
+                  element={
+                    <ProtectedRoute requiredRole="MANAGER">
+                      <TodayBoard />
                     </ProtectedRoute>
                   }
                 />

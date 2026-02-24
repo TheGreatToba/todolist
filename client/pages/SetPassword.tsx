@@ -17,7 +17,7 @@ export default function SetPassword() {
     onSuccess: (data) => {
       queryClient.setQueryData(queryKeys.auth.profile, { user: data.user });
       window.location.href =
-        data.user.role === "MANAGER" ? "/manager" : "/employee";
+        data.user.role === "MANAGER" ? "/today" : "/employee";
     },
     onError: (err) => {
       setError(err.message ?? "Failed to set password");

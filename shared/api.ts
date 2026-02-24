@@ -233,3 +233,24 @@ export interface ManagerDashboard {
     }>;
   };
 }
+
+export interface TodayBoardTask extends DailyTask {
+  employee?: {
+    id: string;
+    name: string;
+    email: string;
+  };
+}
+
+export interface ManagerTodayBoard {
+  date: string;
+  overdue: TodayBoardTask[];
+  today: TodayBoardTask[];
+  completedToday: TodayBoardTask[];
+}
+
+export interface CreateTodayBoardTaskRequest {
+  title: string;
+  assignedToEmployeeId?: string;
+  dueDate?: string;
+}

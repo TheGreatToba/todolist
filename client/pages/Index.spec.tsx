@@ -114,7 +114,7 @@ describe("Index (Home)", () => {
     expect(view.getByText(/real-time updates/i)).toBeInTheDocument();
   });
 
-  it("renders Navigate to /manager when user is MANAGER", () => {
+  it("renders Navigate to /today when user is MANAGER", () => {
     mockUseAuth.mockReturnValue({
       user: { id: "m1", name: "Manager", email: "m@test.com", role: "MANAGER" },
       isAuthenticated: true,

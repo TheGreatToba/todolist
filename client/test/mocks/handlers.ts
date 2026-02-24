@@ -55,6 +55,48 @@ export const managerDashboardHandler = http.get("*/api/manager/dashboard", () =>
   }),
 );
 
+/** GET /api/manager/today-board - minimal operational payload for manager landing page. */
+export const managerTodayBoardHandler = http.get(
+  "*/api/manager/today-board",
+  () =>
+    HttpResponse.json({
+      date: "2025-02-19",
+      overdue: [],
+      today: [],
+      completedToday: [],
+    }),
+);
+
+/** POST /api/manager/today-board/tasks - quick-create task response. */
+export const createTodayBoardTaskHandler = http.post(
+  "*/api/manager/today-board/tasks",
+  async ({ request }) => {
+    const body = (await request.json()) as {
+      title?: string;
+      assignedToEmployeeId?: string;
+      dueDate?: string;
+    };
+    return HttpResponse.json(
+      {
+        id: "msw-today-task-1",
+        taskTemplateId: null,
+        employeeId: body.assignedToEmployeeId ?? null,
+        date: `${body.dueDate ?? "2025-02-19"}T00:00:00.000Z`,
+        status: body.assignedToEmployeeId ? "ASSIGNED" : "UNASSIGNED",
+        isCompleted: false,
+        completedAt: null,
+        taskTemplate: {
+          id: "msw-today-task-1",
+          title: body.title ?? "Quick task",
+          description: null,
+          isRecurring: false,
+        },
+      },
+      { status: 201 },
+    );
+  },
+);
+
 /** GET /api/workstations – empty list (realistic for new team). */
 export const workstationsHandler = http.get("*/api/workstations", () =>
   HttpResponse.json([]),

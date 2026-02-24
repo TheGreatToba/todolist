@@ -3,8 +3,24 @@ import { z } from "zod";
 import prisma from "../lib/db";
 import { AppError } from "../lib/errors";
 import { parseDateQuery } from "../lib/parse-date-query";
-import { shouldTemplateAppearOnDate } from "../lib/recurrence";
+import {
+  normalizeRecurrenceMode,
+  shouldTemplateAppearOnDate,
+} from "../lib/recurrence";
 import { TASK_TEMPLATE_SAME_TEAM_MESSAGE } from "../lib/task-template-invariant";
+
+const RecurrenceModeSchema = z.enum([
+  "schedule_based",
+  "after_completion",
+  "manual_trigger",
+]);
+const ScheduleRecurrenceTypeSchema = z.enum([
+  "daily",
+  "weekly",
+  "x_per_week",
+  "monthly",
+]);
+const RecurrenceIntervalUnitSchema = z.enum(["day", "week", "month"]);
 
 const CreateTaskTemplateSchema = z
   .object({
@@ -13,8 +29,12 @@ const CreateTaskTemplateSchema = z
     workstationId: z.string().optional(),
     assignedToEmployeeId: z.string().optional(),
     isRecurring: z.boolean().default(true),
-    recurrenceType: z.enum(["daily", "weekly", "x_per_week"]).optional(),
+    recurrenceMode: RecurrenceModeSchema.optional(),
+    recurrenceType: ScheduleRecurrenceTypeSchema.optional(),
     recurrenceDays: z.array(z.number().int().min(0).max(6)).optional(),
+    recurrenceDayOfMonth: z.number().int().min(1).max(31).optional(),
+    recurrenceInterval: z.number().int().min(1).optional(),
+    recurrenceIntervalUnit: RecurrenceIntervalUnitSchema.optional(),
     targetPerWeek: z.number().int().min(1).max(7).optional(),
     notifyEmployee: z.boolean().default(true),
     date: z.string().optional(),
@@ -31,6 +51,45 @@ const CreateTaskTemplateSchema = z
           "Either workstationId or assignedToEmployeeId must be provided for one-shot templates",
         path: ["workstationId"],
       });
+    }
+
+    if (!data.isRecurring) {
+      return;
+    }
+
+    const recurrenceMode = data.recurrenceMode ?? "schedule_based";
+    if (recurrenceMode === "schedule_based") {
+      const recurrenceType = data.recurrenceType ?? "daily";
+      if (
+        recurrenceType === "monthly" &&
+        data.recurrenceDayOfMonth === undefined
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            "recurrenceDayOfMonth is required for monthly schedule-based templates",
+          path: ["recurrenceDayOfMonth"],
+        });
+      }
+      return;
+    }
+
+    if (recurrenceMode === "after_completion") {
+      if (data.recurrenceInterval === undefined) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "recurrenceInterval is required for after_completion mode",
+          path: ["recurrenceInterval"],
+        });
+      }
+      if (data.recurrenceIntervalUnit === undefined) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            "recurrenceIntervalUnit is required for after_completion mode",
+          path: ["recurrenceIntervalUnit"],
+        });
+      }
     }
   });
 
@@ -90,6 +149,17 @@ function isTransactionConflictError(error: unknown): boolean {
       ? (error as { code: string }).code
       : null;
   return code === "P2034";
+}
+
+function isUniqueConstraintError(error: unknown): boolean {
+  const code =
+    error &&
+    typeof error === "object" &&
+    "code" in error &&
+    typeof (error as { code?: unknown }).code === "string"
+      ? (error as { code: string }).code
+      : null;
+  return code === "P2002";
 }
 
 function wait(ms: number): Promise<void> {
@@ -155,14 +225,24 @@ async function createDependentDailyTasks(
   taskTemplate: TaskTemplateWithRelations,
   taskDate: Date,
 ): Promise<void> {
-  const shouldAppearToday = shouldTemplateAppearOnDate(
-    {
-      isRecurring: taskTemplate.isRecurring,
-      recurrenceType: taskTemplate.recurrenceType,
-      recurrenceDays: taskTemplate.recurrenceDays,
-    },
-    taskDate,
-  );
+  const recurrenceMode = normalizeRecurrenceMode(taskTemplate.recurrenceMode);
+  let shouldAppearToday = false;
+  if (recurrenceMode === "schedule_based") {
+    shouldAppearToday = shouldTemplateAppearOnDate(
+      {
+        isRecurring: taskTemplate.isRecurring,
+        recurrenceMode: taskTemplate.recurrenceMode,
+        recurrenceType: taskTemplate.recurrenceType,
+        recurrenceDays: taskTemplate.recurrenceDays,
+        recurrenceDayOfMonth: taskTemplate.recurrenceDayOfMonth,
+      },
+      taskDate,
+    );
+  } else if (recurrenceMode === "after_completion") {
+    // First after-completion occurrence is created immediately on template creation date.
+    shouldAppearToday = true;
+  }
+
   const taskSnapshot = buildDailyTaskSnapshot(taskTemplate);
   if (!shouldAppearToday && taskTemplate.isRecurring) {
     return;
@@ -262,10 +342,25 @@ export async function createTaskTemplateTransactional(input: {
               assignedToEmployeeId: body.assignedToEmployeeId || null,
               createdById: input.userId,
               isRecurring: body.isRecurring,
+              recurrenceMode: body.isRecurring
+                ? (body.recurrenceMode ?? "schedule_based")
+                : "schedule_based",
               recurrenceType: body.recurrenceType ?? "daily",
               recurrenceDays: body.recurrenceDays?.length
                 ? body.recurrenceDays.join(",")
                 : null,
+              recurrenceDayOfMonth:
+                body.recurrenceType === "monthly"
+                  ? (body.recurrenceDayOfMonth ?? null)
+                  : null,
+              recurrenceInterval:
+                body.recurrenceMode === "after_completion"
+                  ? (body.recurrenceInterval ?? null)
+                  : null,
+              recurrenceIntervalUnit:
+                body.recurrenceMode === "after_completion"
+                  ? (body.recurrenceIntervalUnit ?? null)
+                  : null,
               targetPerWeek: body.targetPerWeek ?? null,
               notifyEmployee: body.notifyEmployee,
             },
@@ -288,6 +383,212 @@ export async function createTaskTemplateTransactional(input: {
 
           await createDependentDailyTasks(tx, body, taskTemplate, taskDate);
           return taskTemplate;
+        },
+        {
+          maxWait: 5_000,
+          timeout: 15_000,
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        },
+      );
+    } catch (error) {
+      const canRetry =
+        isTransactionConflictError(error) && attempt < maxAttempts;
+      if (!canRetry) throw error;
+      await wait(computeRetryDelayMs(attempt));
+      attempt += 1;
+    }
+  }
+}
+
+type ManualTriggerTaskWithRelations = Prisma.DailyTaskGetPayload<{
+  include: {
+    employee: {
+      select: {
+        id: true;
+        name: true;
+        email: true;
+      };
+    };
+    taskTemplate: {
+      select: {
+        id: true;
+        title: true;
+        description: true;
+        isRecurring: true;
+        recurrenceType: true;
+        workstation: {
+          select: {
+            id: true;
+            name: true;
+          };
+        };
+      };
+    };
+  };
+}>;
+
+const manualTriggerTaskInclude = {
+  employee: {
+    select: {
+      id: true,
+      name: true,
+      email: true,
+    },
+  },
+  taskTemplate: {
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      isRecurring: true,
+      recurrenceType: true,
+      workstation: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+    },
+  },
+} satisfies Prisma.DailyTaskInclude;
+
+export async function instantiateManualTriggerTemplateTaskTransactional(input: {
+  managerUserId: string;
+  templateId: string;
+  dueDate: Date;
+  assignedToEmployeeId?: string | null;
+}): Promise<{ task: ManualTriggerTaskWithRelations; created: boolean }> {
+  const maxAttempts = 3;
+  let attempt = 1;
+
+  while (true) {
+    try {
+      return await prisma.$transaction(
+        async (tx) => {
+          const managedTeams = await tx.team.findMany({
+            where: { managerId: input.managerUserId },
+            select: { id: true },
+          });
+          const managedTeamIds = new Set(managedTeams.map((team) => team.id));
+
+          const template = await tx.taskTemplate.findUnique({
+            where: { id: input.templateId },
+            include: {
+              createdBy: { select: { id: true } },
+              workstation: { select: { id: true, name: true, teamId: true } },
+              assignedToEmployee: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                  role: true,
+                  teamId: true,
+                },
+              },
+            },
+          });
+
+          if (!template) {
+            throw new AppError(404, "Template not found");
+          }
+
+          const templateTeamId =
+            template.workstation?.teamId ??
+            template.assignedToEmployee?.teamId ??
+            null;
+          const canAccessUnassignedTemplate =
+            templateTeamId === null &&
+            template.createdBy.id === input.managerUserId;
+
+          if (
+            (templateTeamId === null && !canAccessUnassignedTemplate) ||
+            (templateTeamId !== null && !managedTeamIds.has(templateTeamId))
+          ) {
+            throw new AppError(404, "Template not found");
+          }
+
+          if (
+            normalizeRecurrenceMode(template.recurrenceMode) !==
+            "manual_trigger"
+          ) {
+            throw new AppError(
+              400,
+              "Only manual_trigger templates can be instantiated with this endpoint",
+            );
+          }
+
+          let targetEmployeeId: string | null = null;
+          if (input.assignedToEmployeeId) {
+            const employee = await tx.user.findUnique({
+              where: { id: input.assignedToEmployeeId },
+              select: { id: true, role: true, teamId: true },
+            });
+            if (
+              !employee ||
+              employee.role !== "EMPLOYEE" ||
+              !employee.teamId ||
+              !managedTeamIds.has(employee.teamId)
+            ) {
+              throw new AppError(404, "Employee not found");
+            }
+            if (templateTeamId !== null && employee.teamId !== templateTeamId) {
+              throw new AppError(403, "Forbidden");
+            }
+            targetEmployeeId = employee.id;
+          } else if (
+            template.assignedToEmployee &&
+            template.assignedToEmployee.role === "EMPLOYEE" &&
+            template.assignedToEmployee.teamId &&
+            managedTeamIds.has(template.assignedToEmployee.teamId)
+          ) {
+            targetEmployeeId = template.assignedToEmployee.id;
+          }
+
+          const dayEnd = addOneDay(input.dueDate);
+          const taskSnapshot = buildDailyTaskSnapshot(template);
+          const baseWhere = {
+            taskTemplateId: template.id,
+            date: {
+              gte: input.dueDate,
+              lt: dayEnd,
+            },
+          };
+
+          try {
+            const createdTask = await tx.dailyTask.create({
+              data: {
+                taskTemplateId: template.id,
+                ...taskSnapshot,
+                employeeId: targetEmployeeId,
+                date: input.dueDate,
+                status: targetEmployeeId ? "ASSIGNED" : "UNASSIGNED",
+                isCompleted: false,
+                completedAt: null,
+              },
+              include: manualTriggerTaskInclude,
+            });
+            return { task: createdTask, created: true };
+          } catch (error) {
+            if (!isUniqueConstraintError(error)) throw error;
+
+            const existingTask = await tx.dailyTask.findFirst({
+              where: targetEmployeeId
+                ? {
+                    ...baseWhere,
+                    employeeId: targetEmployeeId,
+                  }
+                : {
+                    ...baseWhere,
+                    employeeId: null,
+                    status: "UNASSIGNED",
+                  },
+              include: manualTriggerTaskInclude,
+              orderBy: { createdAt: "asc" },
+            });
+
+            if (!existingTask) throw error;
+            return { task: existingTask, created: false };
+          }
         },
         {
           maxWait: 5_000,

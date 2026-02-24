@@ -18,7 +18,7 @@ export default function Signup() {
   React.useEffect(() => {
     if (user) {
       if (user.role === "MANAGER") {
-        navigate("/manager", { replace: true });
+        navigate("/today", { replace: true });
       } else if (user.role === "EMPLOYEE") {
         navigate("/employee", { replace: true });
       }

@@ -1101,6 +1101,255 @@ describe("Permissions - role-based access", () => {
     }
   });
 
+  it("GET /api/manager/today-board as EMPLOYEE returns 403", async () => {
+    const agent = request.agent(app);
+    await agent
+      .post("/api/auth/login")
+      .send({ email: "emp@test.com", password: "password" });
+
+    const res = await agent.get("/api/manager/today-board");
+
+    expect(res.status).toBe(403);
+  });
+
+  it("GET /api/manager/today-board classifies overdue, today, and completed today", async () => {
+    const manager = await prisma.user.findUnique({
+      where: { email: "mgr@test.com" },
+      select: { id: true, teamId: true },
+    });
+    const employee = await prisma.user.findUnique({
+      where: { email: "emp@test.com" },
+      select: { id: true, teamId: true, role: true },
+    });
+    expect(manager?.id).toBeTruthy();
+    expect(employee?.id).toBeTruthy();
+    expect(employee?.role).toBe("EMPLOYEE");
+    expect(employee?.teamId).toBe(manager?.teamId);
+
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const yesterdayStart = new Date(todayStart.getTime() - 24 * 60 * 60 * 1000);
+    const tomorrowStart = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
+    const completedAtToday = new Date(todayStart.getTime() + 60 * 60 * 1000);
+    const completedAtYesterday = new Date(
+      yesterdayStart.getTime() + 60 * 60 * 1000,
+    );
+    const uniqueSuffix = `${Date.now()}`;
+
+    const overdueTask = await prisma.dailyTask.create({
+      data: {
+        taskTemplateId: null,
+        templateSourceId: `today-classification-overdue-${uniqueSuffix}`,
+        templateTitle: "Today Board Overdue",
+        templateDescription: null,
+        templateRecurrenceType: null,
+        templateIsRecurring: false,
+        employeeId: employee!.id,
+        date: yesterdayStart,
+        status: "ASSIGNED",
+        isCompleted: false,
+        completedAt: null,
+      },
+    });
+    const todayTask = await prisma.dailyTask.create({
+      data: {
+        taskTemplateId: null,
+        templateSourceId: `today-classification-today-${uniqueSuffix}`,
+        templateTitle: "Today Board Today",
+        templateDescription: null,
+        templateRecurrenceType: null,
+        templateIsRecurring: false,
+        employeeId: employee!.id,
+        date: todayStart,
+        status: "ASSIGNED",
+        isCompleted: false,
+        completedAt: null,
+      },
+    });
+    const completedTodayTask = await prisma.dailyTask.create({
+      data: {
+        taskTemplateId: null,
+        templateSourceId: `today-classification-completed-${uniqueSuffix}`,
+        templateTitle: "Today Board Completed",
+        templateDescription: null,
+        templateRecurrenceType: null,
+        templateIsRecurring: false,
+        employeeId: employee!.id,
+        date: yesterdayStart,
+        status: "DONE",
+        isCompleted: true,
+        completedAt: completedAtToday,
+      },
+    });
+    const completedYesterdayTask = await prisma.dailyTask.create({
+      data: {
+        taskTemplateId: null,
+        templateSourceId: `today-classification-noise-completed-${uniqueSuffix}`,
+        templateTitle: "Today Board Noise Completed",
+        templateDescription: null,
+        templateRecurrenceType: null,
+        templateIsRecurring: false,
+        employeeId: employee!.id,
+        date: yesterdayStart,
+        status: "DONE",
+        isCompleted: true,
+        completedAt: completedAtYesterday,
+      },
+    });
+    const futureTask = await prisma.dailyTask.create({
+      data: {
+        taskTemplateId: null,
+        templateSourceId: `today-classification-noise-future-${uniqueSuffix}`,
+        templateTitle: "Today Board Noise Future",
+        templateDescription: null,
+        templateRecurrenceType: null,
+        templateIsRecurring: false,
+        employeeId: employee!.id,
+        date: tomorrowStart,
+        status: "ASSIGNED",
+        isCompleted: false,
+        completedAt: null,
+      },
+    });
+
+    try {
+      const agent = request.agent(app);
+      await agent
+        .post("/api/auth/login")
+        .send({ email: "mgr@test.com", password: "password" });
+
+      const res = await agent.get("/api/manager/today-board");
+
+      expect(res.status).toBe(200);
+      const overdueIds = (res.body.overdue as Array<{ id: string }>).map(
+        (task) => task.id,
+      );
+      const todayIds = (res.body.today as Array<{ id: string }>).map(
+        (task) => task.id,
+      );
+      const completedIds = (
+        res.body.completedToday as Array<{ id: string }>
+      ).map((task) => task.id);
+
+      expect(overdueIds).toContain(overdueTask.id);
+      expect(todayIds).toContain(todayTask.id);
+      expect(completedIds).toContain(completedTodayTask.id);
+
+      expect(overdueIds).not.toContain(todayTask.id);
+      expect(overdueIds).not.toContain(completedTodayTask.id);
+      expect(todayIds).not.toContain(completedTodayTask.id);
+      expect(todayIds).not.toContain(completedYesterdayTask.id);
+      expect(todayIds).not.toContain(futureTask.id);
+      expect(completedIds).not.toContain(completedYesterdayTask.id);
+      expect(completedIds).not.toContain(overdueTask.id);
+    } finally {
+      await prisma.dailyTask.deleteMany({
+        where: {
+          id: {
+            in: [
+              overdueTask.id,
+              todayTask.id,
+              completedTodayTask.id,
+              completedYesterdayTask.id,
+              futureTask.id,
+            ],
+          },
+        },
+      });
+    }
+  });
+
+  it("POST /api/manager/today-board/tasks defaults due date to today", async () => {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const tomorrowStart = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
+
+    const agent = request.agent(app);
+    await agent
+      .post("/api/auth/login")
+      .send({ email: "mgr@test.com", password: "password" });
+
+    const createRes = await agent
+      .post("/api/manager/today-board/tasks")
+      .send({ title: `Quick default ${Date.now()}` });
+
+    expect(createRes.status).toBe(201);
+    expect(createRes.body.taskTemplate.title).toMatch(/^Quick default /);
+
+    const createdDate = new Date(createRes.body.date);
+    expect(createdDate.getTime()).toBeGreaterThanOrEqual(todayStart.getTime());
+    expect(createdDate.getTime()).toBeLessThan(tomorrowStart.getTime());
+
+    try {
+      const createdTask = await prisma.dailyTask.findUnique({
+        where: { id: createRes.body.id },
+        select: { employeeId: true, status: true, date: true },
+      });
+      expect(createdTask).toBeTruthy();
+      expect(createdTask?.employeeId).toBeNull();
+      expect(createdTask?.status).toBe("UNASSIGNED");
+      expect(createdTask!.date.getTime()).toBeGreaterThanOrEqual(
+        todayStart.getTime(),
+      );
+      expect(createdTask!.date.getTime()).toBeLessThan(tomorrowStart.getTime());
+    } finally {
+      await prisma.dailyTask
+        .deleteMany({ where: { id: createRes.body.id } })
+        .catch(() => {});
+    }
+  });
+
+  it("completing a task moves it from Today to Completed on manager today board", async () => {
+    const todayYmd = (() => {
+      const now = new Date();
+      const y = now.getFullYear();
+      const m = String(now.getMonth() + 1).padStart(2, "0");
+      const d = String(now.getDate()).padStart(2, "0");
+      return `${y}-${m}-${d}`;
+    })();
+
+    const agent = request.agent(app);
+    await agent
+      .post("/api/auth/login")
+      .send({ email: "mgr@test.com", password: "password" });
+
+    const createRes = await agent.post("/api/manager/today-board/tasks").send({
+      title: `Move section ${Date.now()}`,
+      dueDate: todayYmd,
+    });
+    expect(createRes.status).toBe(201);
+
+    try {
+      const beforeRes = await agent.get("/api/manager/today-board");
+      expect(beforeRes.status).toBe(200);
+      const beforeTodayIds = (
+        beforeRes.body.today as Array<{ id: string }>
+      ).map((task) => task.id);
+      expect(beforeTodayIds).toContain(createRes.body.id);
+
+      const patchRes = await agent
+        .patch(`/api/tasks/daily/${createRes.body.id}`)
+        .send({ isCompleted: true });
+      expect(patchRes.status).toBe(200);
+      expect(patchRes.body.isCompleted).toBe(true);
+
+      const afterRes = await agent.get("/api/manager/today-board");
+      expect(afterRes.status).toBe(200);
+      const afterTodayIds = (afterRes.body.today as Array<{ id: string }>).map(
+        (task) => task.id,
+      );
+      const afterCompletedIds = (
+        afterRes.body.completedToday as Array<{ id: string }>
+      ).map((task) => task.id);
+      expect(afterTodayIds).not.toContain(createRes.body.id);
+      expect(afterCompletedIds).toContain(createRes.body.id);
+    } finally {
+      await prisma.dailyTask
+        .deleteMany({ where: { id: createRes.body.id } })
+        .catch(() => {});
+    }
+  });
+
   it("POST /api/tasks/templates as EMPLOYEE returns 403", async () => {
     const agent = request.agent(app);
     await agent
@@ -1498,7 +1747,7 @@ describe("Permissions - role-based access", () => {
     },
   );
 
-  it("POST /api/tasks/assign-from-template assigns existing template without creating a new one", async () => {
+  it("POST /api/tasks/assign-from-template assigns manual_trigger template without creating a new one", async () => {
     const bcryptjs = (await import("bcryptjs")).default;
     const agent = request.agent(app);
     const loginRes = await agent
@@ -1527,7 +1776,8 @@ describe("Permissions - role-based access", () => {
       data: {
         title: "Reusable template",
         createdById: manager!.id,
-        isRecurring: false,
+        isRecurring: true,
+        recurrenceMode: "manual_trigger",
         notifyEmployee: false,
         assignedToEmployeeId: employee.id,
       },

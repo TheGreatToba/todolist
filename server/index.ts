@@ -42,6 +42,8 @@ import {
   handleUpdateTaskTemplate,
   handleDeleteTaskTemplate,
   handleGetManagerDashboard,
+  handleGetManagerTodayBoard,
+  handleCreateManagerTodayBoardTask,
   handleDailyTaskAssignment,
   handleAssignTaskFromTemplate,
 } from "./routes/tasks";
@@ -278,6 +280,18 @@ export function createApp(): Express {
     requireAuth,
     requireRole("MANAGER"),
     handleGetManagerDashboard,
+  );
+  app.get(
+    "/api/manager/today-board",
+    requireAuth,
+    requireRole("MANAGER"),
+    handleGetManagerTodayBoard,
+  );
+  app.post(
+    "/api/manager/today-board/tasks",
+    requireAuth,
+    requireRole("MANAGER"),
+    handleCreateManagerTodayBoardTask,
   );
   // Cron endpoint: verify secret first (rejects invalid secrets without consuming rate limit quota)
   // then apply rate limit only to authenticated requests

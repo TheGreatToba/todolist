@@ -16,10 +16,7 @@ export default function Home() {
 
   if (user) {
     return (
-      <Navigate
-        to={user.role === "MANAGER" ? "/manager" : "/employee"}
-        replace
-      />
+      <Navigate to={user.role === "MANAGER" ? "/today" : "/employee"} replace />
     );
   }
 

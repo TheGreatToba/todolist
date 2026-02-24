@@ -122,6 +122,81 @@ describe("useUpdateDailyTaskMutation", () => {
     });
     expect(invalidateSpy).not.toHaveBeenCalled();
   });
+
+  it("optimistically moves a task from Today to Completed in manager today board cache", async () => {
+    let resolveResponse: ((value: Response) => void) | null = null;
+    mockFetchWithCsrf.mockImplementation(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveResponse = resolve;
+        }),
+    );
+
+    const { queryClient, wrapper } = createWrapper();
+    queryClient.setQueryData(queryKeys.manager.todayBoard, {
+      date: "2025-02-19",
+      overdue: [],
+      today: [
+        {
+          id: "today-task-1",
+          taskTemplateId: "tt1",
+          employeeId: "e1",
+          date: "2025-02-19T00:00:00.000Z",
+          status: "ASSIGNED",
+          isCompleted: false,
+          completedAt: null,
+          taskTemplate: { id: "tt1", title: "Task", isRecurring: false },
+          employee: { id: "e1", name: "Alice", email: "alice@test.com" },
+        },
+      ],
+      completedToday: [],
+    });
+
+    function ToggleTaskTest() {
+      const mutation = useUpdateDailyTaskMutation();
+      return (
+        <button
+          onClick={() =>
+            mutation.mutate({ taskId: "today-task-1", isCompleted: true })
+          }
+        >
+          Toggle
+        </button>
+      );
+    }
+
+    render(<ToggleTaskTest />, { wrapper });
+    await userEvent.click(screen.getByRole("button", { name: /toggle/i }));
+
+    await waitFor(() => {
+      const board = queryClient.getQueryData<{
+        today: Array<{ id: string }>;
+        completedToday: Array<{ id: string; isCompleted: boolean }>;
+      }>(queryKeys.manager.todayBoard);
+      expect(board?.today).toHaveLength(0);
+      expect(board?.completedToday).toHaveLength(1);
+      expect(board?.completedToday[0]).toMatchObject({
+        id: "today-task-1",
+        isCompleted: true,
+      });
+    });
+
+    resolveResponse?.(
+      new Response(
+        JSON.stringify({
+          id: "today-task-1",
+          taskTemplateId: "tt1",
+          employeeId: "e1",
+          date: "2025-02-19T00:00:00.000Z",
+          status: "DONE",
+          isCompleted: true,
+          completedAt: "2025-02-19T10:00:00.000Z",
+          taskTemplate: { id: "tt1", title: "Task", isRecurring: false },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ) as Response,
+    );
+  });
 });
 
 describe("useCreateWorkstationMutation", () => {
