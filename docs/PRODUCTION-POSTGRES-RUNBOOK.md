@@ -148,6 +148,12 @@ Example cron:
 
 Script: `scripts/db-restore-drill.sh`
 
+Modes:
+
+- Logical restore only: set `BACKUP_FILE`
+- PITR only: set `PITR_TARGET_TIME` + `BASE_BACKUP_DIR` + `WAL_ARCHIVE_DIR`
+- Combined drill: set both logical and PITR variables
+
 ### A) Full dump restore to clean database
 
 ```bash
@@ -246,6 +252,12 @@ pg_restore --list /var/backups/todolist/dumps/todolist_*.dump | head
 PGHOST=127.0.0.1 PGPORT=5432 PGUSER=postgres PGPASSWORD='<password>' BACKUP_FILE='/var/backups/todolist/dumps/todolist_YYYYMMDDTHHMMSSZ.dump' RESTORE_DB='todolist_restore_drill' ./scripts/db-restore-drill.sh
 ```
 
+### PITR validity test
+
+```bash
+PITR_TARGET_TIME='2026-02-23 01:45:00+00' BASE_BACKUP_DIR='/var/backups/todolist/base/base_YYYYMMDDTHHMMSSZ' WAL_ARCHIVE_DIR='/var/backups/todolist/wal' PITR_PORT=55432 PITR_PGDATA_DIR='/tmp/todolist-pitr-55432' ./scripts/db-restore-drill.sh
+```
+
 ### App startup after restore
 
 ```bash
@@ -253,3 +265,13 @@ DATABASE_URL='postgresql://postgres:<password>@127.0.0.1:5432/todolist_restore_d
 curl -fsS http://127.0.0.1:3000/health/live
 curl -fsS http://127.0.0.1:3000/health/ready
 ```
+
+### Automated CI drill
+
+GitHub Actions job `backup-restore-drill` executes:
+
+1. `prisma migrate deploy` on a fresh PostgreSQL database
+2. backup generation with `scripts/db-backup-nightly.sh`
+3. logical restore with `scripts/db-restore-drill.sh`
+4. PITR restore drill with `scripts/db-restore-drill.sh` in PITR mode
+5. production server startup against restored DB + `/health/live` and `/health/ready` checks

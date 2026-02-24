@@ -11,38 +11,50 @@ require_command() {
 }
 
 require_command psql
-require_command pg_restore
 require_command tar
 
-if [[ -z "${BACKUP_FILE:-}" ]]; then
-  echo "BACKUP_FILE is required (path to pg_dump -Fc file)." >&2
+RUN_LOGICAL_RESTORE="false"
+RUN_PITR="false"
+
+if [[ -n "${BACKUP_FILE:-}" ]]; then
+  require_command pg_restore
+  if [[ ! -f "${BACKUP_FILE}" ]]; then
+    echo "Backup file not found: ${BACKUP_FILE}" >&2
+    exit 1
+  fi
+  RUN_LOGICAL_RESTORE="true"
+fi
+
+if [[ -n "${PITR_TARGET_TIME:-}" ]]; then
+  require_command pg_ctl
+  RUN_PITR="true"
+fi
+
+if [[ "${RUN_LOGICAL_RESTORE}" != "true" && "${RUN_PITR}" != "true" ]]; then
+  echo "Set BACKUP_FILE for logical restore and/or PITR_TARGET_TIME for PITR drill." >&2
   exit 1
 fi
 
-if [[ ! -f "${BACKUP_FILE}" ]]; then
-  echo "Backup file not found: ${BACKUP_FILE}" >&2
-  exit 1
-fi
+if [[ "${RUN_LOGICAL_RESTORE}" == "true" ]]; then
+  RESTORE_DB="${RESTORE_DB:-todolist_restore_drill}"
+  PGDATABASE="${PGDATABASE:-postgres}"
 
-RESTORE_DB="${RESTORE_DB:-todolist_restore_drill}"
-PGDATABASE="${PGDATABASE:-postgres}"
+  echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Recreating restore database: ${RESTORE_DB}"
+  psql -v ON_ERROR_STOP=1 -d "${PGDATABASE}" -c "DROP DATABASE IF EXISTS \"${RESTORE_DB}\";"
+  psql -v ON_ERROR_STOP=1 -d "${PGDATABASE}" -c "CREATE DATABASE \"${RESTORE_DB}\";"
 
-echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Recreating restore database: ${RESTORE_DB}"
-psql -v ON_ERROR_STOP=1 -d "${PGDATABASE}" -c "DROP DATABASE IF EXISTS \"${RESTORE_DB}\";"
-psql -v ON_ERROR_STOP=1 -d "${PGDATABASE}" -c "CREATE DATABASE \"${RESTORE_DB}\";"
+  echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Restoring logical backup into ${RESTORE_DB}"
+  pg_restore \
+    --verbose \
+    --clean \
+    --if-exists \
+    --no-owner \
+    --no-privileges \
+    --dbname="${RESTORE_DB}" \
+    "${BACKUP_FILE}"
 
-echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Restoring logical backup into ${RESTORE_DB}"
-pg_restore \
-  --verbose \
-  --clean \
-  --if-exists \
-  --no-owner \
-  --no-privileges \
-  --dbname="${RESTORE_DB}" \
-  "${BACKUP_FILE}"
-
-echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Running sanity checks on ${RESTORE_DB}"
-psql -v ON_ERROR_STOP=1 -d "${RESTORE_DB}" <<'SQL'
+  echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Running sanity checks on ${RESTORE_DB}"
+  psql -v ON_ERROR_STOP=1 -d "${RESTORE_DB}" <<'SQL'
 SELECT to_regclass('"User"') AS user_table;
 SELECT to_regclass('"TaskTemplate"') AS task_template_table;
 SELECT to_regclass('"DailyTask"') AS daily_task_table;
@@ -52,9 +64,10 @@ SELECT COUNT(*) AS templates_count FROM "TaskTemplate";
 SELECT COUNT(*) AS daily_tasks_count FROM "DailyTask";
 SQL
 
-echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Logical restore drill complete"
+  echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] Logical restore drill complete"
+fi
 
-if [[ -n "${PITR_TARGET_TIME:-}" ]]; then
+if [[ "${RUN_PITR}" == "true" ]]; then
   if [[ -z "${BASE_BACKUP_DIR:-}" || -z "${WAL_ARCHIVE_DIR:-}" ]]; then
     echo "PITR_TARGET_TIME is set, but BASE_BACKUP_DIR or WAL_ARCHIVE_DIR is missing." >&2
     exit 1
@@ -73,8 +86,6 @@ if [[ -n "${PITR_TARGET_TIME:-}" ]]; then
   PITR_PORT="${PITR_PORT:-55432}"
   PITR_HOST="${PITR_HOST:-127.0.0.1}"
   PITR_PGDATA_DIR="${PITR_PGDATA_DIR:-/tmp/todolist-pitr-${PITR_PORT}}"
-
-  require_command pg_ctl
 
   BASE_TAR="$(find "${BASE_BACKUP_DIR}" -maxdepth 1 -type f -name "base.tar*" | head -n 1)"
   WAL_TAR="$(find "${BASE_BACKUP_DIR}" -maxdepth 1 -type f -name "pg_wal.tar*" | head -n 1)"

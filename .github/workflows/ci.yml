@@ -140,3 +140,140 @@ jobs:
           PORT: "34567"
           DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/todolist_ci_smoke?schema=public"
           JWT_SECRET: "ci-smoke-secret"
+
+  backup-restore-drill:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - name: Install PostgreSQL tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql postgresql-client
+          PG_BIN_DIR="$(dirname "$(find /usr/lib/postgresql -name pg_dump | head -n 1)")"
+          if [ -z "${PG_BIN_DIR}" ]; then
+            echo "Could not locate PostgreSQL bin directory" >&2
+            exit 1
+          fi
+          echo "${PG_BIN_DIR}" >> "$GITHUB_PATH"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm exec prisma generate
+
+      - name: Create source database
+        run: |
+          psql "postgresql://postgres:postgres@localhost:5432/postgres" -v ON_ERROR_STOP=1 -c 'DROP DATABASE IF EXISTS "todolist_ci_dr_source";'
+          psql "postgresql://postgres:postgres@localhost:5432/postgres" -v ON_ERROR_STOP=1 -c 'CREATE DATABASE "todolist_ci_dr_source";'
+
+      - name: Migrate and seed source database
+        run: |
+          pnpm exec prisma migrate deploy
+          pnpm run seed
+        env:
+          DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/todolist_ci_dr_source?schema=public"
+          JWT_SECRET: "ci-drill-secret"
+          NODE_ENV: test
+
+      - name: Generate backup and validate dump manifest
+        run: |
+          rm -rf /tmp/todolist-ci-backups
+          mkdir -p /tmp/todolist-ci-backups/wal
+          BACKUP_ROOT="/tmp/todolist-ci-backups" ENABLE_PITR_BASE_BACKUP="true" BASE_BACKUP_DATABASE_URL="postgresql://postgres:postgres@localhost:5432/todolist_ci_dr_source" bash scripts/db-backup-nightly.sh
+          DUMP_FILE="$(ls -1t /tmp/todolist-ci-backups/dumps/todolist_*.dump | head -n 1)"
+          BASE_BACKUP_DIR="$(ls -1dt /tmp/todolist-ci-backups/base/base_* | head -n 1)"
+          test -n "${DUMP_FILE}"
+          test -n "${BASE_BACKUP_DIR}"
+          pg_restore --list "${DUMP_FILE}" >/dev/null
+          echo "BACKUP_FILE=${DUMP_FILE}" >> "$GITHUB_ENV"
+          echo "BASE_BACKUP_DIR=${BASE_BACKUP_DIR}" >> "$GITHUB_ENV"
+        env:
+          DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/todolist_ci_dr_source"
+
+      - name: Restore backup into clean database and run sanity checks
+        run: |
+          RESTORE_DB="todolist_ci_dr_restore" bash scripts/db-restore-drill.sh
+        env:
+          PGHOST: "127.0.0.1"
+          PGPORT: "5432"
+          PGUSER: "postgres"
+          PGPASSWORD: "postgres"
+          PGDATABASE: "postgres"
+          BACKUP_FILE: ${{ env.BACKUP_FILE }}
+
+      - name: PITR drill restore to target timestamp
+        run: |
+          PITR_TARGET_TIME="$(date -u +"%Y-%m-%d %H:%M:%S+00")"
+          PITR_TARGET_TIME="${PITR_TARGET_TIME}" \
+          BASE_BACKUP_DIR="${BASE_BACKUP_DIR}" \
+          WAL_ARCHIVE_DIR="/tmp/todolist-ci-backups/wal" \
+          PITR_PORT="55432" \
+          PITR_PGDATA_DIR="/tmp/todolist-ci-pitr-55432" \
+          PGUSER="postgres" \
+          PGPASSWORD="postgres" \
+          bash scripts/db-restore-drill.sh
+        env:
+          BASE_BACKUP_DIR: ${{ env.BASE_BACKUP_DIR }}
+
+      - name: Build app
+        run: pnpm run build
+
+      - name: Start app on restored DB and verify health checks
+        run: |
+          set -euo pipefail
+          LOG_FILE="/tmp/todolist-ci-drill-server.log"
+          PORT="34568"
+          DATABASE_URL="postgresql://postgres:postgres@localhost:5432/todolist_ci_dr_restore?schema=public" \
+          NODE_ENV="production" \
+          JWT_SECRET="ci-drill-secret" \
+          TRUST_PROXY="true" \
+          COOKIE_SECURE="false" \
+          PORT="${PORT}" \
+          pnpm start >"${LOG_FILE}" 2>&1 &
+          APP_PID=$!
+          cleanup() {
+            kill "${APP_PID}" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          READY=0
+          for _ in $(seq 1 40); do
+            if curl -fsS "http://127.0.0.1:${PORT}/health/live" >/dev/null; then
+              READY=1
+              break
+            fi
+            sleep 1
+          done
+
+          if [[ "${READY}" != "1" ]]; then
+            cat "${LOG_FILE}" >&2
+            exit 1
+          fi
+
+          curl -fsS "http://127.0.0.1:${PORT}/health/live" >/dev/null
+          curl -fsS "http://127.0.0.1:${PORT}/health/ready" >/dev/null

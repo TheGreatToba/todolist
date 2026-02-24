@@ -1418,47 +1418,32 @@ describe("Permissions - role-based access", () => {
       const functionName = `fail_daily_task_insert_fn_${Date.now()}`;
       const dbUrl = process.env.DATABASE_URL ?? "";
       const isPostgres = /^postgres(ql)?:\/\//i.test(dbUrl);
-      const isSqlite =
-        dbUrl.startsWith("file:") || dbUrl.toLowerCase().includes("sqlite");
       try {
-        if (!isPostgres && !isSqlite) {
+        if (!isPostgres) {
           // Keep this test non-blocking on unexpected providers in CI matrices.
           expect(true).toBe(true);
           return;
         }
 
-        if (isPostgres) {
-          await prisma.$executeRawUnsafe(
-            `DROP TRIGGER IF EXISTS "${triggerName}" ON "DailyTask";`,
-          );
-          await prisma.$executeRawUnsafe(
-            `DROP FUNCTION IF EXISTS "${functionName}"();`,
-          );
-          await prisma.$executeRawUnsafe(
-            `CREATE FUNCTION "${functionName}"() RETURNS trigger AS $$
-           BEGIN
-             RAISE EXCEPTION 'forced DailyTask insert failure';
-           END;
-           $$ LANGUAGE plpgsql;`,
-          );
-          await prisma.$executeRawUnsafe(
-            `CREATE TRIGGER "${triggerName}"
+        await prisma.$executeRawUnsafe(
+          `DROP TRIGGER IF EXISTS "${triggerName}" ON "DailyTask";`,
+        );
+        await prisma.$executeRawUnsafe(
+          `DROP FUNCTION IF EXISTS "${functionName}"();`,
+        );
+        await prisma.$executeRawUnsafe(
+          `CREATE FUNCTION "${functionName}"() RETURNS trigger AS $$
+         BEGIN
+           RAISE EXCEPTION 'forced DailyTask insert failure';
+         END;
+         $$ LANGUAGE plpgsql;`,
+        );
+        await prisma.$executeRawUnsafe(
+          `CREATE TRIGGER "${triggerName}"
            BEFORE INSERT ON "DailyTask"
            FOR EACH ROW
            EXECUTE FUNCTION "${functionName}"();`,
-          );
-        } else if (isSqlite) {
-          await prisma.$executeRawUnsafe(
-            `DROP TRIGGER IF EXISTS ${triggerName}`,
-          );
-          await prisma.$executeRawUnsafe(
-            `CREATE TRIGGER ${triggerName}
-           BEFORE INSERT ON "DailyTask"
-           BEGIN
-             SELECT RAISE(ABORT, 'forced DailyTask insert failure');
-           END;`,
-          );
-        }
+        );
 
         const res = await auth.post("/api/tasks/templates").send({
           title,
@@ -1489,10 +1474,6 @@ describe("Permissions - role-based access", () => {
           );
           await prisma.$executeRawUnsafe(
             `DROP FUNCTION IF EXISTS "${functionName}"();`,
-          );
-        } else if (isSqlite) {
-          await prisma.$executeRawUnsafe(
-            `DROP TRIGGER IF EXISTS ${triggerName}`,
           );
         }
         await prisma.dailyTask.deleteMany({
