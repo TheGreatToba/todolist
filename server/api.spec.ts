@@ -1810,6 +1810,198 @@ describe("Permissions - role-based access", () => {
     }
   });
 
+  it("GET /api/tasks/templates/manual-trigger returns only manager-scoped manual_trigger templates", async () => {
+    const agent = request.agent(app);
+    const loginRes = await agent
+      .post("/api/auth/login")
+      .send({ email: "mgr@test.com", password: "password" });
+    const cookie = await assertLoggedIn(agent, "mgr@test.com", loginRes);
+    const auth = withAuthCookie(agent, cookie);
+
+    const manager = await prisma.user.findUnique({
+      where: { email: "mgr@test.com" },
+      select: { id: true, teamId: true },
+    });
+    expect(manager?.teamId).toBeTruthy();
+
+    const ws = await prisma.workstation.create({
+      data: {
+        name: `Manual Trigger WS ${Date.now()}`,
+        teamId: manager!.teamId!,
+      },
+    });
+    const manualTemplate = await prisma.taskTemplate.create({
+      data: {
+        title: `Manual Trigger Template ${Date.now()}`,
+        description: "Manual template",
+        createdById: manager!.id,
+        workstationId: ws.id,
+        isRecurring: true,
+        recurrenceMode: "manual_trigger",
+      },
+    });
+    const scheduleTemplate = await prisma.taskTemplate.create({
+      data: {
+        title: `Scheduled Template ${Date.now()}`,
+        description: "Not manual",
+        createdById: manager!.id,
+        workstationId: ws.id,
+        isRecurring: true,
+        recurrenceMode: "schedule_based",
+      },
+    });
+
+    try {
+      const res = await auth.get("/api/tasks/templates/manual-trigger");
+      expect(res.status).toBe(200);
+      expect(Array.isArray(res.body)).toBe(true);
+
+      const returnedIds = (res.body as Array<{ id: string }>).map((t) => t.id);
+      expect(returnedIds).toContain(manualTemplate.id);
+      expect(returnedIds).not.toContain(scheduleTemplate.id);
+      const returnedTitles = (res.body as Array<{ title: string }>).map(
+        (t) => t.title,
+      );
+      expect(returnedTitles).toEqual([...returnedTitles].sort());
+    } finally {
+      await prisma.taskTemplate.deleteMany({
+        where: { id: { in: [manualTemplate.id, scheduleTemplate.id] } },
+      });
+      await prisma.workstation.delete({ where: { id: ws.id } });
+    }
+  });
+
+  it("POST /api/tasks/from-template/:templateId instantiates manual_trigger template with today default and is idempotent (including concurrent double-click)", async () => {
+    const bcryptjs = (await import("bcryptjs")).default;
+    const agent = request.agent(app);
+    const loginRes = await agent
+      .post("/api/auth/login")
+      .send({ email: "mgr@test.com", password: "password" });
+    const cookie = await assertLoggedIn(agent, "mgr@test.com", loginRes);
+    const auth = withAuthCookie(agent, cookie);
+
+    const manager = await prisma.user.findUnique({
+      where: { email: "mgr@test.com" },
+      select: { id: true, teamId: true },
+    });
+    expect(manager?.teamId).toBeTruthy();
+
+    const employee = await prisma.user.create({
+      data: {
+        name: "Manual Trigger Instantiation Employee",
+        email: `manual-inst-${Date.now()}@test.com`,
+        passwordHash: await bcryptjs.hash("password", 10),
+        role: "EMPLOYEE",
+        teamId: manager!.teamId!,
+      },
+    });
+
+    const template = await prisma.taskTemplate.create({
+      data: {
+        title: "One Click Manual Task",
+        description: "Snapshot must be copied",
+        createdById: manager!.id,
+        assignedToEmployeeId: employee.id,
+        isRecurring: true,
+        recurrenceMode: "manual_trigger",
+      },
+    });
+    const concurrentTemplate = await prisma.taskTemplate.create({
+      data: {
+        title: "Concurrent One Click Manual Task",
+        description: "Double-click safety snapshot",
+        createdById: manager!.id,
+        assignedToEmployeeId: employee.id,
+        isRecurring: true,
+        recurrenceMode: "manual_trigger",
+      },
+    });
+
+    try {
+      const boardRes = await auth.get("/api/manager/today-board");
+      expect(boardRes.status).toBe(200);
+      const boardDate = boardRes.body.date as string;
+
+      const first = await auth
+        .post(`/api/tasks/from-template/${template.id}`)
+        .send({});
+      expect(first.status).toBe(201);
+      expect(first.body.taskTemplate.title).toBe("One Click Manual Task");
+      expect(first.body.taskTemplate.description).toBe(
+        "Snapshot must be copied",
+      );
+      const boardAfterCreate = await auth.get("/api/manager/today-board");
+      expect(boardAfterCreate.status).toBe(200);
+      const todayIds = (
+        boardAfterCreate.body.today as Array<{ id: string }>
+      ).map((task) => task.id);
+      expect(todayIds).toContain(first.body.id as string);
+
+      const second = await auth
+        .post(`/api/tasks/from-template/${template.id}`)
+        .send({});
+      expect(second.status).toBe(200);
+      expect(second.body.id).toBe(first.body.id);
+
+      const explicitDateRequest = await auth
+        .post(`/api/tasks/from-template/${template.id}`)
+        .send({ dueDate: boardDate });
+      expect(explicitDateRequest.status).toBe(200);
+      expect(explicitDateRequest.body.id).toBe(first.body.id);
+
+      const storedTask = await prisma.dailyTask.findUnique({
+        where: { id: first.body.id as string },
+        select: {
+          id: true,
+          templateTitle: true,
+          templateDescription: true,
+          taskTemplateId: true,
+        },
+      });
+      expect(storedTask).toBeTruthy();
+      expect(storedTask?.taskTemplateId).toBe(template.id);
+      expect(storedTask?.templateTitle).toBe("One Click Manual Task");
+      expect(storedTask?.templateDescription).toBe("Snapshot must be copied");
+
+      const duplicateCount = await prisma.dailyTask.count({
+        where: {
+          taskTemplateId: template.id,
+          employeeId: employee.id,
+          date: new Date(first.body.date as string),
+        },
+      });
+      expect(duplicateCount).toBe(1);
+
+      const [concurrentA, concurrentB] = await Promise.all([
+        auth.post(`/api/tasks/from-template/${concurrentTemplate.id}`).send({}),
+        auth.post(`/api/tasks/from-template/${concurrentTemplate.id}`).send({}),
+      ]);
+      const concurrentStatuses = [
+        concurrentA.status,
+        concurrentB.status,
+      ].sort();
+      expect(concurrentStatuses).toEqual([200, 201]);
+      expect(concurrentA.body.id).toBe(concurrentB.body.id);
+
+      const concurrentDuplicateCount = await prisma.dailyTask.count({
+        where: {
+          taskTemplateId: concurrentTemplate.id,
+          employeeId: employee.id,
+          date: new Date(concurrentA.body.date as string),
+        },
+      });
+      expect(concurrentDuplicateCount).toBe(1);
+    } finally {
+      await prisma.dailyTask.deleteMany({
+        where: { taskTemplateId: { in: [template.id, concurrentTemplate.id] } },
+      });
+      await prisma.taskTemplate.deleteMany({
+        where: { id: { in: [template.id, concurrentTemplate.id] } },
+      });
+      await prisma.user.delete({ where: { id: employee.id } });
+    }
+  });
+
   it("POST /api/tasks/templates with workstation not in manager teams returns 404", async () => {
     const bcryptjs = (await import("bcryptjs")).default;
     const otherManager = await prisma.user.create({

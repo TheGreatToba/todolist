@@ -9,6 +9,7 @@ import React from "react";
 import {
   queryKeys,
   useUpdateDailyTaskMutation,
+  useCreateTaskFromTemplateMutation,
   useCreateWorkstationMutation,
 } from "./queries";
 import { fetchWithCsrf } from "@/lib/api";
@@ -196,6 +197,104 @@ describe("useUpdateDailyTaskMutation", () => {
         { status: 200, headers: { "Content-Type": "application/json" } },
       ) as Response,
     );
+  });
+});
+
+describe("useCreateTaskFromTemplateMutation", () => {
+  beforeEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  it("optimistically inserts created template task into manager today board immediately", async () => {
+    let resolveResponse: ((value: Response) => void) | null = null;
+    mockFetchWithCsrf.mockImplementation(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveResponse = resolve;
+        }),
+    );
+
+    const { queryClient, wrapper } = createWrapper();
+    queryClient.setQueryData(queryKeys.manager.todayBoard, {
+      date: "2025-02-19",
+      overdue: [],
+      today: [],
+      completedToday: [],
+    });
+    queryClient.setQueryData(queryKeys.manager.manualTriggerTemplates, [
+      {
+        id: "tmpl-1",
+        title: "Open side entrance",
+        description: "For delivery windows",
+      },
+    ]);
+    queryClient.setQueryData(queryKeys.manager.teamMembers, [
+      {
+        id: "emp-1",
+        name: "Alice",
+        email: "alice@test.com",
+        workstations: [],
+      },
+    ]);
+
+    function CreateFromTemplateTest() {
+      const mutation = useCreateTaskFromTemplateMutation();
+      return (
+        <button
+          onClick={() =>
+            mutation.mutate({
+              templateId: "tmpl-1",
+            })
+          }
+        >
+          Create from template
+        </button>
+      );
+    }
+
+    render(<CreateFromTemplateTest />, { wrapper });
+    await userEvent.click(
+      screen.getByRole("button", { name: /create from template/i }),
+    );
+
+    await waitFor(() => {
+      const board = queryClient.getQueryData<{
+        today: Array<{ id: string; taskTemplate: { title: string } }>;
+      }>(queryKeys.manager.todayBoard);
+      expect(board?.today).toHaveLength(1);
+      expect(board?.today[0].id).toMatch(/^optimistic-template-tmpl-1-/);
+      expect(board?.today[0].taskTemplate.title).toBe("Open side entrance");
+    });
+
+    resolveResponse?.(
+      new Response(
+        JSON.stringify({
+          id: "server-task-1",
+          taskTemplateId: "tmpl-1",
+          employeeId: null,
+          date: "2025-02-19T00:00:00.000Z",
+          status: "UNASSIGNED",
+          isCompleted: false,
+          completedAt: null,
+          taskTemplate: {
+            id: "tmpl-1",
+            title: "Open side entrance",
+            description: "For delivery windows",
+            isRecurring: true,
+          },
+        }),
+        { status: 201, headers: { "Content-Type": "application/json" } },
+      ) as Response,
+    );
+
+    await waitFor(() => {
+      const board = queryClient.getQueryData<{
+        today: Array<{ id: string }>;
+      }>(queryKeys.manager.todayBoard);
+      expect(board?.today).toHaveLength(1);
+      expect(board?.today[0].id).toBe("server-task-1");
+    });
   });
 });
 
