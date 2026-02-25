@@ -254,3 +254,14 @@ export interface CreateTodayBoardTaskRequest {
   assignedToEmployeeId?: string;
   dueDate?: string;
 }
+
+export interface ManualTriggerTemplateOption {
+  id: string;
+  title: string;
+  description?: string | null;
+}
+
+export interface CreateTaskFromTemplateRequest {
+  assignedToEmployeeId?: string;
+  dueDate?: string;
+}

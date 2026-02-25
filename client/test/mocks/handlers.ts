@@ -111,3 +111,42 @@ export const teamMembersHandler = http.get("*/api/team/members", () =>
 export const taskTemplatesHandler = http.get("*/api/tasks/templates", () =>
   HttpResponse.json([]),
 );
+
+/** GET /api/tasks/templates/manual-trigger – lightweight manual-trigger options for Today Board. */
+export const manualTriggerTemplatesHandler = http.get(
+  "*/api/tasks/templates/manual-trigger",
+  () =>
+    HttpResponse.json([
+      {
+        id: "msw-template-1",
+        title: "Open side entrance",
+        description: "For delivery windows",
+      },
+    ]),
+);
+
+/** POST /api/tasks/from-template/:templateId – one-click template instantiation. */
+export const createTaskFromTemplateHandler = http.post(
+  "*/api/tasks/from-template/:templateId",
+  async ({ params }) => {
+    const templateId = String(params.templateId ?? "msw-template-1");
+    return HttpResponse.json(
+      {
+        id: "msw-template-task-1",
+        taskTemplateId: templateId,
+        employeeId: null,
+        date: "2025-02-19T00:00:00.000Z",
+        status: "UNASSIGNED",
+        isCompleted: false,
+        completedAt: null,
+        taskTemplate: {
+          id: templateId,
+          title: "Open side entrance",
+          description: "For delivery windows",
+          isRecurring: true,
+        },
+      },
+      { status: 201 },
+    );
+  },
+);

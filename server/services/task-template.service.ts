@@ -553,42 +553,37 @@ export async function instantiateManualTriggerTemplateTaskTransactional(input: {
               lt: dayEnd,
             },
           };
-
-          try {
-            const createdTask = await tx.dailyTask.create({
-              data: {
-                taskTemplateId: template.id,
-                ...taskSnapshot,
-                employeeId: targetEmployeeId,
-                date: input.dueDate,
-                status: targetEmployeeId ? "ASSIGNED" : "UNASSIGNED",
-                isCompleted: false,
-                completedAt: null,
-              },
-              include: manualTriggerTaskInclude,
-            });
-            return { task: createdTask, created: true };
-          } catch (error) {
-            if (!isUniqueConstraintError(error)) throw error;
-
-            const existingTask = await tx.dailyTask.findFirst({
-              where: targetEmployeeId
-                ? {
-                    ...baseWhere,
-                    employeeId: targetEmployeeId,
-                  }
-                : {
-                    ...baseWhere,
-                    employeeId: null,
-                    status: "UNASSIGNED",
-                  },
-              include: manualTriggerTaskInclude,
-              orderBy: { createdAt: "asc" },
-            });
-
-            if (!existingTask) throw error;
+          const existingTask = await tx.dailyTask.findFirst({
+            where: targetEmployeeId
+              ? {
+                  ...baseWhere,
+                  employeeId: targetEmployeeId,
+                }
+              : {
+                  ...baseWhere,
+                  employeeId: null,
+                  status: "UNASSIGNED",
+                },
+            include: manualTriggerTaskInclude,
+            orderBy: { createdAt: "asc" },
+          });
+          if (existingTask) {
             return { task: existingTask, created: false };
           }
+
+          const createdTask = await tx.dailyTask.create({
+            data: {
+              taskTemplateId: template.id,
+              ...taskSnapshot,
+              employeeId: targetEmployeeId,
+              date: input.dueDate,
+              status: targetEmployeeId ? "ASSIGNED" : "UNASSIGNED",
+              isCompleted: false,
+              completedAt: null,
+            },
+            include: manualTriggerTaskInclude,
+          });
+          return { task: createdTask, created: true };
         },
         {
           maxWait: 5_000,
@@ -598,7 +593,8 @@ export async function instantiateManualTriggerTemplateTaskTransactional(input: {
       );
     } catch (error) {
       const canRetry =
-        isTransactionConflictError(error) && attempt < maxAttempts;
+        (isTransactionConflictError(error) || isUniqueConstraintError(error)) &&
+        attempt < maxAttempts;
       if (!canRetry) throw error;
       await wait(computeRetryDelayMs(attempt));
       attempt += 1;

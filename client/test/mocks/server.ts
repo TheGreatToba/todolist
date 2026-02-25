@@ -11,6 +11,8 @@ import {
   workstationsHandler,
   teamMembersHandler,
   taskTemplatesHandler,
+  manualTriggerTemplatesHandler,
+  createTaskFromTemplateHandler,
 } from "./handlers";
 
 export const server = setupServer(
@@ -22,4 +24,6 @@ export const server = setupServer(
   workstationsHandler,
   teamMembersHandler,
   taskTemplatesHandler,
+  manualTriggerTemplatesHandler,
+  createTaskFromTemplateHandler,
 );

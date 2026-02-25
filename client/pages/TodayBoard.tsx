@@ -5,10 +5,17 @@ import { Loader2, LogOut } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   useCreateTodayBoardTaskMutation,
+  useCreateTaskFromTemplateMutation,
   useManagerTodayBoardQuery,
+  useManualTriggerTemplatesQuery,
   useTeamMembersQuery,
   useUpdateDailyTaskMutation,
 } from "@/hooks/queries";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { toastError } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/get-error-message";
 
@@ -134,12 +141,25 @@ export default function TodayBoard() {
   const { logout } = useAuth();
   const { data: board, isLoading } = useManagerTodayBoardQuery();
   const { data: teamMembers = [] } = useTeamMembersQuery();
+  const { data: manualTriggerTemplates = [], isLoading: isTemplatesLoading } =
+    useManualTriggerTemplatesQuery();
   const updateDailyTask = useUpdateDailyTaskMutation();
   const createTodayTask = useCreateTodayBoardTaskMutation();
+  const createFromTemplate = useCreateTaskFromTemplateMutation();
 
   const [title, setTitle] = useState("");
   const [assignedToEmployeeId, setAssignedToEmployeeId] = useState("");
   const [dueDate, setDueDate] = useState("");
+  const [isTemplatePopoverOpen, setIsTemplatePopoverOpen] = useState(false);
+  const [templateSearch, setTemplateSearch] = useState("");
+  const filteredManualTemplates = manualTriggerTemplates.filter((template) => {
+    const q = templateSearch.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      template.title.toLowerCase().includes(q) ||
+      (template.description ?? "").toLowerCase().includes(q)
+    );
+  });
 
   useEffect(() => {
     if (board?.date && dueDate === "") {
@@ -181,6 +201,18 @@ export default function TodayBoard() {
       });
     } catch (error) {
       toastError(getErrorMessage(error, "Failed to update task."));
+    }
+  };
+
+  const handleCreateFromTemplate = async (templateId: string) => {
+    try {
+      await createFromTemplate.mutateAsync({ templateId });
+      setIsTemplatePopoverOpen(false);
+      setTemplateSearch("");
+    } catch (error) {
+      toastError(
+        getErrorMessage(error, "Failed to create task from template."),
+      );
     }
   };
 
@@ -245,9 +277,68 @@ export default function TodayBoard() {
 
       <main className="mx-auto w-full max-w-6xl space-y-6 px-4 py-6">
         <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-            + New task
-          </h2>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+              + New task
+            </h2>
+            <Popover
+              open={isTemplatePopoverOpen}
+              onOpenChange={setIsTemplatePopoverOpen}
+            >
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  className="inline-flex h-9 items-center rounded-lg border border-input bg-background px-3 text-sm font-medium text-foreground transition hover:bg-secondary"
+                >
+                  Create from template
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-80 p-3" align="end">
+                <label className="sr-only" htmlFor="today-template-search">
+                  Search manual templates
+                </label>
+                <input
+                  id="today-template-search"
+                  type="text"
+                  value={templateSearch}
+                  onChange={(event) => setTemplateSearch(event.target.value)}
+                  placeholder="Search manual templates..."
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+                <div className="mt-2 max-h-64 space-y-1 overflow-y-auto">
+                  {isTemplatesLoading ? (
+                    <p className="px-2 py-2 text-sm text-muted-foreground">
+                      Loading templates...
+                    </p>
+                  ) : null}
+                  {!isTemplatesLoading &&
+                  filteredManualTemplates.length === 0 ? (
+                    <p className="px-2 py-2 text-sm text-muted-foreground">
+                      No manual templates found.
+                    </p>
+                  ) : null}
+                  {filteredManualTemplates.map((template) => (
+                    <button
+                      key={template.id}
+                      type="button"
+                      className="w-full rounded-md border border-border px-2 py-2 text-left transition hover:bg-secondary disabled:opacity-50"
+                      onClick={() => void handleCreateFromTemplate(template.id)}
+                      disabled={createFromTemplate.isPending}
+                    >
+                      <span className="block truncate text-sm font-medium text-foreground">
+                        {template.title}
+                      </span>
+                      {template.description ? (
+                        <span className="block truncate text-xs text-muted-foreground">
+                          {template.description}
+                        </span>
+                      ) : null}
+                    </button>
+                  ))}
+                </div>
+              </PopoverContent>
+            </Popover>
+          </div>
           <form
             className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-[2fr_1fr_1fr_auto]"
             onSubmit={handleCreateTask}

@@ -19,7 +19,10 @@ import {
   parseRecurrenceDaysCsv,
   shouldTemplateAppearOnDate,
 } from "../lib/recurrence";
-import { createTaskTemplateTransactional } from "../services/task-template.service";
+import {
+  createTaskTemplateTransactional,
+  instantiateManualTriggerTemplateTaskTransactional,
+} from "../services/task-template.service";
 
 const RecurrenceModeSchema = z.enum([
   "schedule_based",
@@ -89,6 +92,11 @@ const UpdateDailyTaskSchema = z
 
 const CreateTodayBoardTaskSchema = z.object({
   title: z.string().trim().min(1),
+  assignedToEmployeeId: z.string().min(1).optional(),
+  dueDate: z.string().optional(),
+});
+
+const CreateTaskFromTemplateSchema = z.object({
   assignedToEmployeeId: z.string().min(1).optional(),
   dueDate: z.string().optional(),
 });
@@ -1231,6 +1239,95 @@ export const handleAssignTaskFromTemplate: RequestHandler = async (
       createdCount,
       skippedCount,
     });
+  } catch (error) {
+    sendErrorResponse(res, error, req);
+  }
+};
+
+export const handleGetManualTriggerTemplates: RequestHandler = async (
+  req,
+  res,
+) => {
+  try {
+    const payload = getAuthOrThrow(req, res);
+    if (!payload) return;
+
+    const managerTeamIds = await getManagerTeamIds(payload.userId);
+
+    const templates = await prisma.taskTemplate.findMany({
+      where: {
+        isRecurring: true,
+        recurrenceMode: "manual_trigger",
+        OR: [
+          {
+            workstation: {
+              teamId: { in: managerTeamIds },
+            },
+          },
+          {
+            assignedToEmployee: {
+              role: "EMPLOYEE",
+              teamId: { in: managerTeamIds },
+            },
+          },
+          {
+            createdById: payload.userId,
+            workstationId: null,
+            assignedToEmployeeId: null,
+          },
+        ],
+      },
+      select: {
+        id: true,
+        title: true,
+        description: true,
+      },
+      orderBy: [{ title: "asc" }, { createdAt: "desc" }],
+    });
+
+    res.json(templates);
+  } catch (error) {
+    sendErrorResponse(res, error, req);
+  }
+};
+
+export const handleCreateTaskFromTemplate: RequestHandler = async (
+  req,
+  res,
+) => {
+  try {
+    const payload = getAuthOrThrow(req, res);
+    if (!payload) return;
+    const templateId = paramString(req.params.templateId);
+    if (!templateId) {
+      res.status(400).json({ error: "Invalid template ID" });
+      return;
+    }
+
+    const body = CreateTaskFromTemplateSchema.parse(req.body ?? {});
+    let dueDate = getOperationalTodayWindow().todayStart;
+    if (body.dueDate !== undefined && body.dueDate.trim().length > 0) {
+      const parsedDueDate = parseOperationalDueDate(
+        body.dueDate,
+        OPERATIONAL_TIME_ZONE,
+      );
+      if (!parsedDueDate) {
+        res.status(400).json({ error: "Invalid date. Use YYYY-MM-DD." });
+        return;
+      }
+      dueDate = parsedDueDate;
+    }
+
+    const result = await instantiateManualTriggerTemplateTaskTransactional({
+      managerUserId: payload.userId,
+      templateId,
+      dueDate,
+      assignedToEmployeeId: body.assignedToEmployeeId ?? null,
+    });
+
+    res
+      .status(result.created ? 201 : 200)
+      .json(serializeDailyTaskResponse(result.task));
   } catch (error) {
     sendErrorResponse(res, error, req);
   }

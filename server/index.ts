@@ -46,6 +46,8 @@ import {
   handleCreateManagerTodayBoardTask,
   handleDailyTaskAssignment,
   handleAssignTaskFromTemplate,
+  handleGetManualTriggerTemplates,
+  handleCreateTaskFromTemplate,
 } from "./routes/tasks";
 import {
   handleGetWorkstations,
@@ -262,6 +264,18 @@ export function createApp(): Express {
     requireAuth,
     requireRole("MANAGER"),
     handleGetTaskTemplates,
+  );
+  app.get(
+    "/api/tasks/templates/manual-trigger",
+    requireAuth,
+    requireRole("MANAGER"),
+    handleGetManualTriggerTemplates,
+  );
+  app.post(
+    "/api/tasks/from-template/:templateId",
+    requireAuth,
+    requireRole("MANAGER"),
+    handleCreateTaskFromTemplate,
   );
   app.patch(
     "/api/tasks/templates/:templateId",

@@ -23,8 +23,11 @@ import type {
   ForgotPasswordResponse,
   ResetPasswordResponse,
   TaskTemplateWithRelations,
+  TodayBoardTask,
+  ManualTriggerTemplateOption,
   AssignTaskFromTemplateRequest,
   CreateTodayBoardTaskRequest,
+  CreateTaskFromTemplateRequest,
   UpdateTaskTemplateRequest,
   UpdateWorkstationEmployeesRequest,
 } from "@shared/api";
@@ -48,6 +51,7 @@ export const queryKeys = {
     workstations: ["manager", "workstations"] as const,
     teamMembers: ["manager", "teamMembers"] as const,
     taskTemplates: ["manager", "taskTemplates"] as const,
+    manualTriggerTemplates: ["manager", "manualTriggerTemplates"] as const,
   },
   tasks: {
     daily: (date: string) => ["tasks", "daily", date] as const,
@@ -120,6 +124,12 @@ export async function fetchTaskTemplates(): Promise<
   TaskTemplateWithRelations[]
 > {
   return fetchJson("/api/tasks/templates");
+}
+
+export async function fetchManualTriggerTemplates(): Promise<
+  ManualTriggerTemplateOption[]
+> {
+  return fetchJson("/api/tasks/templates/manual-trigger");
 }
 
 export async function fetchDailyTasks(date: string): Promise<DailyTask[]> {
@@ -206,6 +216,19 @@ export function useTaskTemplatesQuery(
   return useQuery({
     queryKey: queryKeys.manager.taskTemplates,
     queryFn: fetchTaskTemplates,
+    ...options,
+  });
+}
+
+export function useManualTriggerTemplatesQuery(
+  options?: Omit<
+    UseQueryOptions<ManualTriggerTemplateOption[], Error>,
+    "queryKey" | "queryFn"
+  >,
+) {
+  return useQuery({
+    queryKey: queryKeys.manager.manualTriggerTemplates,
+    queryFn: fetchManualTriggerTemplates,
     ...options,
   });
 }
@@ -360,6 +383,139 @@ export function useCreateTodayBoardTaskMutation(
     },
     ...options,
     onSuccess: (data, variables, ctx) => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.manager.todayBoardPrefix,
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.manager.dashboardPrefix,
+      });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tasks.dailyPrefix });
+      options?.onSuccess?.(data, variables, ctx);
+    },
+  });
+}
+
+export function useCreateTaskFromTemplateMutation(
+  options?: UseMutationOptions<
+    DailyTask,
+    Error,
+    {
+      templateId: string;
+      data?: CreateTaskFromTemplateRequest;
+    },
+    {
+      previousToday: [QueryKey, ManagerTodayBoardType | null | undefined][];
+      optimisticTaskId: string;
+    }
+  >,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      templateId,
+      data,
+    }: {
+      templateId: string;
+      data?: CreateTaskFromTemplateRequest;
+    }) => {
+      const res = await fetchWithCsrf(
+        `/api/tasks/from-template/${templateId}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(data ?? {}),
+        },
+      );
+      if (!res.ok) {
+        throw new Error(await parseApiError(res));
+      }
+      return res.json() as Promise<DailyTask>;
+    },
+    ...options,
+    onMutate: async (variables) => {
+      await queryClient.cancelQueries({
+        queryKey: queryKeys.manager.todayBoardPrefix,
+      });
+
+      const previousToday =
+        queryClient.getQueriesData<ManagerTodayBoardType | null>({
+          queryKey: queryKeys.manager.todayBoardPrefix,
+        });
+      const cachedTemplates =
+        queryClient.getQueryData<ManualTriggerTemplateOption[]>(
+          queryKeys.manager.manualTriggerTemplates,
+        ) ?? [];
+      const cachedTeamMembers =
+        queryClient.getQueryData<TeamMember[]>(queryKeys.manager.teamMembers) ??
+        [];
+      const selectedTemplate = cachedTemplates.find(
+        (template) => template.id === variables.templateId,
+      );
+      const optimisticTaskId = `optimistic-template-${variables.templateId}-${Date.now().toString(36)}`;
+
+      for (const [key, board] of previousToday) {
+        if (!board) continue;
+        const dueDateYmd = variables.data?.dueDate || board.date;
+        const assignedEmployee = variables.data?.assignedToEmployeeId
+          ? cachedTeamMembers.find(
+              (member) => member.id === variables.data?.assignedToEmployeeId,
+            )
+          : undefined;
+        const optimisticTask: TodayBoardTask = {
+          id: optimisticTaskId,
+          taskTemplateId: variables.templateId,
+          employeeId: assignedEmployee?.id ?? null,
+          date: `${dueDateYmd}T00:00:00.000Z`,
+          status: assignedEmployee ? "ASSIGNED" : "UNASSIGNED",
+          isCompleted: false,
+          completedAt: null,
+          taskTemplate: {
+            id: variables.templateId,
+            title: selectedTemplate?.title || "Template task",
+            description: selectedTemplate?.description ?? null,
+            isRecurring: true,
+          },
+          employee: assignedEmployee
+            ? {
+                id: assignedEmployee.id,
+                name: assignedEmployee.name,
+                email: assignedEmployee.email,
+              }
+            : undefined,
+        };
+        queryClient.setQueryData(
+          key,
+          addTaskToTodayBoard(board, optimisticTask),
+        );
+      }
+
+      return { previousToday, optimisticTaskId };
+    },
+    onError: (error, variables, ctx) => {
+      if (ctx?.previousToday) {
+        for (const [key, data] of ctx.previousToday) {
+          queryClient.setQueryData(key, data);
+        }
+      }
+      options?.onError?.(error, variables, ctx);
+    },
+    onSuccess: (data, variables, ctx) => {
+      const todayBoards =
+        queryClient.getQueriesData<ManagerTodayBoardType | null>({
+          queryKey: queryKeys.manager.todayBoardPrefix,
+        });
+      for (const [key, board] of todayBoards) {
+        if (!board) continue;
+        const withoutOptimistic = removeTaskFromTodayBoard(
+          board,
+          ctx?.optimisticTaskId ?? "",
+        );
+        queryClient.setQueryData(
+          key,
+          addTaskToTodayBoard(withoutOptimistic, data),
+        );
+      }
+
       queryClient.invalidateQueries({
         queryKey: queryKeys.manager.todayBoardPrefix,
       });
@@ -528,6 +684,51 @@ function applyOptimisticTodayBoardUpdate(
     overdue: filteredOverdue,
     today: filteredToday,
     completedToday: filteredCompleted,
+  };
+}
+
+function addTaskToTodayBoard(
+  board: ManagerTodayBoardType,
+  task: TodayBoardTask,
+): ManagerTodayBoardType {
+  const withoutDuplicate = removeTaskFromTodayBoard(board, task.id);
+  const boardDateYmd = toDateYmd(withoutDuplicate.date);
+  const taskDateYmd = toDateYmd(task.date);
+
+  if (task.isCompleted) {
+    return {
+      ...withoutDuplicate,
+      completedToday: [task, ...withoutDuplicate.completedToday],
+    };
+  }
+
+  if (boardDateYmd && taskDateYmd && taskDateYmd < boardDateYmd) {
+    return {
+      ...withoutDuplicate,
+      overdue: [task, ...withoutDuplicate.overdue],
+    };
+  }
+
+  if (boardDateYmd && taskDateYmd && taskDateYmd === boardDateYmd) {
+    return {
+      ...withoutDuplicate,
+      today: [task, ...withoutDuplicate.today],
+    };
+  }
+
+  return withoutDuplicate;
+}
+
+function removeTaskFromTodayBoard(
+  board: ManagerTodayBoardType,
+  taskId: string,
+): ManagerTodayBoardType {
+  if (!taskId) return board;
+  return {
+    ...board,
+    overdue: board.overdue.filter((task) => task.id !== taskId),
+    today: board.today.filter((task) => task.id !== taskId),
+    completedToday: board.completedToday.filter((task) => task.id !== taskId),
   };
 }
 
