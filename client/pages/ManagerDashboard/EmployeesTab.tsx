@@ -1,5 +1,5 @@
 import React from "react";
-import { Edit2 } from "lucide-react";
+import { Edit2, Trash2, Mail } from "lucide-react";
 import type { WorkstationWithEmployees } from "@/hooks/queries";
 import type { TeamMember } from "./types";
 
@@ -22,6 +22,8 @@ interface EmployeesTabProps {
   setEditingEmployee: (id: string | null) => void;
   setEditingWorkstations: (ids: string[]) => void;
   onSaveWorkstations: (employeeId: string) => void;
+  onDeleteEmployee: (employeeId: string) => void;
+  onResendWelcomeEmail: (employeeId: string) => void;
 }
 
 export function EmployeesTab({
@@ -35,6 +37,8 @@ export function EmployeesTab({
   setEditingEmployee,
   setEditingWorkstations,
   onSaveWorkstations,
+  onDeleteEmployee,
+  onResendWelcomeEmail,
 }: EmployeesTabProps) {
   return (
     <div>
@@ -210,10 +214,10 @@ export function EmployeesTab({
                       </label>
                     ))}
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 flex-wrap">
                     <button
                       onClick={() => onSaveWorkstations(member.id)}
-                      className="flex-1 px-3 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-medium transition text-sm"
+                      className="flex-1 min-w-0 px-3 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-medium transition text-sm"
                       type="button"
                     >
                       Save
@@ -223,10 +227,25 @@ export function EmployeesTab({
                         setEditingEmployee(null);
                         setEditingWorkstations([]);
                       }}
-                      className="flex-1 px-3 py-2 border border-input text-foreground hover:bg-secondary rounded-lg transition text-sm"
+                      className="flex-1 min-w-0 px-3 py-2 border border-input text-foreground hover:bg-secondary rounded-lg transition text-sm"
                       type="button"
                     >
                       Cancel
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            `Delete "${member.name}"? This cannot be undone.`,
+                          )
+                        ) {
+                          onDeleteEmployee(member.id);
+                        }
+                      }}
+                      className="px-3 py-2 text-destructive hover:bg-destructive/10 rounded-lg transition text-sm border border-destructive/30"
+                      type="button"
+                    >
+                      Delete employee
                     </button>
                   </div>
                 </div>
@@ -250,20 +269,48 @@ export function EmployeesTab({
                       </div>
                     )}
                   </div>
-                  <button
-                    onClick={() => {
-                      setEditingEmployee(member.id);
-                      setEditingWorkstations(
-                        member.workstations.map((ws) => ws.id),
-                      );
-                    }}
-                    className="p-2 text-primary hover:bg-primary/10 rounded-lg transition"
-                    title="Edit workstations"
-                    type="button"
-                    aria-label={`Edit workstations for ${member.name}`}
-                  >
-                    <Edit2 className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => onResendWelcomeEmail(member.id)}
+                      className="p-2 text-muted-foreground hover:bg-secondary hover:text-foreground rounded-lg transition"
+                      title="Resend welcome email"
+                      type="button"
+                      aria-label={`Resend welcome email to ${member.name}`}
+                    >
+                      <Mail className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => {
+                        setEditingEmployee(member.id);
+                        setEditingWorkstations(
+                          member.workstations.map((ws) => ws.id),
+                        );
+                      }}
+                      className="p-2 text-primary hover:bg-primary/10 rounded-lg transition"
+                      title="Edit workstations"
+                      type="button"
+                      aria-label={`Edit workstations for ${member.name}`}
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            `Delete "${member.name}"? This cannot be undone.`,
+                          )
+                        ) {
+                          onDeleteEmployee(member.id);
+                        }
+                      }}
+                      className="p-2 text-destructive hover:bg-destructive/10 rounded-lg transition"
+                      title="Delete employee"
+                      type="button"
+                      aria-label={`Delete ${member.name}`}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               )}
             </div>

@@ -96,6 +96,14 @@ export default function ManagerDashboard() {
     });
   };
 
+  const handleDeleteEmployee = (employeeId: string) => {
+    mutations.deleteEmployee.mutate(employeeId);
+  };
+
+  const handleResendWelcomeEmail = (employeeId: string) => {
+    mutations.resendWelcomeEmail.mutate(employeeId);
+  };
+
   const handleCreateTask = (e: React.FormEvent) => {
     e.preventDefault();
     if (
@@ -455,6 +463,8 @@ export default function ManagerDashboard() {
             setEditingEmployee={mutations.setEditingEmployee}
             setEditingWorkstations={mutations.setEditingWorkstations}
             onSaveWorkstations={handleUpdateEmployeeWorkstations}
+            onDeleteEmployee={handleDeleteEmployee}
+            onResendWelcomeEmail={handleResendWelcomeEmail}
           />
         )}
 

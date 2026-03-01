@@ -53,6 +53,8 @@ import {
   handleGetWorkstations,
   handleCreateWorkstation,
   handleCreateEmployee,
+  handleDeleteEmployee,
+  handleResendWelcomeEmail,
   handleDeleteWorkstation,
   handleGetTeamMembers,
   handleUpdateEmployeeWorkstations,
@@ -361,6 +363,18 @@ export function createApp(): Express {
     requireAuth,
     requireRole("MANAGER"),
     handleUpdateEmployeeWorkstations,
+  );
+  app.delete(
+    "/api/employees/:employeeId",
+    requireAuth,
+    requireRole("MANAGER"),
+    handleDeleteEmployee,
+  );
+  app.post(
+    "/api/employees/:employeeId/resend-welcome-email",
+    requireAuth,
+    requireRole("MANAGER"),
+    handleResendWelcomeEmail,
   );
 
   return app;
