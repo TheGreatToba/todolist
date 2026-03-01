@@ -456,21 +456,17 @@ export const handleResendWelcomeEmail: RequestHandler = async (req, res) => {
     }
 
     if (!employee.teamId) {
-      res
-        .status(403)
-        .json({
-          error: "You do not have permission to resend email for this employee",
-        });
+      res.status(403).json({
+        error: "You do not have permission to resend email for this employee",
+      });
       return;
     }
 
     const isManaged = await isTeamManagedBy(employee.teamId, payload.userId);
     if (!isManaged) {
-      res
-        .status(403)
-        .json({
-          error: "You do not have permission to resend email for this employee",
-        });
+      res.status(403).json({
+        error: "You do not have permission to resend email for this employee",
+      });
       return;
     }
 
@@ -507,8 +503,10 @@ export const handleResendWelcomeEmail: RequestHandler = async (req, res) => {
 
     if (!emailResult.success) {
       logger.warn("Failed to resend set-password email:", emailResult.error);
+      const isDev = process.env.NODE_ENV !== "production";
       res.status(500).json({
         error: "Failed to send email. Please try again later.",
+        ...(isDev && emailResult.error && { detail: emailResult.error }),
         emailSent: false,
       });
       return;

@@ -53,7 +53,20 @@ async function getTransporter(): Promise<nodemailer.Transporter> {
       });
     } else {
       logger.debug("No SMTP config: using Ethereal test account");
-      const testAccount = await nodemailer.createTestAccount();
+      let testAccount: nodemailer.TestAccount;
+      try {
+        testAccount = await nodemailer.createTestAccount();
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        logger.error("Ethereal createTestAccount failed:", msg);
+        throw new Error(
+          "Impossible d'utiliser le service d'email de test (Ethereal). " +
+            "Configurez SMTP (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS) dans .env ou vérifiez votre connexion. " +
+            "Détail: " +
+            msg,
+          { cause: err },
+        );
+      }
       transporter = nodemailer.createTransport({
         host: "smtp.ethereal.email",
         port: 587,
