@@ -1,21 +1,13 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import type { TodayBoardTask } from "@shared/api";
 import { useNavigate } from "react-router-dom";
 import { Loader2, LogOut } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  useCreateTodayBoardTaskMutation,
-  useCreateTaskFromTemplateMutation,
   useManagerTodayBoardQuery,
-  useManualTriggerTemplatesQuery,
-  useTeamMembersQuery,
   useUpdateDailyTaskMutation,
 } from "@/hooks/queries";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { ManagerDashboardHeader } from "@/pages/ManagerDashboard/ManagerDashboardHeader";
 import { toastError } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/get-error-message";
 
@@ -140,57 +132,15 @@ export default function TodayBoard() {
   const navigate = useNavigate();
   const { logout } = useAuth();
   const { data: board, isLoading } = useManagerTodayBoardQuery();
-  const { data: teamMembers = [] } = useTeamMembersQuery();
-  const { data: manualTriggerTemplates = [], isLoading: isTemplatesLoading } =
-    useManualTriggerTemplatesQuery();
   const updateDailyTask = useUpdateDailyTaskMutation();
-  const createTodayTask = useCreateTodayBoardTaskMutation();
-  const createFromTemplate = useCreateTaskFromTemplateMutation();
-
-  const [title, setTitle] = useState("");
-  const [assignedToEmployeeId, setAssignedToEmployeeId] = useState("");
-  const [dueDate, setDueDate] = useState("");
-  const [isTemplatePopoverOpen, setIsTemplatePopoverOpen] = useState(false);
-  const [templateSearch, setTemplateSearch] = useState("");
-  const filteredManualTemplates = manualTriggerTemplates.filter((template) => {
-    const q = templateSearch.trim().toLowerCase();
-    if (!q) return true;
-    return (
-      template.title.toLowerCase().includes(q) ||
-      (template.description ?? "").toLowerCase().includes(q)
-    );
-  });
-
-  useEffect(() => {
-    if (board?.date && dueDate === "") {
-      setDueDate(board.date);
-    }
-  }, [board?.date, dueDate]);
 
   const handleLogout = () => {
     logout();
     navigate("/", { replace: true });
   };
 
-  const handleCreateTask = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title.trim()) {
-      toastError("Please enter a task title.");
-      return;
-    }
-
-    try {
-      await createTodayTask.mutateAsync({
-        title: title.trim(),
-        dueDate: dueDate || board?.date,
-        assignedToEmployeeId: assignedToEmployeeId || undefined,
-      });
-      setTitle("");
-      setAssignedToEmployeeId("");
-      setDueDate(board?.date ?? "");
-    } catch (error) {
-      toastError(getErrorMessage(error, "Failed to create task."));
-    }
+  const handleTabChange = () => {
+    // No-op on Today page; other tabs use Link in header
   };
 
   const handleToggleTask = async (task: TodayBoardTask) => {
@@ -201,18 +151,6 @@ export default function TodayBoard() {
       });
     } catch (error) {
       toastError(getErrorMessage(error, "Failed to update task."));
-    }
-  };
-
-  const handleCreateFromTemplate = async (templateId: string) => {
-    try {
-      await createFromTemplate.mutateAsync({ templateId });
-      setIsTemplatePopoverOpen(false);
-      setTemplateSearch("");
-    } catch (error) {
-      toastError(
-        getErrorMessage(error, "Failed to create task from template."),
-      );
     }
   };
 
@@ -247,152 +185,16 @@ export default function TodayBoard() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-primary/5 to-background">
-      <header className="border-b border-border bg-card/70 backdrop-blur-sm">
-        <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-4 py-4">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">Today Board</h1>
-            <p className="text-sm text-muted-foreground">
-              {formatBoardDate(board.date)}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => navigate("/manager")}
-              className="rounded-lg border border-input px-3 py-2 text-sm text-foreground transition hover:bg-secondary"
-            >
-              Tasks history
-            </button>
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="inline-flex items-center gap-2 rounded-lg border border-input px-3 py-2 text-sm text-foreground transition hover:bg-secondary"
-            >
-              <LogOut className="h-4 w-4" />
-              Sign out
-            </button>
-          </div>
-        </div>
-      </header>
+      <ManagerDashboardHeader
+        teamName="Today Board"
+        subtitle={formatBoardDate(board.date)}
+        activeTab="today"
+        onTabChange={handleTabChange}
+        onLogout={handleLogout}
+        showSettings={false}
+      />
 
       <main className="mx-auto w-full max-w-6xl space-y-6 px-4 py-6">
-        <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-              + New task
-            </h2>
-            <Popover
-              open={isTemplatePopoverOpen}
-              onOpenChange={setIsTemplatePopoverOpen}
-            >
-              <PopoverTrigger asChild>
-                <button
-                  type="button"
-                  className="inline-flex h-9 items-center rounded-lg border border-input bg-background px-3 text-sm font-medium text-foreground transition hover:bg-secondary"
-                >
-                  Create from template
-                </button>
-              </PopoverTrigger>
-              <PopoverContent className="w-80 p-3" align="end">
-                <label className="sr-only" htmlFor="today-template-search">
-                  Search manual templates
-                </label>
-                <input
-                  id="today-template-search"
-                  type="text"
-                  value={templateSearch}
-                  onChange={(event) => setTemplateSearch(event.target.value)}
-                  placeholder="Search manual templates..."
-                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                />
-                <div className="mt-2 max-h-64 space-y-1 overflow-y-auto">
-                  {isTemplatesLoading ? (
-                    <p className="px-2 py-2 text-sm text-muted-foreground">
-                      Loading templates...
-                    </p>
-                  ) : null}
-                  {!isTemplatesLoading &&
-                  filteredManualTemplates.length === 0 ? (
-                    <p className="px-2 py-2 text-sm text-muted-foreground">
-                      No manual templates found.
-                    </p>
-                  ) : null}
-                  {filteredManualTemplates.map((template) => (
-                    <button
-                      key={template.id}
-                      type="button"
-                      className="w-full rounded-md border border-border px-2 py-2 text-left transition hover:bg-secondary disabled:opacity-50"
-                      onClick={() => void handleCreateFromTemplate(template.id)}
-                      disabled={createFromTemplate.isPending}
-                    >
-                      <span className="block truncate text-sm font-medium text-foreground">
-                        {template.title}
-                      </span>
-                      {template.description ? (
-                        <span className="block truncate text-xs text-muted-foreground">
-                          {template.description}
-                        </span>
-                      ) : null}
-                    </button>
-                  ))}
-                </div>
-              </PopoverContent>
-            </Popover>
-          </div>
-          <form
-            className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-[2fr_1fr_1fr_auto]"
-            onSubmit={handleCreateTask}
-          >
-            <label className="sr-only" htmlFor="today-task-title">
-              Task title
-            </label>
-            <input
-              id="today-task-title"
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Task title"
-              className="h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-            />
-
-            <label className="sr-only" htmlFor="today-task-assignee">
-              Assignment
-            </label>
-            <select
-              id="today-task-assignee"
-              value={assignedToEmployeeId}
-              onChange={(e) => setAssignedToEmployeeId(e.target.value)}
-              className="h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-            >
-              <option value="">Unassigned</option>
-              {teamMembers.map((member) => (
-                <option key={member.id} value={member.id}>
-                  {member.name}
-                </option>
-              ))}
-            </select>
-
-            <label className="sr-only" htmlFor="today-task-due-date">
-              Due date
-            </label>
-            <input
-              id="today-task-due-date"
-              type="date"
-              value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
-              className="h-10 rounded-lg border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-            />
-
-            <button
-              type="submit"
-              disabled={createTodayTask.isPending}
-              className="h-10 rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50"
-            >
-              {createTodayTask.isPending ? "Creating..." : "+ New task"}
-            </button>
-          </form>
-        </section>
-
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
           <TaskSection
             title="Overdue"

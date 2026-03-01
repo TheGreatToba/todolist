@@ -6,6 +6,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { TestMemoryRouter } from "@/test/router";
 
 vi.mock("react-router-dom", async () => {
   const actual =
@@ -47,7 +48,9 @@ function renderWithProviders(ui: React.ReactElement) {
     defaultOptions: { queries: { retry: false } },
   });
   return render(
-    <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>,
+    <TestMemoryRouter initialEntries={["/manager"]}>
+      <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>
+    </TestMemoryRouter>,
   );
 }
 

@@ -3,15 +3,13 @@
  */
 import React from "react";
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { render, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { TestMemoryRouter } from "@/test/router";
 import TodayBoard from "./TodayBoard";
 
 const mockNavigate = vi.fn();
-const mockMutateCreateTask = vi.fn();
 const mockMutateUpdateTask = vi.fn();
-const mockMutateCreateFromTemplate = vi.fn();
 const mockLogout = vi.fn();
 
 vi.mock("react-router-dom", async () => {
@@ -31,40 +29,22 @@ vi.mock("@/contexts/AuthContext", () => ({
 
 vi.mock("@/hooks/queries", () => ({
   useManagerTodayBoardQuery: vi.fn(),
-  useTeamMembersQuery: vi.fn(),
   useUpdateDailyTaskMutation: vi.fn(),
-  useCreateTodayBoardTaskMutation: vi.fn(),
-  useManualTriggerTemplatesQuery: vi.fn(),
-  useCreateTaskFromTemplateMutation: vi.fn(),
 }));
 
 import { useAuth } from "@/contexts/AuthContext";
 import {
   useManagerTodayBoardQuery,
-  useTeamMembersQuery,
   useUpdateDailyTaskMutation,
-  useCreateTodayBoardTaskMutation,
-  useManualTriggerTemplatesQuery,
-  useCreateTaskFromTemplateMutation,
 } from "@/hooks/queries";
 
 const mockUseAuth = vi.mocked(useAuth);
 const mockUseManagerTodayBoardQuery = vi.mocked(useManagerTodayBoardQuery);
-const mockUseTeamMembersQuery = vi.mocked(useTeamMembersQuery);
 const mockUseUpdateDailyTaskMutation = vi.mocked(useUpdateDailyTaskMutation);
-const mockUseCreateTodayBoardTaskMutation = vi.mocked(
-  useCreateTodayBoardTaskMutation,
-);
-const mockUseManualTriggerTemplatesQuery = vi.mocked(
-  useManualTriggerTemplatesQuery,
-);
-const mockUseCreateTaskFromTemplateMutation = vi.mocked(
-  useCreateTaskFromTemplateMutation,
-);
 
 function renderTodayBoard() {
   const { container } = render(
-    <TestMemoryRouter>
+    <TestMemoryRouter initialEntries={["/today"]}>
       <TodayBoard />
     </TestMemoryRouter>,
   );
@@ -114,59 +94,13 @@ describe("TodayBoard", () => {
       },
       isLoading: false,
     } as unknown as ReturnType<typeof useManagerTodayBoardQuery>);
-    mockUseTeamMembersQuery.mockReturnValue({
-      data: [
-        {
-          id: "emp-1",
-          name: "Alice",
-          email: "alice@test.com",
-          workstations: [],
-        },
-      ],
-    } as unknown as ReturnType<typeof useTeamMembersQuery>);
     mockUseUpdateDailyTaskMutation.mockReturnValue({
       mutateAsync: mockMutateUpdateTask,
       isPending: false,
       variables: undefined,
     } as unknown as ReturnType<typeof useUpdateDailyTaskMutation>);
-    mockUseCreateTodayBoardTaskMutation.mockReturnValue({
-      mutateAsync: mockMutateCreateTask,
-      isPending: false,
-    } as unknown as ReturnType<typeof useCreateTodayBoardTaskMutation>);
-    mockUseManualTriggerTemplatesQuery.mockReturnValue({
-      data: [
-        {
-          id: "tmpl-1",
-          title: "Open side entrance",
-          description: "For delivery windows",
-        },
-      ],
-      isLoading: false,
-    } as unknown as ReturnType<typeof useManualTriggerTemplatesQuery>);
-    mockUseCreateTaskFromTemplateMutation.mockReturnValue({
-      mutateAsync: mockMutateCreateFromTemplate,
-      isPending: false,
-    } as unknown as ReturnType<typeof useCreateTaskFromTemplateMutation>);
 
-    mockMutateCreateTask.mockResolvedValue({});
     mockMutateUpdateTask.mockResolvedValue({});
-    mockMutateCreateFromTemplate.mockResolvedValue({});
-  });
-
-  it("defaults quick-create due date to board date", async () => {
-    const { view } = renderTodayBoard();
-
-    const dueDateInput = view.getByLabelText(/due date/i) as HTMLInputElement;
-    expect(dueDateInput.value).toBe("2025-02-24");
-
-    await userEvent.type(view.getByLabelText(/task title/i), "Restock sauces");
-    await userEvent.click(view.getByRole("button", { name: /\+ new task/i }));
-
-    expect(mockMutateCreateTask).toHaveBeenCalledWith({
-      title: "Restock sauces",
-      dueDate: "2025-02-24",
-      assignedToEmployeeId: undefined,
-    });
   });
 
   it("toggles task completion from today section", async () => {
@@ -182,16 +116,17 @@ describe("TodayBoard", () => {
     });
   });
 
-  it("creates a task from manual-trigger template in one click", async () => {
+  it("shows navigation tabs (Today, Dashboard, Workstations, Employees, Task)", () => {
     const { view } = renderTodayBoard();
-
-    await userEvent.click(
-      view.getByRole("button", { name: /create from template/i }),
-    );
-    await userEvent.click(screen.getByText("Open side entrance"));
-
-    expect(mockMutateCreateFromTemplate).toHaveBeenCalledWith({
-      templateId: "tmpl-1",
-    });
+    expect(view.getByRole("link", { name: /dashboard/i })).toBeInTheDocument();
+    expect(
+      view.getByRole("link", { name: /workstations/i }),
+    ).toBeInTheDocument();
+    expect(view.getByRole("link", { name: /employees/i })).toBeInTheDocument();
+    expect(view.getByRole("link", { name: /task/i })).toBeInTheDocument();
+    const todayTabs = view.getAllByText("Today");
+    expect(
+      todayTabs.some((el) => el.getAttribute("aria-current") === "page"),
+    ).toBe(true);
   });
 });
