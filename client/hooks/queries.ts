@@ -867,7 +867,7 @@ export function useUpdateWorkstationEmployeesMutation(
 
 export function useCreateEmployeeMutation(
   options?: UseMutationOptions<
-    { emailSent?: boolean },
+    { emailSent?: boolean; emailError?: string },
     Error,
     {
       name: string;
@@ -939,6 +939,63 @@ export function useUpdateEmployeeWorkstationsMutation(
       });
       queryClient.invalidateQueries({
         queryKey: queryKeys.manager.dashboardPrefix,
+      });
+      options?.onSuccess?.(data, variables, ctx);
+    },
+  });
+}
+
+export function useDeleteEmployeeMutation(
+  options?: UseMutationOptions<void, Error, string>,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (employeeId: string) => {
+      const res = await fetchWithCsrf(`/api/employees/${employeeId}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to delete employee");
+      }
+    },
+    ...options,
+    onSuccess: (data, variables, ctx) => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.manager.teamMembers,
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.manager.dashboardPrefix,
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.manager.todayBoardPrefix,
+      });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tasks.dailyPrefix });
+      options?.onSuccess?.(data, variables, ctx);
+    },
+  });
+}
+
+export function useResendWelcomeEmailMutation(
+  options?: UseMutationOptions<{ emailSent: boolean }, Error, string>,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (employeeId: string) => {
+      const res = await fetchWithCsrf(
+        `/api/employees/${employeeId}/resend-welcome-email`,
+        {
+          method: "POST",
+        },
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to resend email");
+      return data as { success: true; emailSent: boolean };
+    },
+    ...options,
+    onSuccess: (data, variables, ctx) => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.manager.teamMembers,
       });
       options?.onSuccess?.(data, variables, ctx);
     },

@@ -15,26 +15,44 @@ function escapeHtml(unsafe: string): string {
 // In production, you would use your actual email provider (Gmail, SendGrid, etc.)
 let transporter: nodemailer.Transporter | null = null;
 
-async function getTransporter() {
+/** Reset transporter (e.g. after send failure so next attempt re-reads env). */
+export function resetEmailTransporter() {
+  transporter = null;
+}
+
+function getSmtpPort(): number {
+  const raw = process.env.SMTP_PORT?.trim() ?? "";
+  const port = parseInt(raw, 10);
+  if (!Number.isInteger(port) || port <= 0 || port > 65535) return 587;
+  return port;
+}
+
+function isSmtpConfigured(): boolean {
+  const host = process.env.SMTP_HOST?.trim();
+  const user = process.env.SMTP_USER?.trim();
+  const pass = process.env.SMTP_PASS;
+  return !!(host && process.env.SMTP_PORT?.trim() && user && pass);
+}
+
+async function getTransporter(): Promise<nodemailer.Transporter> {
   if (!transporter) {
-    // Check if we have email configuration from environment
-    if (
-      process.env.SMTP_HOST &&
-      process.env.SMTP_PORT &&
-      process.env.SMTP_USER &&
-      process.env.SMTP_PASS
-    ) {
+    if (isSmtpConfigured()) {
+      const port = getSmtpPort();
+      logger.info("Using SMTP transport", {
+        host: process.env.SMTP_HOST?.trim(),
+        port,
+      });
       transporter = nodemailer.createTransport({
-        host: process.env.SMTP_HOST,
-        port: parseInt(process.env.SMTP_PORT),
-        secure: process.env.SMTP_SECURE === "true", // true for 465, false for other ports
+        host: process.env.SMTP_HOST!.trim(),
+        port,
+        secure: process.env.SMTP_SECURE === "true",
         auth: {
-          user: process.env.SMTP_USER,
+          user: process.env.SMTP_USER!.trim(),
           pass: process.env.SMTP_PASS,
         },
       });
     } else {
-      // For development, create an Ethereal test account
+      logger.debug("No SMTP config: using Ethereal test account");
       const testAccount = await nodemailer.createTestAccount();
       transporter = nodemailer.createTransport({
         host: "smtp.ethereal.email",
@@ -109,6 +127,7 @@ export async function sendSetPasswordEmail(
     return { success: true, messageId: info.messageId };
   } catch (error) {
     logger.error("Failed to send set password email:", error);
+    resetEmailTransporter();
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",
@@ -164,6 +183,7 @@ export async function sendTaskAssignmentEmail(
     return { success: true, messageId: info.messageId };
   } catch (error) {
     logger.error("Failed to send task assignment email:", error);
+    resetEmailTransporter();
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",
@@ -223,6 +243,7 @@ export async function sendPasswordResetEmail(
     return { success: true, messageId: info.messageId };
   } catch (error) {
     logger.error("Failed to send password reset email:", error);
+    resetEmailTransporter();
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",
@@ -253,6 +274,7 @@ export default async function sendEmail(
     return { success: true, messageId: info.messageId };
   } catch (error) {
     logger.error("Failed to send email:", error);
+    resetEmailTransporter();
     return {
       success: false,
       error: error instanceof Error ? error.message : "Unknown error",

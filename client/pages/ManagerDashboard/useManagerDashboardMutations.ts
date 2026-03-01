@@ -6,6 +6,8 @@ import {
   useDeleteWorkstationMutation,
   useCreateEmployeeMutation,
   useUpdateEmployeeWorkstationsMutation,
+  useDeleteEmployeeMutation,
+  useResendWelcomeEmailMutation,
   useCreateTaskTemplateMutation,
   useAssignTaskFromTemplateMutation,
   useUpdateTaskTemplateMutation,
@@ -20,6 +22,8 @@ const FALLBACK = {
   deleteWorkstation: "Failed to delete workstation.",
   createEmployee: "Failed to create employee.",
   updateWorkstations: "Failed to update employee workstations.",
+  deleteEmployee: "Failed to delete employee.",
+  resendWelcomeEmail: "Failed to resend welcome email.",
   createTask: "Failed to create task.",
   updateTemplate: "Failed to update template.",
   deleteTemplate: "Failed to delete template.",
@@ -80,9 +84,12 @@ export function useManagerDashboardMutations(
   const createEmployee = useCreateEmployeeMutation({
     onSuccess: (data) => {
       setNewEmployee(initialNewEmployee);
-      toastSuccess(
-        `Employee created successfully!${data.emailSent ? " Email sent." : " (Email delivery skipped)"}`,
-      );
+      const emailMsg = data.emailSent
+        ? " Email envoyé."
+        : data.emailError
+          ? ` E-mail non envoyé : ${data.emailError}`
+          : " E-mail non envoyé (vérifiez la config SMTP).";
+      toastSuccess(`Employé créé avec succès.${emailMsg}`);
     },
     onError: (err) => {
       toastError(getErrorMessage(err, FALLBACK.createEmployee));
@@ -96,6 +103,28 @@ export function useManagerDashboardMutations(
     },
     onError: (err) => {
       toastError(getErrorMessage(err, FALLBACK.updateWorkstations));
+    },
+  });
+  const deleteEmployee = useDeleteEmployeeMutation({
+    onSuccess: () => {
+      setEditingEmployee(null);
+      setEditingWorkstations([]);
+      toastSuccess("Employee deleted successfully.");
+    },
+    onError: (err) => {
+      toastError(getErrorMessage(err, FALLBACK.deleteEmployee));
+    },
+  });
+  const resendWelcomeEmail = useResendWelcomeEmailMutation({
+    onSuccess: (data) => {
+      toastSuccess(
+        data?.emailSent
+          ? "Welcome email sent again successfully."
+          : "Email sent.",
+      );
+    },
+    onError: (err) => {
+      toastError(getErrorMessage(err, FALLBACK.resendWelcomeEmail));
     },
   });
   const createTaskTemplate = useCreateTaskTemplateMutation({
@@ -152,6 +181,8 @@ export function useManagerDashboardMutations(
     deleteWorkstation,
     createEmployee,
     updateEmployeeWorkstations,
+    deleteEmployee,
+    resendWelcomeEmail,
     createTaskTemplate,
     assignTaskFromTemplate,
     updateTaskTemplate,

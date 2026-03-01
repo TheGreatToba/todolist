@@ -326,6 +326,7 @@ export const handleCreateEmployee: RequestHandler = async (req, res) => {
         name: ew.workstation.name,
       })),
       emailSent: emailResult.success,
+      ...(emailResult.success ? {} : { emailError: emailResult.error }),
     });
   } catch (error) {
     sendErrorResponse(res, error, req);
@@ -376,6 +377,144 @@ export const handleDeleteWorkstation: RequestHandler = async (req, res) => {
     });
 
     res.json({ success: true });
+  } catch (error) {
+    sendErrorResponse(res, error, req);
+  }
+};
+
+// Delete an employee (manager only). Employee must belong to a managed team.
+export const handleDeleteEmployee: RequestHandler = async (req, res) => {
+  try {
+    const payload = getAuthOrThrow(req, res);
+    if (!payload) return;
+    const employeeId = paramString(req.params.employeeId);
+    if (!employeeId) {
+      res.status(400).json({ error: "Invalid employee ID" });
+      return;
+    }
+
+    const employee = await prisma.user.findUnique({
+      where: { id: employeeId },
+      select: { id: true, role: true, teamId: true },
+    });
+
+    if (!employee || employee.role !== "EMPLOYEE") {
+      res.status(404).json({ error: "Employee not found" });
+      return;
+    }
+
+    if (!employee.teamId) {
+      res
+        .status(403)
+        .json({ error: "You do not have permission to delete this employee" });
+      return;
+    }
+
+    const isManaged = await isTeamManagedBy(employee.teamId, payload.userId);
+    if (!isManaged) {
+      res
+        .status(403)
+        .json({ error: "You do not have permission to delete this employee" });
+      return;
+    }
+
+    await prisma.user.delete({
+      where: { id: employeeId },
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    sendErrorResponse(res, error, req);
+  }
+};
+
+// Resend welcome / set-password email to an existing employee (manager only).
+export const handleResendWelcomeEmail: RequestHandler = async (req, res) => {
+  try {
+    const payload = getAuthOrThrow(req, res);
+    if (!payload) return;
+    const employeeId = paramString(req.params.employeeId);
+    if (!employeeId) {
+      res.status(400).json({ error: "Invalid employee ID" });
+      return;
+    }
+
+    const employee = await prisma.user.findUnique({
+      where: { id: employeeId },
+      include: {
+        workstations: {
+          include: {
+            workstation: { select: { name: true } },
+          },
+        },
+      },
+    });
+
+    if (!employee || employee.role !== "EMPLOYEE") {
+      res.status(404).json({ error: "Employee not found" });
+      return;
+    }
+
+    if (!employee.teamId) {
+      res
+        .status(403)
+        .json({
+          error: "You do not have permission to resend email for this employee",
+        });
+      return;
+    }
+
+    const isManaged = await isTeamManagedBy(employee.teamId, payload.userId);
+    if (!isManaged) {
+      res
+        .status(403)
+        .json({
+          error: "You do not have permission to resend email for this employee",
+        });
+      return;
+    }
+
+    const setPasswordToken = generateSecureToken();
+    const setPasswordTokenHash = hashToken(setPasswordToken);
+    const expiryHours = getSetPasswordTokenExpiryHours();
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + expiryHours);
+
+    await prisma.$transaction(async (tx) => {
+      await tx.setPasswordToken.deleteMany({
+        where: { userId: employeeId },
+      });
+      await tx.setPasswordToken.create({
+        data: {
+          userId: employeeId,
+          tokenHash: setPasswordTokenHash,
+          expiresAt,
+        },
+      });
+    });
+
+    const setPasswordLink = `${getFrontendBaseUrl()}/set-password?token=${encodeURIComponent(setPasswordToken)}`;
+    const workstationNames = employee.workstations.map(
+      (ew) => ew.workstation.name,
+    );
+    const emailResult = await sendSetPasswordEmail(
+      employee.email,
+      employee.name,
+      setPasswordLink,
+      workstationNames,
+      expiryHours,
+    );
+
+    if (!emailResult.success) {
+      logger.warn("Failed to resend set-password email:", emailResult.error);
+      res.status(500).json({
+        error: "Failed to send email. Please try again later.",
+        emailSent: false,
+      });
+      return;
+    }
+
+    res.json({ success: true, emailSent: true });
   } catch (error) {
     sendErrorResponse(res, error, req);
   }
