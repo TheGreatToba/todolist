@@ -1,13 +1,12 @@
 import React from "react";
 import type { TodayBoardTask } from "@shared/api";
 import { useNavigate } from "react-router-dom";
-import { Loader2, LogOut } from "lucide-react";
+import { Loader2, LogOut, Users } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   useManagerTodayBoardQuery,
   useUpdateDailyTaskMutation,
 } from "@/hooks/queries";
-import { ManagerDashboardHeader } from "@/pages/ManagerDashboard/ManagerDashboardHeader";
 import { toastError } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/get-error-message";
 
@@ -128,6 +127,23 @@ function TaskSection({
   );
 }
 
+type ManagerTab = "tasks" | "workstations" | "employees" | "templates";
+
+const MANAGER_TABS: {
+  id: ManagerTab;
+  label: string;
+  icon?: React.ReactNode;
+}[] = [
+  { id: "tasks", label: "Dashboard" },
+  { id: "workstations", label: "Workstations" },
+  {
+    id: "employees",
+    label: "Employees",
+    icon: <Users className="mr-2 inline h-4 w-4" />,
+  },
+  { id: "templates", label: "Task" },
+];
+
 export default function TodayBoard() {
   const navigate = useNavigate();
   const { logout } = useAuth();
@@ -139,8 +155,12 @@ export default function TodayBoard() {
     navigate("/", { replace: true });
   };
 
-  const handleTabChange = () => {
-    // No-op on Today page; other tabs use Link in header
+  const handleManagerTab = (tab: ManagerTab) => {
+    if (tab === "tasks") {
+      navigate("/manager");
+    } else {
+      navigate(`/manager?tab=${tab}`);
+    }
   };
 
   const handleToggleTask = async (task: TodayBoardTask) => {
@@ -185,14 +205,43 @@ export default function TodayBoard() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-primary/5 to-background">
-      <ManagerDashboardHeader
-        teamName="Today Board"
-        subtitle={formatBoardDate(board.date)}
-        activeTab="today"
-        onTabChange={handleTabChange}
-        onLogout={handleLogout}
-        showSettings={false}
-      />
+      <header className="border-b border-border bg-card/70 backdrop-blur-sm">
+        <div className="mx-auto w-full max-w-6xl px-4 py-4">
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-foreground">
+                Today Board
+              </h1>
+              <p className="text-sm text-muted-foreground">
+                {formatBoardDate(board.date)}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="inline-flex items-center gap-2 rounded-lg border border-input px-3 py-2 text-sm text-foreground transition hover:bg-secondary"
+              >
+                <LogOut className="h-4 w-4" />
+                Sign out
+              </button>
+            </div>
+          </div>
+          <div className="flex gap-4 border-t border-border pt-4">
+            {MANAGER_TABS.map(({ id, label, icon }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => handleManagerTab(id)}
+                className="inline-flex items-center border-b-2 border-transparent px-4 py-2 font-medium text-muted-foreground transition hover:text-foreground"
+              >
+                {icon}
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </header>
 
       <main className="mx-auto w-full max-w-6xl space-y-6 px-4 py-6">
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">

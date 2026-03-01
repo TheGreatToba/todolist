@@ -44,7 +44,7 @@ const mockUseUpdateDailyTaskMutation = vi.mocked(useUpdateDailyTaskMutation);
 
 function renderTodayBoard() {
   const { container } = render(
-    <TestMemoryRouter initialEntries={["/today"]}>
+    <TestMemoryRouter>
       <TodayBoard />
     </TestMemoryRouter>,
   );
@@ -103,6 +103,20 @@ describe("TodayBoard", () => {
     mockMutateUpdateTask.mockResolvedValue({});
   });
 
+  it("navigates to manager dashboard when clicking Dashboard tab", async () => {
+    const { view } = renderTodayBoard();
+    await userEvent.click(view.getByRole("button", { name: /^Dashboard$/i }));
+    expect(mockNavigate).toHaveBeenCalledWith("/manager");
+  });
+
+  it("navigates to manager with tab param when clicking Workstations tab", async () => {
+    const { view } = renderTodayBoard();
+    await userEvent.click(
+      view.getByRole("button", { name: /^Workstations$/i }),
+    );
+    expect(mockNavigate).toHaveBeenCalledWith("/manager?tab=workstations");
+  });
+
   it("toggles task completion from today section", async () => {
     const { view } = renderTodayBoard();
 
@@ -114,19 +128,5 @@ describe("TodayBoard", () => {
       taskId: "task-1",
       isCompleted: true,
     });
-  });
-
-  it("shows navigation tabs (Today, Dashboard, Workstations, Employees, Task)", () => {
-    const { view } = renderTodayBoard();
-    expect(view.getByRole("link", { name: /dashboard/i })).toBeInTheDocument();
-    expect(
-      view.getByRole("link", { name: /workstations/i }),
-    ).toBeInTheDocument();
-    expect(view.getByRole("link", { name: /employees/i })).toBeInTheDocument();
-    expect(view.getByRole("link", { name: /task/i })).toBeInTheDocument();
-    const todayTabs = view.getAllByText("Today");
-    expect(
-      todayTabs.some((el) => el.getAttribute("aria-current") === "page"),
-    ).toBe(true);
   });
 });

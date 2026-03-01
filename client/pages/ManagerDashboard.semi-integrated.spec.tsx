@@ -8,7 +8,7 @@ import React from "react";
 import { describe, it, expect, vi } from "vitest";
 import { render, within, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { TestMemoryRouter } from "@/test/router";
+import { MemoryRouter } from "react-router-dom";
 import ManagerDashboard from "./ManagerDashboard";
 
 vi.mock("react-router-dom", async () => {
@@ -42,11 +42,11 @@ function createTestQueryClient() {
 function renderDashboardWithProviders() {
   const queryClient = createTestQueryClient();
   const { container } = render(
-    <TestMemoryRouter initialEntries={["/manager"]}>
+    <MemoryRouter>
       <QueryClientProvider client={queryClient}>
         <ManagerDashboard />
       </QueryClientProvider>
-    </TestMemoryRouter>,
+    </MemoryRouter>,
   );
   return { view: within(container), queryClient };
 }

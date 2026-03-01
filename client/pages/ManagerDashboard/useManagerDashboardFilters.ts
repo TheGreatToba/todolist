@@ -12,16 +12,13 @@ const VALID_TABS: ManagerTab[] = [
   "templates",
 ];
 
-function tabFromParam(value: string | null): ManagerTab {
-  if (value && VALID_TABS.includes(value as ManagerTab)) {
-    return value as ManagerTab;
-  }
-  return "tasks";
+function tabFromSearchParams(searchParams: URLSearchParams): ManagerTab {
+  const tab = searchParams.get(TAB_PARAM);
+  return (VALID_TABS.includes(tab as ManagerTab) ? tab : "tasks") as ManagerTab;
 }
 
 export function useManagerDashboardFilters() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const tabParam = searchParams.get(TAB_PARAM);
   const [selectedDate, setSelectedDate] = useState<string>(() =>
     todayLocalISO(),
   );
@@ -30,20 +27,16 @@ export function useManagerDashboardFilters() {
     null,
   );
   const [activeTab, setActiveTabState] = useState<ManagerTab>(() =>
-    tabFromParam(tabParam),
+    tabFromSearchParams(searchParams),
   );
 
   useEffect(() => {
-    setActiveTabState(tabFromParam(searchParams.get(TAB_PARAM)));
+    setActiveTabState(tabFromSearchParams(searchParams));
   }, [searchParams]);
 
   const setActiveTab = (tab: ManagerTab) => {
     setActiveTabState(tab);
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      next.set(TAB_PARAM, tab);
-      return next;
-    });
+    setSearchParams(tab === "tasks" ? {} : { [TAB_PARAM]: tab });
   };
 
   return {
