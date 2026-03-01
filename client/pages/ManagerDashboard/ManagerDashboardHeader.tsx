@@ -1,4 +1,5 @@
 import React from "react";
+import { Link } from "react-router-dom";
 import { LogOut, Settings, Users } from "lucide-react";
 import type { ManagerTab } from "./useManagerDashboardFilters";
 
@@ -48,6 +49,12 @@ export function ManagerDashboardHeader({
         </div>
 
         <div className="flex gap-4 border-t border-border pt-4">
+          <Link
+            to="/today"
+            className="border-b-2 border-transparent px-4 py-2 font-medium text-muted-foreground transition hover:text-foreground"
+          >
+            Today
+          </Link>
           <button
             onClick={() => onTabChange("tasks")}
             className={`px-4 py-2 font-medium transition border-b-2 ${

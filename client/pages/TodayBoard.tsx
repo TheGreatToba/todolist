@@ -1,6 +1,6 @@
 import React from "react";
 import type { TodayBoardTask } from "@shared/api";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation, Link } from "react-router-dom";
 import { Loader2, LogOut, Users } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -146,7 +146,9 @@ const MANAGER_TABS: {
 
 export default function TodayBoard() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { logout } = useAuth();
+  const isOnToday = location.pathname === "/today";
   const { data: board, isLoading } = useManagerTodayBoardQuery();
   const updateDailyTask = useUpdateDailyTaskMutation();
 
@@ -228,6 +230,16 @@ export default function TodayBoard() {
             </div>
           </div>
           <div className="flex gap-4 border-t border-border pt-4">
+            <Link
+              to="/today"
+              className={`inline-flex items-center border-b-2 px-4 py-2 font-medium transition ${
+                isOnToday
+                  ? "border-primary text-primary"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Today
+            </Link>
             {MANAGER_TABS.map(({ id, label, icon }) => (
               <button
                 key={id}
