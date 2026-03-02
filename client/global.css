@@ -112,3 +112,20 @@
     white-space: pre;
   }
 }
+
+/* Nav tabs: horizontal scroll on mobile, minimal scrollbar */
+@layer utilities {
+  .nav-tabs-scroll {
+    -webkit-overflow-scrolling: touch;
+  }
+  .nav-tabs-scroll::-webkit-scrollbar {
+    height: 4px;
+  }
+  .nav-tabs-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .nav-tabs-scroll::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 2px;
+  }
+}
