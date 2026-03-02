@@ -989,7 +989,12 @@ export function useResendWelcomeEmailMutation(
         },
       );
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to resend email");
+      if (!res.ok) {
+        const message = data.detail
+          ? `${data.error || "Failed to resend email"}: ${data.detail}`
+          : data.error || "Failed to resend email";
+        throw new Error(message);
+      }
       return data as { success: true; emailSent: boolean };
     },
     ...options,

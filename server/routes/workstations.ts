@@ -503,10 +503,9 @@ export const handleResendWelcomeEmail: RequestHandler = async (req, res) => {
 
     if (!emailResult.success) {
       logger.warn("Failed to resend set-password email:", emailResult.error);
-      const isDev = process.env.NODE_ENV !== "production";
       res.status(500).json({
         error: "Failed to send email. Please try again later.",
-        ...(isDev && emailResult.error && { detail: emailResult.error }),
+        ...(emailResult.error && { detail: emailResult.error }),
         emailSent: false,
       });
       return;
