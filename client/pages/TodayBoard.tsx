@@ -229,28 +229,30 @@ export default function TodayBoard() {
               </button>
             </div>
           </div>
-          <div className="flex gap-4 border-t border-border pt-4">
-            <Link
-              to="/today"
-              className={`inline-flex items-center border-b-2 px-4 py-2 font-medium transition ${
-                isOnToday
-                  ? "border-primary text-primary"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Today
-            </Link>
-            {MANAGER_TABS.map(({ id, label, icon }) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => handleManagerTab(id)}
-                className="inline-flex items-center border-b-2 border-transparent px-4 py-2 font-medium text-muted-foreground transition hover:text-foreground"
+          <div className="border-t border-border pt-4 -mx-4 sm:mx-0">
+            <div className="nav-tabs-scroll flex gap-2 sm:gap-4 overflow-x-auto pb-px px-4 sm:px-0">
+              <Link
+                to="/today"
+                className={`flex-shrink-0 whitespace-nowrap inline-flex items-center border-b-2 px-3 sm:px-4 py-2 font-medium transition ${
+                  isOnToday
+                    ? "border-primary text-primary"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
               >
-                {icon}
-                {label}
-              </button>
-            ))}
+                Today
+              </Link>
+              {MANAGER_TABS.map(({ id, label, icon }) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => handleManagerTab(id)}
+                  className="flex-shrink-0 whitespace-nowrap inline-flex items-center border-b-2 border-transparent px-3 sm:px-4 py-2 font-medium text-muted-foreground transition hover:text-foreground"
+                >
+                  {icon}
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </header>
