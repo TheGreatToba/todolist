@@ -16,6 +16,7 @@ const ResetPassword = React.lazy(() => import("./pages/ResetPassword"));
 const EmployeeDashboard = React.lazy(() => import("./pages/EmployeeDashboard"));
 const TodayBoard = React.lazy(() => import("./pages/TodayBoard"));
 const ManagerDashboard = React.lazy(() => import("./pages/ManagerDashboard"));
+const ManagerLayout = React.lazy(() => import("./pages/ManagerLayout"));
 const NotFound = React.lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient();
@@ -92,7 +93,10 @@ function ProtectedRoute({
 
   if (requiredRole && user.role !== requiredRole) {
     return (
-      <Navigate to={user.role === "MANAGER" ? "/today" : "/employee"} replace />
+      <Navigate
+        to={user.role === "MANAGER" ? "/manager/today" : "/employee"}
+        replace
+      />
     );
   }
 
@@ -123,21 +127,20 @@ const App = () => (
                   }
                 />
                 <Route
-                  path="/today"
-                  element={
-                    <ProtectedRoute requiredRole="MANAGER">
-                      <TodayBoard />
-                    </ProtectedRoute>
-                  }
-                />
-                <Route
                   path="/manager"
                   element={
                     <ProtectedRoute requiredRole="MANAGER">
-                      <ManagerDashboard />
+                      <ManagerLayout />
                     </ProtectedRoute>
                   }
-                />
+                >
+                  <Route index element={<Navigate to="dashboard" replace />} />
+                  <Route path="today" element={<TodayBoard />} />
+                  <Route path="dashboard" element={<ManagerDashboard />} />
+                  <Route path="workstations" element={<ManagerDashboard />} />
+                  <Route path="employees" element={<ManagerDashboard />} />
+                  <Route path="task" element={<ManagerDashboard />} />
+                </Route>
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                 <Route path="*" element={<NotFound />} />
               </Routes>

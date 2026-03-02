@@ -33,6 +33,8 @@ vi.mock("@/hooks/useSocket", () => ({
 }));
 
 import ManagerDashboard from "./ManagerDashboard";
+import ManagerLayout from "./ManagerLayout";
+import { Routes, Route } from "react-router-dom";
 
 const mockDashboardResponse = {
   team: { name: "Test Team" },
@@ -43,13 +45,19 @@ const mockDashboardResponse = {
 const mockWorkstationsResponse: unknown[] = [];
 const mockTeamMembersResponse: unknown[] = [];
 
-function renderWithProviders(ui: React.ReactElement) {
+function renderManagerRoute() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   return render(
-    <MemoryRouter>
-      <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>
+    <MemoryRouter initialEntries={["/manager/dashboard"]}>
+      <QueryClientProvider client={queryClient}>
+        <Routes>
+          <Route path="/manager" element={<ManagerLayout />}>
+            <Route path="dashboard" element={<ManagerDashboard />} />
+          </Route>
+        </Routes>
+      </QueryClientProvider>
     </MemoryRouter>,
   );
 }
@@ -98,7 +106,7 @@ describe("ManagerDashboard Settings modal", () => {
   });
 
   it("opens and closes the Settings modal and displays the team name", async () => {
-    renderWithProviders(<ManagerDashboard />);
+    renderManagerRoute();
 
     const settingsButton = await screen.findByRole("button", {
       name: /open team settings/i,
@@ -120,7 +128,7 @@ describe("ManagerDashboard Settings modal", () => {
   });
 
   it("closes the Settings modal on Escape", async () => {
-    renderWithProviders(<ManagerDashboard />);
+    renderManagerRoute();
 
     const settingsButton = await screen.findByRole("button", {
       name: /open team settings/i,
@@ -135,11 +143,11 @@ describe("ManagerDashboard Settings modal", () => {
   });
 
   it("locks body scroll when Settings modal is open and restores on close", async () => {
-    renderWithProviders(<ManagerDashboard />);
+    renderManagerRoute();
 
-    const settingsButton = (
-      await screen.findAllByRole("button", { name: /open team settings/i })
-    )[0];
+    const settingsButton = await screen.findByRole("button", {
+      name: /open team settings/i,
+    });
     await userEvent.click(settingsButton);
 
     await screen.findByRole("dialog", { name: /team settings/i });
@@ -150,11 +158,11 @@ describe("ManagerDashboard Settings modal", () => {
   });
 
   it("restores focus to the Settings trigger button when modal is closed", async () => {
-    renderWithProviders(<ManagerDashboard />);
+    renderManagerRoute();
 
-    const settingsButton = (
-      await screen.findAllByRole("button", { name: /open team settings/i })
-    )[0];
+    const settingsButton = await screen.findByRole("button", {
+      name: /open team settings/i,
+    });
     settingsButton.focus();
     await userEvent.click(settingsButton);
 
@@ -169,11 +177,11 @@ describe("ManagerDashboard Settings modal", () => {
   });
 
   it("traps Tab focus in Settings modal (Tab from last goes to first)", async () => {
-    renderWithProviders(<ManagerDashboard />);
+    renderManagerRoute();
 
-    const settingsButton = (
-      await screen.findAllByRole("button", { name: /open team settings/i })
-    )[0];
+    const settingsButton = await screen.findByRole("button", {
+      name: /open team settings/i,
+    });
     await userEvent.click(settingsButton);
 
     const dialog = await screen.findByRole("dialog", {
@@ -195,11 +203,11 @@ describe("ManagerDashboard Settings modal", () => {
   });
 
   it("traps Tab focus in Settings modal (Shift+Tab from first goes to last)", async () => {
-    renderWithProviders(<ManagerDashboard />);
+    renderManagerRoute();
 
-    const settingsButton = (
-      await screen.findAllByRole("button", { name: /open team settings/i })
-    )[0];
+    const settingsButton = await screen.findByRole("button", {
+      name: /open team settings/i,
+    });
     await userEvent.click(settingsButton);
 
     const dialog = await screen.findByRole("dialog", {
@@ -220,11 +228,11 @@ describe("ManagerDashboard Settings modal", () => {
   });
 
   it("allows focus to stay in portaled content with data-focus-trap-allow", async () => {
-    renderWithProviders(<ManagerDashboard />);
+    renderManagerRoute();
 
-    const settingsButton = (
-      await screen.findAllByRole("button", { name: /open team settings/i })
-    )[0];
+    const settingsButton = await screen.findByRole("button", {
+      name: /open team settings/i,
+    });
     await userEvent.click(settingsButton);
 
     await screen.findByRole("dialog", { name: /team settings/i });
@@ -246,11 +254,11 @@ describe("ManagerDashboard Settings modal", () => {
   });
 
   it("pulls focus back into modal when focus leaves to element without data-focus-trap-allow", async () => {
-    renderWithProviders(<ManagerDashboard />);
+    renderManagerRoute();
 
-    const settingsButton = (
-      await screen.findAllByRole("button", { name: /open team settings/i })
-    )[0];
+    const settingsButton = await screen.findByRole("button", {
+      name: /open team settings/i,
+    });
     await userEvent.click(settingsButton);
 
     const dialog = await screen.findByRole("dialog", {

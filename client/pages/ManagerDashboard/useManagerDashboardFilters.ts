@@ -1,24 +1,30 @@
-import { useState, useEffect } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { todayLocalISO } from "@/lib/date-utils";
 
 export type ManagerTab = "tasks" | "workstations" | "employees" | "templates";
 
-const TAB_PARAM = "tab";
-const VALID_TABS: ManagerTab[] = [
-  "tasks",
-  "workstations",
-  "employees",
-  "templates",
-];
+const PATH_TO_TAB: Record<string, ManagerTab> = {
+  "/manager/dashboard": "tasks",
+  "/manager/workstations": "workstations",
+  "/manager/employees": "employees",
+  "/manager/task": "templates",
+};
 
-function tabFromSearchParams(searchParams: URLSearchParams): ManagerTab {
-  const tab = searchParams.get(TAB_PARAM);
-  return (VALID_TABS.includes(tab as ManagerTab) ? tab : "tasks") as ManagerTab;
+const TAB_TO_PATH: Record<ManagerTab, string> = {
+  tasks: "/manager/dashboard",
+  workstations: "/manager/workstations",
+  employees: "/manager/employees",
+  templates: "/manager/task",
+};
+
+function tabFromPathname(pathname: string): ManagerTab {
+  return PATH_TO_TAB[pathname] ?? "tasks";
 }
 
 export function useManagerDashboardFilters() {
-  const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [selectedDate, setSelectedDate] = useState<string>(() =>
     todayLocalISO(),
   );
@@ -26,17 +32,10 @@ export function useManagerDashboardFilters() {
   const [selectedWorkstation, setSelectedWorkstation] = useState<string | null>(
     null,
   );
-  const [activeTab, setActiveTabState] = useState<ManagerTab>(() =>
-    tabFromSearchParams(searchParams),
-  );
 
-  useEffect(() => {
-    setActiveTabState(tabFromSearchParams(searchParams));
-  }, [searchParams]);
-
+  const activeTab = tabFromPathname(location.pathname);
   const setActiveTab = (tab: ManagerTab) => {
-    setActiveTabState(tab);
-    setSearchParams(tab === "tasks" ? {} : { [TAB_PARAM]: tab });
+    navigate(TAB_TO_PATH[tab]);
   };
 
   return {

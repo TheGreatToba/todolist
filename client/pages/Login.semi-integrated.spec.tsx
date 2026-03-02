@@ -51,7 +51,7 @@ describe("Login (semi-integrated with MSW)", () => {
     mockNavigate.mockClear();
   });
 
-  it("on successful login (MSW returns 200), redirects to /today", async () => {
+  it("on successful login (MSW returns 200), redirects to /manager/today", async () => {
     const { view } = renderLoginWithProviders();
 
     await userEvent.type(
@@ -62,7 +62,9 @@ describe("Login (semi-integrated with MSW)", () => {
     await userEvent.click(view.getByRole("button", { name: /sign in/i }));
 
     await waitFor(() => {
-      expect(mockNavigate).toHaveBeenCalledWith("/today", { replace: true });
+      expect(mockNavigate).toHaveBeenCalledWith("/manager/today", {
+        replace: true,
+      });
     });
   });
 

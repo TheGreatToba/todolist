@@ -103,20 +103,6 @@ describe("TodayBoard", () => {
     mockMutateUpdateTask.mockResolvedValue({});
   });
 
-  it("navigates to manager dashboard when clicking Dashboard tab", async () => {
-    const { view } = renderTodayBoard();
-    await userEvent.click(view.getByRole("button", { name: /^Dashboard$/i }));
-    expect(mockNavigate).toHaveBeenCalledWith("/manager");
-  });
-
-  it("navigates to manager with tab param when clicking Workstations tab", async () => {
-    const { view } = renderTodayBoard();
-    await userEvent.click(
-      view.getByRole("button", { name: /^Workstations$/i }),
-    );
-    expect(mockNavigate).toHaveBeenCalledWith("/manager?tab=workstations");
-  });
-
   it("toggles task completion from today section", async () => {
     const { view } = renderTodayBoard();
 

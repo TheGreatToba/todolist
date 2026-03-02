@@ -15,19 +15,17 @@ import { getErrorMessage } from "@/lib/get-error-message";
 import { useManagerDashboardFilters } from "./useManagerDashboardFilters";
 import { useManagerDashboardModals } from "./useManagerDashboardModals";
 import { useManagerDashboardMutations } from "./useManagerDashboardMutations";
-import { ManagerDashboardHeader } from "./ManagerDashboardHeader";
 import { TasksTab } from "./TasksTab";
 import { WorkstationsTab } from "./WorkstationsTab";
 import { EmployeesTab } from "./EmployeesTab";
 import { TemplatesTab } from "./TemplatesTab";
 import { NewTaskModal } from "./NewTaskModal";
 import { EditTaskTemplateModal } from "./EditTaskTemplateModal";
-import { SettingsModal } from "./SettingsModal";
 import type { EditTaskTemplateFormState } from "./EditTaskTemplateModal";
 
 export default function ManagerDashboard() {
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { logout } = useAuth();
 
   const filters = useManagerDashboardFilters();
   const modals = useManagerDashboardModals();
@@ -390,14 +388,6 @@ export default function ManagerDashboard() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-primary/5 to-background">
-      <ManagerDashboardHeader
-        teamName={dashboard.team.name}
-        activeTab={filters.activeTab}
-        onTabChange={filters.setActiveTab}
-        onOpenSettings={modals.openSettingsModal}
-        onLogout={handleLogout}
-      />
-
       <div className="max-w-6xl mx-auto px-4 py-8">
         {filters.activeTab === "tasks" && (
           <TasksTab
@@ -517,14 +507,6 @@ export default function ManagerDashboard() {
         workstations={dashboard.workstations}
         teamMembers={teamMembers}
         isSubmitting={mutations.updateTaskTemplate.isPending}
-      />
-
-      <SettingsModal
-        isOpen={modals.showSettingsModal}
-        onClose={() => modals.setShowSettingsModal(false)}
-        teamName={dashboard.team.name}
-        modalRef={modals.settingsModalRef}
-        user={user}
       />
     </div>
   );

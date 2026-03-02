@@ -1,20 +1,18 @@
 import React from "react";
-import { Link } from "react-router-dom";
+import { NavLink } from "react-router-dom";
 import { LogOut, Settings, Users } from "lucide-react";
-import type { ManagerTab } from "./useManagerDashboardFilters";
 
 interface ManagerDashboardHeaderProps {
   teamName: string;
-  activeTab: ManagerTab;
-  onTabChange: (tab: ManagerTab) => void;
   onOpenSettings: () => void;
   onLogout: () => void;
 }
 
+const navLinkClass =
+  "flex-shrink-0 whitespace-nowrap border-b-2 border-transparent px-3 sm:px-4 py-2 font-medium text-muted-foreground transition hover:text-foreground data-[active]:border-primary data-[active]:text-primary";
+
 export function ManagerDashboardHeader({
   teamName,
-  activeTab,
-  onTabChange,
   onOpenSettings,
   onLogout,
 }: ManagerDashboardHeaderProps) {
@@ -50,57 +48,52 @@ export function ManagerDashboardHeader({
 
         <div className="border-t border-border pt-4 -mx-4 sm:mx-0">
           <div className="nav-tabs-scroll flex gap-2 sm:gap-4 overflow-x-auto pb-px px-4 sm:px-0">
-            <Link
-              to="/today"
-              className="flex-shrink-0 whitespace-nowrap border-b-2 border-transparent px-3 sm:px-4 py-2 font-medium text-muted-foreground transition hover:text-foreground"
+            <NavLink
+              to="/manager/today"
+              end
+              className={({ isActive }) =>
+                `${navLinkClass} ${isActive ? "border-primary text-primary" : ""}`
+              }
             >
               Today
-            </Link>
-            <button
-              onClick={() => onTabChange("tasks")}
-              className={`flex-shrink-0 whitespace-nowrap px-3 sm:px-4 py-2 font-medium transition border-b-2 ${
-                activeTab === "tasks"
-                  ? "border-primary text-primary"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-              }`}
-              type="button"
+            </NavLink>
+            <NavLink
+              to="/manager/dashboard"
+              end
+              className={({ isActive }) =>
+                `${navLinkClass} ${isActive ? "border-primary text-primary" : ""}`
+              }
             >
               Dashboard
-            </button>
-            <button
-              onClick={() => onTabChange("workstations")}
-              className={`flex-shrink-0 whitespace-nowrap px-3 sm:px-4 py-2 font-medium transition border-b-2 ${
-                activeTab === "workstations"
-                  ? "border-primary text-primary"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-              }`}
-              type="button"
+            </NavLink>
+            <NavLink
+              to="/manager/workstations"
+              end
+              className={({ isActive }) =>
+                `${navLinkClass} ${isActive ? "border-primary text-primary" : ""}`
+              }
             >
               Workstations
-            </button>
-            <button
-              onClick={() => onTabChange("employees")}
-              className={`flex-shrink-0 whitespace-nowrap inline-flex items-center px-3 sm:px-4 py-2 font-medium transition border-b-2 ${
-                activeTab === "employees"
-                  ? "border-primary text-primary"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-              }`}
-              type="button"
+            </NavLink>
+            <NavLink
+              to="/manager/employees"
+              end
+              className={({ isActive }) =>
+                `${navLinkClass} inline-flex items-center ${isActive ? "border-primary text-primary" : ""}`
+              }
             >
               <Users className="w-4 h-4 inline mr-1.5 sm:mr-2 flex-shrink-0" />
               Employees
-            </button>
-            <button
-              onClick={() => onTabChange("templates")}
-              className={`flex-shrink-0 whitespace-nowrap px-3 sm:px-4 py-2 font-medium transition border-b-2 ${
-                activeTab === "templates"
-                  ? "border-primary text-primary"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-              }`}
-              type="button"
+            </NavLink>
+            <NavLink
+              to="/manager/task"
+              end
+              className={({ isActive }) =>
+                `${navLinkClass} ${isActive ? "border-primary text-primary" : ""}`
+              }
             >
               Task
-            </button>
+            </NavLink>
           </div>
         </div>
       </div>
