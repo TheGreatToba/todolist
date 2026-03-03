@@ -14,6 +14,7 @@ model Team {
   id           String        @id @default(cuid())
   name         String
   managerId    String
+  tenantKey    String?       @unique
   manager      User          @relation("ManagerOfTeam", fields: [managerId], references: [id], onDelete: Cascade)
   members      User[]        @relation("TeamMembers")
   workstations Workstation[]
@@ -74,6 +75,7 @@ model User {
   passwordResetToken PasswordResetToken?
   assignedTasks      TaskTemplate[]      @relation("AssignedTasks")
   dayPreparations    DayPreparation[]
+  kpiEvents          ManagerKpiEvent[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -188,4 +190,19 @@ model DayPreparation {
 
   @@unique([managerId, date])
   @@index([date])
+}
+
+model ManagerKpiEvent {
+  id        String   @id @default(cuid())
+  managerId String
+  manager   User     @relation(fields: [managerId], references: [id], onDelete: Cascade)
+  name      String
+  occurredAt DateTime @default(now())
+  properties Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([managerId, name])
+  @@index([name, occurredAt])
 }

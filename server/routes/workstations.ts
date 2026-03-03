@@ -1,24 +1,34 @@
 import crypto from "crypto";
 import { RequestHandler } from "express";
 import { z } from "zod";
-import prisma from "../lib/db";
 import { hashPassword, hashToken } from "../lib/auth";
 import { sendErrorResponse } from "../lib/errors";
 import { logger } from "../lib/logger";
 import { getAuthOrThrow } from "../middleware/requireAuth";
+import { getTenantOrThrow } from "../middleware/requireTenantContext";
 import { sendSetPasswordEmail } from "../lib/email";
 import { getSetPasswordTokenExpiryHours } from "../lib/set-password-expiry";
 import { getFrontendBaseUrl } from "../lib/app-url";
 import { isTemplateDueOnDate } from "../jobs/daily-task-assignment";
-import {
-  getManagerTeamIds,
-  getManagerFirstTeam,
-  isTeamManagedBy,
-} from "../lib/manager-teams";
 import { paramString } from "../lib/params";
+import { scopedPrisma } from "../security/scoped-prisma";
+import {
+  assertManagerOwnsTeam,
+  assertTenantAccessToResource,
+} from "../security/tenantGuard";
+import type { TenantContext } from "../security/tenant-context";
 
 function generateSecureToken(): string {
   return crypto.randomBytes(32).toString("hex");
+}
+
+function canAccessTeam(tenant: TenantContext, teamId: string | null): boolean {
+  try {
+    assertTenantAccessToResource(tenant, teamId);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 const CreateWorkstationSchema = z.object({
@@ -58,14 +68,17 @@ export const handleGetWorkstations: RequestHandler = async (req, res) => {
   try {
     const payload = getAuthOrThrow(req, res);
     if (!payload) return;
-    const teamIds = await getManagerTeamIds(payload.userId);
+    const tenant = getTenantOrThrow(req, res);
+    if (!tenant) return;
+    const scoped = scopedPrisma(tenant);
+    const teamIds = tenant.teamIds;
 
     if (teamIds.length === 0) {
       res.status(404).json({ error: "Team not found" });
       return;
     }
 
-    const workstations = await prisma.workstation.findMany({
+    const workstations = await scoped.workstation.findMany({
       where: { teamId: { in: teamIds } },
       include: {
         employees: {
@@ -96,20 +109,31 @@ export const handleCreateWorkstation: RequestHandler = async (req, res) => {
   try {
     const payload = getAuthOrThrow(req, res);
     if (!payload) return;
+    const tenant = getTenantOrThrow(req, res);
+    if (!tenant) return;
+    const scoped = scopedPrisma(tenant);
     const body = CreateWorkstationSchema.parse(req.body);
 
-    let team: Awaited<ReturnType<typeof getManagerFirstTeam>>;
+    let team: { id: string } | null;
     if (body.teamId) {
-      const allowed = await isTeamManagedBy(body.teamId, payload.userId);
-      if (!allowed) {
+      try {
+        assertManagerOwnsTeam(tenant, body.teamId);
+      } catch {
         res
           .status(403)
           .json({ error: "Team not found or you do not manage this team." });
         return;
       }
-      team = await prisma.team.findUnique({ where: { id: body.teamId } });
+      team = await scoped.team.findFirst({
+        where: { id: body.teamId },
+        select: { id: true },
+      });
     } else {
-      team = await getManagerFirstTeam(payload.userId);
+      team = await scoped.team.findFirst({
+        where: { id: { in: tenant.teamIds } },
+        select: { id: true },
+        orderBy: { name: "asc" },
+      });
     }
     if (!team) {
       res.status(404).json({ error: "Team not found" });
@@ -117,7 +141,7 @@ export const handleCreateWorkstation: RequestHandler = async (req, res) => {
     }
 
     // Name unique per team: two managers can have a workstation with the same name
-    const existing = await prisma.workstation.findFirst({
+    const existing = await scoped.workstation.findFirst({
       where: { teamId: team.id, name: body.name },
     });
     if (existing) {
@@ -127,7 +151,7 @@ export const handleCreateWorkstation: RequestHandler = async (req, res) => {
       return;
     }
 
-    const workstation = await prisma.workstation.create({
+    const workstation = await scoped.workstation.create({
       data: { name: body.name, teamId: team.id },
     });
 
@@ -142,11 +166,18 @@ export const handleCreateEmployee: RequestHandler = async (req, res) => {
   try {
     const payload = getAuthOrThrow(req, res);
     if (!payload) return;
+    const tenant = getTenantOrThrow(req, res);
+    if (!tenant) return;
+    const scoped = scopedPrisma(tenant);
     const body = CreateEmployeeSchema.parse(req.body);
 
     // Check if user already exists
-    const existingUser = await prisma.user.findUnique({
-      where: { email: body.email },
+    const existingUser = await scoped.user.findFirst({
+      where: {
+        email: body.email,
+        teamId: { in: tenant.teamIds },
+      },
+      select: { id: true },
     });
 
     if (existingUser) {
@@ -154,14 +185,17 @@ export const handleCreateEmployee: RequestHandler = async (req, res) => {
       return;
     }
 
-    const teamIds = await getManagerTeamIds(payload.userId);
+    const teamIds = tenant.teamIds;
     if (teamIds.length === 0) {
       res.status(404).json({ error: "Team not found" });
       return;
     }
 
-    const requestedWorkstations = await prisma.workstation.findMany({
-      where: { id: { in: body.workstationIds } },
+    const requestedWorkstations = await scoped.workstation.findMany({
+      where: {
+        id: { in: body.workstationIds },
+        teamId: { in: teamIds },
+      },
     });
 
     if (requestedWorkstations.length !== body.workstationIds.length) {
@@ -169,8 +203,8 @@ export const handleCreateEmployee: RequestHandler = async (req, res) => {
       return;
     }
 
-    const allowed = requestedWorkstations.every(
-      (ws) => ws.teamId && teamIds.includes(ws.teamId),
+    const allowed = requestedWorkstations.every((ws) =>
+      canAccessTeam(tenant, ws.teamId),
     );
     if (!allowed) {
       res.status(403).json({
@@ -212,7 +246,7 @@ export const handleCreateEmployee: RequestHandler = async (req, res) => {
     expiresAt.setHours(expiresAt.getHours() + expiryHours);
 
     // Create employee and initial daily tasks in a single transaction to avoid partial writes.
-    const { employee } = await prisma.$transaction(async (tx) => {
+    const { employee } = await scoped.$transaction(async (tx) => {
       // Create employee in the same team as the selected workstations
       const employee = await tx.user.create({
         data: {
@@ -338,31 +372,33 @@ export const handleDeleteWorkstation: RequestHandler = async (req, res) => {
   try {
     const payload = getAuthOrThrow(req, res);
     if (!payload) return;
+    const tenant = getTenantOrThrow(req, res);
+    if (!tenant) return;
+    const scoped = scopedPrisma(tenant);
     const workstationId = paramString(req.params.workstationId);
     if (!workstationId) {
       res.status(400).json({ error: "Invalid workstation ID" });
       return;
     }
 
-    const teamIds = await getManagerTeamIds(payload.userId);
+    const teamIds = tenant.teamIds;
     if (teamIds.length === 0) {
       res.status(404).json({ error: "Team not found" });
       return;
     }
 
-    const workstation = await prisma.workstation.findUnique({
-      where: { id: workstationId },
+    const workstation = await scoped.workstation.findFirst({
+      where: {
+        id: workstationId,
+        teamId: { in: teamIds },
+      },
     });
-    if (
-      !workstation ||
-      !workstation.teamId ||
-      !teamIds.includes(workstation.teamId)
-    ) {
+    if (!workstation || !workstation.teamId) {
       res.status(404).json({ error: "Workstation not found" });
       return;
     }
 
-    const employeeCount = await prisma.employeeWorkstation.count({
+    const employeeCount = await scoped.employeeWorkstation.count({
       where: { workstationId },
     });
     if (employeeCount > 0) {
@@ -372,7 +408,7 @@ export const handleDeleteWorkstation: RequestHandler = async (req, res) => {
       return;
     }
 
-    await prisma.workstation.delete({
+    await scoped.workstation.delete({
       where: { id: workstationId },
     });
 
@@ -387,13 +423,16 @@ export const handleDeleteEmployee: RequestHandler = async (req, res) => {
   try {
     const payload = getAuthOrThrow(req, res);
     if (!payload) return;
+    const tenant = getTenantOrThrow(req, res);
+    if (!tenant) return;
+    const scoped = scopedPrisma(tenant);
     const employeeId = paramString(req.params.employeeId);
     if (!employeeId) {
       res.status(400).json({ error: "Invalid employee ID" });
       return;
     }
 
-    const employee = await prisma.user.findUnique({
+    const employee = await scoped.user.findFirst({
       where: { id: employeeId },
       select: { id: true, role: true, teamId: true },
     });
@@ -410,15 +449,16 @@ export const handleDeleteEmployee: RequestHandler = async (req, res) => {
       return;
     }
 
-    const isManaged = await isTeamManagedBy(employee.teamId, payload.userId);
-    if (!isManaged) {
+    try {
+      assertTenantAccessToResource(tenant, employee.teamId);
+    } catch {
       res
         .status(403)
         .json({ error: "You do not have permission to delete this employee" });
       return;
     }
 
-    await prisma.user.delete({
+    await scoped.user.delete({
       where: { id: employeeId },
     });
 
@@ -433,13 +473,16 @@ export const handleResendWelcomeEmail: RequestHandler = async (req, res) => {
   try {
     const payload = getAuthOrThrow(req, res);
     if (!payload) return;
+    const tenant = getTenantOrThrow(req, res);
+    if (!tenant) return;
+    const scoped = scopedPrisma(tenant);
     const employeeId = paramString(req.params.employeeId);
     if (!employeeId) {
       res.status(400).json({ error: "Invalid employee ID" });
       return;
     }
 
-    const employee = await prisma.user.findUnique({
+    const employee = await scoped.user.findFirst({
       where: { id: employeeId },
       include: {
         workstations: {
@@ -462,8 +505,9 @@ export const handleResendWelcomeEmail: RequestHandler = async (req, res) => {
       return;
     }
 
-    const isManaged = await isTeamManagedBy(employee.teamId, payload.userId);
-    if (!isManaged) {
+    try {
+      assertTenantAccessToResource(tenant, employee.teamId);
+    } catch {
       res.status(403).json({
         error: "You do not have permission to resend email for this employee",
       });
@@ -476,7 +520,7 @@ export const handleResendWelcomeEmail: RequestHandler = async (req, res) => {
     const expiresAt = new Date();
     expiresAt.setHours(expiresAt.getHours() + expiryHours);
 
-    await prisma.$transaction(async (tx) => {
+    await scoped.$transaction(async (tx) => {
       await tx.setPasswordToken.deleteMany({
         where: { userId: employeeId },
       });
@@ -522,14 +566,17 @@ export const handleGetTeamMembers: RequestHandler = async (req, res) => {
   try {
     const payload = getAuthOrThrow(req, res);
     if (!payload) return;
-    const teamIds = await getManagerTeamIds(payload.userId);
+    const tenant = getTenantOrThrow(req, res);
+    if (!tenant) return;
+    const scoped = scopedPrisma(tenant);
+    const teamIds = tenant.teamIds;
 
     if (teamIds.length === 0) {
       res.status(404).json({ error: "Team not found" });
       return;
     }
 
-    const membersData = await prisma.user.findMany({
+    const membersData = await scoped.user.findMany({
       where: {
         teamId: { in: teamIds },
         role: "EMPLOYEE",
@@ -573,6 +620,9 @@ export const handleUpdateEmployeeWorkstations: RequestHandler = async (
   try {
     const payload = getAuthOrThrow(req, res);
     if (!payload) return;
+    const tenant = getTenantOrThrow(req, res);
+    if (!tenant) return;
+    const scoped = scopedPrisma(tenant);
     const employeeId = paramString(req.params.employeeId);
     if (!employeeId) {
       res.status(400).json({ error: "Invalid employee ID" });
@@ -582,7 +632,7 @@ export const handleUpdateEmployeeWorkstations: RequestHandler = async (
     const body = UpdateEmployeeWorkstationsSchema.parse(req.body);
 
     // Verify employee exists and belongs to manager's team
-    const employee = await prisma.user.findUnique({
+    const employee = await scoped.user.findFirst({
       where: { id: employeeId },
       include: { team: true },
     });
@@ -599,16 +649,20 @@ export const handleUpdateEmployeeWorkstations: RequestHandler = async (
       return;
     }
 
-    const isManaged = await isTeamManagedBy(employee.teamId, payload.userId);
-    if (!isManaged) {
+    try {
+      assertTenantAccessToResource(tenant, employee.teamId);
+    } catch {
       res
         .status(403)
         .json({ error: "You do not have permission to update this employee" });
       return;
     }
 
-    const requestedWorkstations = await prisma.workstation.findMany({
-      where: { id: { in: body.workstationIds } },
+    const requestedWorkstations = await scoped.workstation.findMany({
+      where: {
+        id: { in: body.workstationIds },
+        teamId: { in: tenant.teamIds },
+      },
     });
 
     if (requestedWorkstations.length !== body.workstationIds.length) {
@@ -616,9 +670,8 @@ export const handleUpdateEmployeeWorkstations: RequestHandler = async (
       return;
     }
 
-    const managerTeamIds = await getManagerTeamIds(payload.userId);
-    const allowed = requestedWorkstations.every(
-      (ws) => ws.teamId && managerTeamIds.includes(ws.teamId),
+    const allowed = requestedWorkstations.every((ws) =>
+      canAccessTeam(tenant, ws.teamId),
     );
     if (!allowed) {
       res.status(403).json({
@@ -628,7 +681,7 @@ export const handleUpdateEmployeeWorkstations: RequestHandler = async (
     }
 
     // Update assignments and return updated employee in a single transaction to avoid partial writes.
-    const updatedEmployee = await prisma.$transaction(async (tx) => {
+    const updatedEmployee = await scoped.$transaction(async (tx) => {
       // Delete existing assignments
       await tx.employeeWorkstation.deleteMany({
         where: { employeeId },
@@ -697,6 +750,9 @@ export const handleUpdateWorkstationEmployees: RequestHandler = async (
   try {
     const payload = getAuthOrThrow(req, res);
     if (!payload) return;
+    const tenant = getTenantOrThrow(req, res);
+    if (!tenant) return;
+    const scoped = scopedPrisma(tenant);
     const workstationId = paramString(req.params.workstationId);
     if (!workstationId) {
       res.status(400).json({ error: "Invalid workstation ID" });
@@ -704,28 +760,34 @@ export const handleUpdateWorkstationEmployees: RequestHandler = async (
     }
 
     const body = UpdateWorkstationEmployeesSchema.parse(req.body);
-    const managerTeamIds = await getManagerTeamIds(payload.userId);
+    const managerTeamIds = tenant.teamIds;
     if (managerTeamIds.length === 0) {
       res.status(404).json({ error: "Team not found" });
       return;
     }
 
-    const workstation = await prisma.workstation.findUnique({
-      where: { id: workstationId },
+    const workstation = await scoped.workstation.findFirst({
+      where: {
+        id: workstationId,
+        teamId: { in: managerTeamIds },
+      },
       select: { id: true, teamId: true },
     });
 
     if (
       !workstation ||
       !workstation.teamId ||
-      !managerTeamIds.includes(workstation.teamId)
+      !canAccessTeam(tenant, workstation.teamId)
     ) {
       res.status(404).json({ error: "Workstation not found" });
       return;
     }
 
-    const employees = await prisma.user.findMany({
-      where: { id: { in: body.employeeIds } },
+    const employees = await scoped.user.findMany({
+      where: {
+        id: { in: body.employeeIds },
+        teamId: { in: managerTeamIds },
+      },
       select: { id: true, role: true, teamId: true },
     });
 
@@ -739,7 +801,7 @@ export const handleUpdateWorkstationEmployees: RequestHandler = async (
         employee.role === "EMPLOYEE" &&
         employee.teamId === workstation.teamId &&
         employee.teamId !== null &&
-        managerTeamIds.includes(employee.teamId),
+        canAccessTeam(tenant, employee.teamId),
     );
     if (!validEmployees) {
       res.status(403).json({
@@ -748,7 +810,7 @@ export const handleUpdateWorkstationEmployees: RequestHandler = async (
       return;
     }
 
-    await prisma.$transaction(async (tx) => {
+    await scoped.$transaction(async (tx) => {
       await tx.employeeWorkstation.deleteMany({
         where: { workstationId },
       });
@@ -763,7 +825,7 @@ export const handleUpdateWorkstationEmployees: RequestHandler = async (
       }
     });
 
-    const updatedWorkstation = await prisma.workstation.findUnique({
+    const updatedWorkstation = await scoped.workstation.findFirst({
       where: { id: workstationId },
       include: {
         employees: {

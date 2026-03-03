@@ -5,6 +5,7 @@ import { useManagerDashboardQuery } from "@/hooks/queries";
 import { todayLocalISO } from "@/lib/date-utils";
 import { ManagerDashboardHeader } from "./ManagerDashboard/ManagerDashboardHeader";
 import { SettingsModal } from "./ManagerDashboard/SettingsModal";
+import { ManagerExceptionAlertsBar } from "./ManagerDashboard/ManagerExceptionAlertsBar";
 
 export default function ManagerLayout() {
   const navigate = useNavigate();
@@ -15,7 +16,8 @@ export default function ManagerLayout() {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const settingsModalRef = useRef<HTMLDivElement | null>(null);
 
-  const teamName = dashboard?.team?.name ?? "Manager";
+  const teamName = dashboard?.team?.name ?? "Responsable";
+  const teamId = dashboard?.team?.id ?? user?.teamId ?? null;
 
   const handleLogout = () => {
     logout();
@@ -29,6 +31,7 @@ export default function ManagerLayout() {
         onOpenSettings={() => setShowSettingsModal(true)}
         onLogout={handleLogout}
       />
+      <ManagerExceptionAlertsBar teamId={teamId} />
       <Outlet />
       <SettingsModal
         isOpen={showSettingsModal}
@@ -36,6 +39,7 @@ export default function ManagerLayout() {
         teamName={teamName}
         modalRef={settingsModalRef}
         user={user}
+        teamId={teamId}
       />
     </>
   );

@@ -8,20 +8,42 @@ import {
   useTaskTemplatesQuery,
   useUpdateDailyTaskMutation,
   useUpdateWorkstationEmployeesMutation,
+  useBatchUpdateDailyTasksMutation,
+  useBatchUpdateTaskTemplatesMutation,
+  useManagerWeeklyReportQuery,
 } from "@/hooks/queries";
-import { Loader2, LogOut } from "lucide-react";
-import { toastError, toastInfo } from "@/lib/toast";
+import { Loader2, LogOut, Search } from "lucide-react";
+import { toastError, toastInfo, toastSuccess } from "@/lib/toast";
+import { formatBatchConflictSummary } from "@/lib/batch-conflict-messages";
 import { getErrorMessage } from "@/lib/get-error-message";
+import { todayLocalISO } from "@/lib/date-utils";
 import { useManagerDashboardFilters } from "./useManagerDashboardFilters";
 import { useManagerDashboardModals } from "./useManagerDashboardModals";
 import { useManagerDashboardMutations } from "./useManagerDashboardMutations";
 import { TasksTab } from "./TasksTab";
+import { PilotageTab } from "./PilotageTab";
 import { WorkstationsTab } from "./WorkstationsTab";
 import { EmployeesTab } from "./EmployeesTab";
 import { TemplatesTab } from "./TemplatesTab";
 import { NewTaskModal } from "./NewTaskModal";
 import { EditTaskTemplateModal } from "./EditTaskTemplateModal";
 import type { EditTaskTemplateFormState } from "./EditTaskTemplateModal";
+import { DIRECT_ASSIGNMENTS_ID } from "./types";
+import { ManagerGlobalSearch } from "./ManagerGlobalSearch";
+import type { ManagerBatchTaskTemplatesAction } from "@shared/api";
+import { trackManagerKpiEvent } from "@/lib/metrics";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+
+type ConfirmDeleteType = "workstation" | "employee" | "template";
 
 export default function ManagerDashboard() {
   const navigate = useNavigate();
@@ -41,8 +63,19 @@ export default function ManagerDashboard() {
   const { data: workstations = [] } = useWorkstationsQuery();
   const { data: teamMembers = [] } = useTeamMembersQuery();
   const { data: templates = [] } = useTaskTemplatesQuery();
+  const { data: weeklyReport } = useManagerWeeklyReportQuery({
+    date: filters.selectedDate,
+  });
   const updateDailyTask = useUpdateDailyTaskMutation();
   const updateWorkstationEmployees = useUpdateWorkstationEmployeesMutation();
+  const batchUpdateDailyTasks = useBatchUpdateDailyTasksMutation();
+  const batchUpdateTaskTemplates = useBatchUpdateTaskTemplatesMutation();
+  const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<{
+    type: ConfirmDeleteType;
+    id: string;
+    label: string;
+  } | null>(null);
 
   const [editTemplateForm, setEditTemplateForm] =
     useState<EditTaskTemplateFormState | null>(null);
@@ -55,7 +88,7 @@ export default function ManagerDashboard() {
   const handleCreateWorkstation = (e: React.FormEvent) => {
     e.preventDefault();
     if (!mutations.newWorkstation.trim()) {
-      toastError("Please enter a workstation name");
+      toastError("Merci de saisir un nom de poste");
       return;
     }
     mutations.createWorkstation.mutate({
@@ -64,8 +97,12 @@ export default function ManagerDashboard() {
   };
 
   const handleDeleteWorkstation = (workstationId: string) => {
-    if (!confirm("Are you sure you want to delete this workstation?")) return;
-    mutations.deleteWorkstation.mutate(workstationId);
+    const workstation = workstations.find((ws) => ws.id === workstationId);
+    setConfirmDelete({
+      type: "workstation",
+      id: workstationId,
+      label: workstation?.name ?? "ce poste",
+    });
   };
 
   const handleCreateEmployee = (e: React.FormEvent) => {
@@ -76,7 +113,7 @@ export default function ManagerDashboard() {
       mutations.newEmployee.workstationIds.length === 0
     ) {
       toastError(
-        "Please fill in name, email and select at least one workstation",
+        "Merci de renseigner le nom, l'e-mail et au moins un poste pour l'employé",
       );
       return;
     }
@@ -85,7 +122,7 @@ export default function ManagerDashboard() {
 
   const handleUpdateEmployeeWorkstations = (employeeId: string) => {
     if (mutations.editingWorkstations.length === 0) {
-      toastError("Please select at least one workstation");
+      toastError("Merci de sélectionner au moins un poste");
       return;
     }
     mutations.updateEmployeeWorkstations.mutate({
@@ -95,7 +132,12 @@ export default function ManagerDashboard() {
   };
 
   const handleDeleteEmployee = (employeeId: string) => {
-    mutations.deleteEmployee.mutate(employeeId);
+    const employee = teamMembers.find((member) => member.id === employeeId);
+    setConfirmDelete({
+      type: "employee",
+      id: employeeId,
+      label: employee?.name ?? "cet employe",
+    });
   };
 
   const handleResendWelcomeEmail = (employeeId: string) => {
@@ -108,14 +150,14 @@ export default function ManagerDashboard() {
       mutations.newTask.creationMode === "create" &&
       !mutations.newTask.title
     ) {
-      toastError("Please fill in the task title");
+      toastError("Merci de renseigner le titre de la tâche");
       return;
     }
     if (
       mutations.newTask.creationMode === "template" &&
       !mutations.newTask.templateId
     ) {
-      toastError("Please select a template");
+      toastError("Merci de sélectionner un modèle de tâche");
       return;
     }
     if (
@@ -123,7 +165,7 @@ export default function ManagerDashboard() {
         !mutations.newTask.isRecurring) &&
       mutations.newTask.assignmentType === "none"
     ) {
-      toastError("Please select where to assign this task");
+      toastError("Merci de choisir où assigner cette tâche");
       return;
     }
     if (
@@ -132,7 +174,7 @@ export default function ManagerDashboard() {
       mutations.newTask.assignmentType === "workstation" &&
       !mutations.newTask.workstationId
     ) {
-      toastError("Please select a workstation");
+      toastError("Merci de sélectionner un poste");
       return;
     }
     if (
@@ -141,13 +183,13 @@ export default function ManagerDashboard() {
       mutations.newTask.assignmentType === "employee" &&
       !mutations.newTask.assignedToEmployeeId
     ) {
-      toastError("Please select an employee");
+      toastError("Merci de sélectionner un employé");
       return;
     }
     if (mutations.newTask.creationMode === "template") {
       const assignmentType = mutations.newTask.assignmentType;
       if (assignmentType === "none") {
-        toastError("Please select where to assign this task");
+        toastError("Merci de choisir où assigner cette tâche");
         return;
       }
       mutations.assignTaskFromTemplate.mutate({
@@ -186,7 +228,12 @@ export default function ManagerDashboard() {
     try {
       await updateDailyTask.mutateAsync({ taskId, isCompleted: !isCompleted });
     } catch (error) {
-      toastError(getErrorMessage(error, "Failed to update task."));
+      toastError(
+        getErrorMessage(
+          error,
+          "Échec de la mise à jour de la tâche. Merci de réessayer.",
+        ),
+      );
     }
   };
 
@@ -196,8 +243,8 @@ export default function ManagerDashboard() {
     } catch (error) {
       const fallback =
         error instanceof Error && /CONFLICT/i.test(error.message)
-          ? "This employee already has this task today."
-          : "Failed to reassign task.";
+          ? "Cet employé a déjà cette tâche aujourd'hui."
+          : "Échec de la ré-attribution de la tâche.";
       toastError(getErrorMessage(error, fallback));
     }
   };
@@ -216,8 +263,95 @@ export default function ManagerDashboard() {
       });
     } catch (error) {
       toastError(
-        getErrorMessage(error, "Failed to prepare day task assignment."),
+        getErrorMessage(
+          error,
+          "Échec de la préparation de la tâche pour la journée.",
+        ),
       );
+    }
+  };
+
+  const handleBatchAssignTasks = async (
+    taskIds: string[],
+    employeeId: string,
+  ) => {
+    if (!employeeId || taskIds.length === 0) return;
+    try {
+      const data = await batchUpdateDailyTasks.mutateAsync({
+        taskIds,
+        employeeId,
+      });
+      trackManagerKpiEvent("manager.batch_update_daily_tasks", {
+        mode: "assign_or_reassign",
+        taskCount: data.updatedCount,
+        requestedTaskCount: taskIds.length,
+        employeeId,
+        date: filters.selectedDate,
+        source: "tasks_tab_or_pilotage",
+      });
+      if (data.updatedCount > 0) {
+        toastSuccess(
+          `${data.updatedCount} tâche(s) assignée(s).`,
+          data.conflicts.length > 0
+            ? formatBatchConflictSummary(data.conflicts)
+            : undefined,
+        );
+      }
+      if (data.conflicts.length > 0 && data.updatedCount === 0) {
+        toastError(
+          "Aucune tâche mise à jour.",
+          formatBatchConflictSummary(data.conflicts),
+        );
+      }
+    } catch (error) {
+      const fallback = "Échec de la mise à jour des tâches sélectionnées.";
+      toastError(getErrorMessage(error, fallback));
+    }
+  };
+
+  const handleBatchUnassignTasks = async (taskIds: string[]) => {
+    if (taskIds.length === 0) return;
+    try {
+      const data = await batchUpdateDailyTasks.mutateAsync({
+        taskIds,
+        employeeId: null,
+      });
+      trackManagerKpiEvent("manager.batch_update_daily_tasks", {
+        mode: "unassign",
+        taskCount: data.updatedCount,
+        requestedTaskCount: taskIds.length,
+        date: filters.selectedDate,
+        source: "tasks_tab_or_pilotage",
+      });
+      if (data.updatedCount > 0) {
+        toastSuccess(
+          `${data.updatedCount} tâche(s) désassignée(s).`,
+          data.conflicts.length > 0
+            ? formatBatchConflictSummary(data.conflicts)
+            : undefined,
+        );
+      }
+      if (data.conflicts.length > 0 && data.updatedCount === 0) {
+        toastError(
+          "Aucune tâche désassignée.",
+          formatBatchConflictSummary(data.conflicts),
+        );
+      }
+    } catch (error) {
+      const fallback = "Échec de la désassignation des tâches sélectionnées.";
+      toastError(getErrorMessage(error, fallback));
+    }
+  };
+
+  const handleBatchUpdateTemplates = async (
+    options: ManagerBatchTaskTemplatesAction,
+  ) => {
+    if (options.templateIds.length === 0) return;
+    try {
+      await batchUpdateTaskTemplates.mutateAsync(options);
+    } catch (error) {
+      const fallback = "Échec de la mise à jour des modèles sélectionnés.";
+      toastError(getErrorMessage(error, fallback));
     }
   };
 
@@ -245,14 +379,14 @@ export default function ManagerDashboard() {
     e.preventDefault();
     if (!modals.editingTemplate || !editTemplateForm) return;
     if (!editTemplateForm.title) {
-      toastError("Please fill in the task title");
+      toastError("Merci de renseigner le titre de la tâche");
       return;
     }
     if (
       !editTemplateForm.isRecurring &&
       editTemplateForm.assignmentType === "none"
     ) {
-      toastError("Please select where to assign this task");
+      toastError("Merci de choisir où assigner cette tâche");
       return;
     }
     if (
@@ -260,7 +394,7 @@ export default function ManagerDashboard() {
       editTemplateForm.assignmentType === "workstation" &&
       !editTemplateForm.workstationId
     ) {
-      toastError("Please select a workstation");
+      toastError("Merci de sélectionner un poste");
       return;
     }
     if (
@@ -268,7 +402,7 @@ export default function ManagerDashboard() {
       editTemplateForm.assignmentType === "employee" &&
       !editTemplateForm.assignedToEmployeeId
     ) {
-      toastError("Please select an employee");
+      toastError("Merci de sélectionner un employé");
       return;
     }
 
@@ -306,7 +440,68 @@ export default function ManagerDashboard() {
   };
 
   const handleDeleteTemplate = (templateId: string) => {
-    mutations.deleteTaskTemplate.mutate(templateId);
+    const template = templates.find((t) => t.id === templateId);
+    setConfirmDelete({
+      type: "template",
+      id: templateId,
+      label: template?.title ?? "cette tache",
+    });
+  };
+
+  const executeConfirmDelete = () => {
+    if (!confirmDelete) return;
+    const { type, id } = confirmDelete;
+    if (type === "workstation") {
+      mutations.deleteWorkstation.mutate(id);
+    } else if (type === "employee") {
+      mutations.deleteEmployee.mutate(id);
+    } else {
+      mutations.deleteTaskTemplate.mutate(id);
+    }
+    setConfirmDelete(null);
+  };
+
+  const handleSelectEmployeeFromSearch = (employeeId: string) => {
+    filters.setActiveTab("tasks");
+    filters.setSelectedEmployee(employeeId);
+    filters.setSelectedWorkstation(null);
+  };
+
+  const handleSelectWorkstationFromSearch = (workstationId: string) => {
+    filters.setActiveTab("tasks");
+    filters.setSelectedWorkstation(workstationId);
+    filters.setSelectedEmployee(null);
+  };
+
+  const handleSelectTemplateFromSearch = () => {
+    filters.setActiveTab("templates");
+  };
+
+  const handleSelectTaskFromSearch = (taskId: string) => {
+    const task = dashboard?.dailyTasks.find((t) => t.id === taskId);
+    if (!task) return;
+    filters.setActiveTab("tasks");
+    const empId =
+      (task as { employeeId?: string | null; employee?: { id: string } })
+        .employeeId ?? task.employee?.id;
+    if (empId) filters.setSelectedEmployee(empId);
+    const workstationId =
+      task.taskTemplate.workstation?.id ?? DIRECT_ASSIGNMENTS_ID;
+    filters.setSelectedWorkstation(workstationId);
+  };
+
+  const handleGoToTasksWithFilters = (options: {
+    employeeId?: string | null;
+    workstationId?: string | null;
+  }) => {
+    filters.setActiveTab("tasks");
+    filters.setSelectedDate(todayLocalISO());
+    filters.setSelectedEmployee(
+      options.employeeId !== undefined ? options.employeeId : null,
+    );
+    filters.setSelectedWorkstation(
+      options.workstationId !== undefined ? options.workstationId : null,
+    );
   };
 
   // Reset edit form when modal closes
@@ -319,23 +514,23 @@ export default function ManagerDashboard() {
   const handleExportCsv = () => {
     if (!dashboard) return;
     if (dashboard.dailyTasks.length === 0) {
-      toastInfo("No tasks to export for this date.");
+      toastInfo("Aucune tâche à exporter pour cette date.");
       return;
     }
     const headers = [
       "Date",
-      "Employee",
-      "Workstation",
-      "Task",
-      "Status",
-      "Completed At",
+      "Employé",
+      "Poste",
+      "Tâche",
+      "Statut",
+      "Terminée à",
     ];
     const rows = dashboard.dailyTasks.map((t) => [
       filters.selectedDate,
       t.employee.name,
       t.taskTemplate.workstation?.name ?? "Direct",
       t.taskTemplate.title,
-      t.isCompleted ? "Completed" : "Pending",
+      t.isCompleted ? "Terminée" : "En attente",
       t.completedAt ? new Date(t.completedAt).toLocaleString() : "",
     ]);
     const csv = [
@@ -368,10 +563,10 @@ export default function ManagerDashboard() {
       <div className="min-h-screen bg-gradient-to-b from-primary/5 to-background flex items-center justify-center">
         <div className="text-center">
           <h2 className="text-2xl font-bold text-foreground mb-2">
-            Team not found
+            Équipe introuvable
           </h2>
           <p className="text-muted-foreground mb-6">
-            Please contact your administrator
+            Merci de contacter votre administrateur
           </p>
           <button
             onClick={handleLogout}
@@ -379,7 +574,7 @@ export default function ManagerDashboard() {
             type="button"
           >
             <LogOut className="w-4 h-4" />
-            Sign out
+            Se déconnecter
           </button>
         </div>
       </div>
@@ -389,6 +584,90 @@ export default function ManagerDashboard() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-primary/5 to-background">
       <div className="max-w-6xl mx-auto px-4 py-8">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">
+              Tableau de bord manager
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              Recherchez des employés, postes, modèles et tâches.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsGlobalSearchOpen(true)}
+            className="inline-flex items-center gap-2 rounded-lg border border-input bg-background px-3 py-2 text-sm font-medium text-foreground shadow-sm hover:bg-secondary"
+            aria-label="Ouvrir la recherche globale manager"
+          >
+            <Search className="h-4 w-4" />
+            <span className="hidden sm:inline">Rechercher...</span>
+          </button>
+        </div>
+
+        {weeklyReport && (
+          <div className="mb-6">
+            <div className="rounded-xl border border-border bg-card/80 p-4 shadow-sm">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-foreground">
+                    Analyse hebdomadaire ({weeklyReport.weekStart} -{" "}
+                    {weeklyReport.weekEnd})
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {weeklyReport.summary.completedTasks} terminées -{" "}
+                    {weeklyReport.summary.overdueTasks} en retard -{" "}
+                    {weeklyReport.recurringDelays.length} récurrences à
+                    surveiller
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                  {weeklyReport.bottlenecks.employees[0] && (
+                    <span className="rounded-full bg-secondary/60 px-2 py-1">
+                      Goulot d&apos;étranglement principal :{" "}
+                      {weeklyReport.bottlenecks.employees[0].name} (
+                      {weeklyReport.bottlenecks.employees[0].peakDayTaskCount}{" "}
+                      tâches/jour au pic)
+                    </span>
+                  )}
+                  {weeklyReport.bottlenecks.workstations[0] && (
+                    <span className="rounded-full bg-secondary/60 px-2 py-1">
+                      Poste sensible :{" "}
+                      {weeklyReport.bottlenecks.workstations[0].name} (
+                      {
+                        weeklyReport.bottlenecks.workstations[0]
+                          .peakDayUncompletedCount
+                      }{" "}
+                      inachevée/jour au pic)
+                    </span>
+                  )}
+                  {weeklyReport.recurringDelays[0] && (
+                    <span className="rounded-full bg-secondary/60 px-2 py-1">
+                      Retard récurrent : {weeklyReport.recurringDelays[0].title}{" "}
+                      (
+                      {Math.round(
+                        weeklyReport.recurringDelays[0].delayRate * 100,
+                      )}
+                      % en retard)
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {filters.activeTab === "pilotage" && (
+          <PilotageTab
+            teamMembers={teamMembers}
+            onToggleTask={handleToggleManagerTask}
+            onBatchAssignTasks={handleBatchAssignTasks}
+            onGoToTasksWithFilters={handleGoToTasksWithFilters}
+            isBatchUpdatingTasks={batchUpdateDailyTasks.isPending}
+            pendingTaskId={updateDailyTask.variables?.taskId ?? null}
+            isTaskUpdating={updateDailyTask.isPending}
+          />
+        )}
+
         {filters.activeTab === "tasks" && (
           <TasksTab
             dashboard={dashboard}
@@ -407,6 +686,9 @@ export default function ManagerDashboard() {
             isPrepareAssigning={mutations.assignTaskFromTemplate.isPending}
             pendingTaskId={updateDailyTask.variables?.taskId ?? null}
             isTaskUpdating={updateDailyTask.isPending}
+            onBatchAssignTasks={handleBatchAssignTasks}
+            onBatchUnassignTasks={handleBatchUnassignTasks}
+            isBatchUpdatingTasks={batchUpdateDailyTasks.isPending}
           />
         )}
 
@@ -426,12 +708,12 @@ export default function ManagerDashboard() {
                 },
                 {
                   onSuccess: () =>
-                    toastInfo("Workstation employees updated successfully."),
+                    toastInfo("Employes du poste mis a jour avec succes."),
                   onError: (error) =>
                     toastError(
                       getErrorMessage(
                         error,
-                        "Failed to update workstation employees.",
+                        "Echec de la mise a jour des employes du poste.",
                       ),
                     ),
                 },
@@ -464,9 +746,26 @@ export default function ManagerDashboard() {
             onEdit={handleEditTemplate}
             onDelete={handleDeleteTemplate}
             onCreateTemplate={() => modals.setShowNewTaskModal(true)}
+            teamMembers={teamMembers}
+            workstations={workstations}
+            onBatchUpdateTemplates={handleBatchUpdateTemplates}
+            isBatchUpdatingTemplates={batchUpdateTaskTemplates.isPending}
           />
         )}
       </div>
+
+      <ManagerGlobalSearch
+        open={isGlobalSearchOpen}
+        onOpenChange={setIsGlobalSearchOpen}
+        employees={teamMembers}
+        workstations={workstations}
+        templates={templates}
+        dashboard={dashboard}
+        onSelectEmployee={handleSelectEmployeeFromSearch}
+        onSelectWorkstation={handleSelectWorkstationFromSearch}
+        onSelectTemplate={handleSelectTemplateFromSearch}
+        onSelectTask={handleSelectTaskFromSearch}
+      />
 
       <NewTaskModal
         isOpen={modals.showNewTaskModal}
@@ -508,6 +807,36 @@ export default function ManagerDashboard() {
         teamMembers={teamMembers}
         isSubmitting={mutations.updateTaskTemplate.isPending}
       />
+
+      <AlertDialog
+        open={!!confirmDelete}
+        onOpenChange={(open) => {
+          if (!open) setConfirmDelete(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmer la suppression</AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmDelete?.type === "workstation" &&
+                `Voulez-vous vraiment supprimer le poste « ${confirmDelete.label} » ?`}
+              {confirmDelete?.type === "employee" &&
+                `Voulez-vous vraiment supprimer « ${confirmDelete.label} » ? Cette action est irréversible.`}
+              {confirmDelete?.type === "template" &&
+                `Voulez-vous vraiment supprimer la tâche « ${confirmDelete.label} » ? Les tâches déjà générées seront conservées comme historique.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={executeConfirmDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Supprimer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

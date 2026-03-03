@@ -5,6 +5,7 @@ import rateLimit from "express-rate-limit";
 import cookieParser from "cookie-parser";
 import { ensureAuthConfig, verifyToken, AUTH_COOKIE_NAME } from "./lib/auth";
 import { requireAuth, requireRole } from "./middleware/requireAuth";
+import { requireTenantContext } from "./middleware/requireTenantContext";
 import { parse as parseCookie } from "cookie";
 import {
   setCsrfCookieIfMissing,
@@ -23,6 +24,7 @@ import { createServer as createHttpServer, Server as HttpServer } from "http";
 import { Server as SocketIOServer } from "socket.io";
 import prisma from "./lib/db";
 import { setIO } from "./lib/socket";
+import { loadTenantContextFromAuth } from "./security/tenant-context";
 import { handleDemo } from "./routes/demo";
 import {
   handleSignup,
@@ -48,6 +50,9 @@ import {
   handleAssignTaskFromTemplate,
   handleGetManualTriggerTemplates,
   handleCreateTaskFromTemplate,
+  handleManagerBatchUpdateDailyTasks,
+  handleManagerBatchUpdateTaskTemplates,
+  handleGetManagerWeeklyReport,
 } from "./routes/tasks";
 import {
   handleGetWorkstations,
@@ -60,6 +65,7 @@ import {
   handleUpdateEmployeeWorkstations,
   handleUpdateWorkstationEmployees,
 } from "./routes/workstations";
+import { handleTrackManagerKpiEvent } from "./routes/metrics";
 
 export function createApp(): Express {
   const app = express();
@@ -235,78 +241,97 @@ export function createApp(): Express {
   });
 
   app.get("/api/demo", handleDemo);
+  const withTenantContext = [requireAuth, requireTenantContext];
+  const withManagerTenantContext = [
+    requireAuth,
+    requireTenantContext,
+    requireRole("MANAGER"),
+  ];
 
   // Auth routes (rate-limited)
   app.post("/api/auth/signup", authLimiter, handleSignup);
   app.post("/api/auth/login", authLimiter, handleLogin);
-  app.get("/api/auth/profile", requireAuth, handleProfile);
-  app.patch("/api/auth/profile", requireAuth, handleUpdateProfile);
+  app.get("/api/auth/profile", ...withTenantContext, handleProfile);
+  app.patch("/api/auth/profile", ...withTenantContext, handleUpdateProfile);
   app.post("/api/auth/logout", handleLogout);
   app.post("/api/auth/set-password", setPasswordLimiter, handleSetPassword);
   app.post("/api/auth/forgot-password", authLimiter, handleForgotPassword);
   app.post("/api/auth/reset-password", setPasswordLimiter, handleResetPassword);
 
   // Task routes
-  app.get("/api/tasks/daily", requireAuth, handleGetEmployeeDailyTasks);
-  app.patch("/api/tasks/daily/:taskId", requireAuth, handleUpdateDailyTask);
+  app.get(
+    "/api/tasks/daily",
+    ...withTenantContext,
+    handleGetEmployeeDailyTasks,
+  );
+  app.patch(
+    "/api/tasks/daily/:taskId",
+    ...withTenantContext,
+    handleUpdateDailyTask,
+  );
+  app.post(
+    "/api/manager/daily-tasks/batch",
+    ...withManagerTenantContext,
+    handleManagerBatchUpdateDailyTasks,
+  );
   app.post(
     "/api/tasks/templates",
-    requireAuth,
-    requireRole("MANAGER"),
+    ...withManagerTenantContext,
     handleCreateTaskTemplate,
   );
   app.post(
     "/api/tasks/assign-from-template",
-    requireAuth,
-    requireRole("MANAGER"),
+    ...withManagerTenantContext,
     handleAssignTaskFromTemplate,
   );
   app.get(
     "/api/tasks/templates",
-    requireAuth,
-    requireRole("MANAGER"),
+    ...withManagerTenantContext,
     handleGetTaskTemplates,
+  );
+  app.post(
+    "/api/manager/task-templates/batch",
+    ...withManagerTenantContext,
+    handleManagerBatchUpdateTaskTemplates,
   );
   app.get(
     "/api/tasks/templates/manual-trigger",
-    requireAuth,
-    requireRole("MANAGER"),
+    ...withManagerTenantContext,
     handleGetManualTriggerTemplates,
   );
   app.post(
     "/api/tasks/from-template/:templateId",
-    requireAuth,
-    requireRole("MANAGER"),
+    ...withManagerTenantContext,
     handleCreateTaskFromTemplate,
   );
   app.patch(
     "/api/tasks/templates/:templateId",
-    requireAuth,
-    requireRole("MANAGER"),
+    ...withManagerTenantContext,
     handleUpdateTaskTemplate,
   );
   app.delete(
     "/api/tasks/templates/:templateId",
-    requireAuth,
-    requireRole("MANAGER"),
+    ...withManagerTenantContext,
     handleDeleteTaskTemplate,
   );
   app.get(
     "/api/manager/dashboard",
-    requireAuth,
-    requireRole("MANAGER"),
+    ...withManagerTenantContext,
     handleGetManagerDashboard,
   );
   app.get(
     "/api/manager/today-board",
-    requireAuth,
-    requireRole("MANAGER"),
+    ...withManagerTenantContext,
     handleGetManagerTodayBoard,
+  );
+  app.get(
+    "/api/manager/weekly-report",
+    ...withManagerTenantContext,
+    handleGetManagerWeeklyReport,
   );
   app.post(
     "/api/manager/today-board/tasks",
-    requireAuth,
-    requireRole("MANAGER"),
+    ...withManagerTenantContext,
     handleCreateManagerTodayBoardTask,
   );
   // Cron endpoint: verify secret first (rejects invalid secrets without consuming rate limit quota)
@@ -321,26 +346,22 @@ export function createApp(): Express {
   // Workstation routes
   app.get(
     "/api/workstations",
-    requireAuth,
-    requireRole("MANAGER"),
+    ...withManagerTenantContext,
     handleGetWorkstations,
   );
   app.post(
     "/api/workstations",
-    requireAuth,
-    requireRole("MANAGER"),
+    ...withManagerTenantContext,
     handleCreateWorkstation,
   );
   app.delete(
     "/api/workstations/:workstationId",
-    requireAuth,
-    requireRole("MANAGER"),
+    ...withManagerTenantContext,
     handleDeleteWorkstation,
   );
   app.patch(
     "/api/workstations/:workstationId/employees",
-    requireAuth,
-    requireRole("MANAGER"),
+    ...withManagerTenantContext,
     handleUpdateWorkstationEmployees,
   );
 
@@ -348,33 +369,34 @@ export function createApp(): Express {
   app.post(
     "/api/employees",
     createEmployeeLimiter,
-    requireAuth,
-    requireRole("MANAGER"),
+    ...withManagerTenantContext,
     handleCreateEmployee,
   );
   app.get(
     "/api/team/members",
-    requireAuth,
-    requireRole("MANAGER"),
+    ...withManagerTenantContext,
     handleGetTeamMembers,
   );
   app.patch(
     "/api/employees/:employeeId/workstations",
-    requireAuth,
-    requireRole("MANAGER"),
+    ...withManagerTenantContext,
     handleUpdateEmployeeWorkstations,
   );
   app.delete(
     "/api/employees/:employeeId",
-    requireAuth,
-    requireRole("MANAGER"),
+    ...withManagerTenantContext,
     handleDeleteEmployee,
   );
   app.post(
     "/api/employees/:employeeId/resend-welcome-email",
-    requireAuth,
-    requireRole("MANAGER"),
+    ...withManagerTenantContext,
     handleResendWelcomeEmail,
+  );
+
+  app.post(
+    "/api/manager/kpi-events",
+    ...withManagerTenantContext,
+    handleTrackManagerKpiEvent,
   );
 
   return app;
@@ -428,20 +450,8 @@ export function attachSocketIO(
         return next(new Error("Invalid token"));
       }
 
-      const teamIds: string[] = [];
-      if (payload.role === "EMPLOYEE") {
-        const user = await prisma.user.findUnique({
-          where: { id: payload.userId },
-          select: { teamId: true },
-        });
-        if (user?.teamId) teamIds.push(user.teamId);
-      } else if (payload.role === "MANAGER") {
-        const teams = await prisma.team.findMany({
-          where: { managerId: payload.userId },
-          select: { id: true },
-        });
-        teamIds.push(...teams.map((t) => t.id));
-      }
+      const tenant = await loadTenantContextFromAuth(payload);
+      const teamIds = tenant.teamIds;
 
       (socket.data as { userId: string; teamIds: string[] }).userId =
         payload.userId;

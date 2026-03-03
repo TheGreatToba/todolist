@@ -113,6 +113,8 @@ export interface DailyTask {
   status?: "UNASSIGNED" | "ASSIGNED" | "DONE";
   isCompleted: boolean;
   completedAt?: string | null;
+  /** Priority score for Pilotage/Today views (higher = more urgent). Server-computed. */
+  priorityScore?: number;
   taskTemplate: {
     id: string;
     title: string;
@@ -232,6 +234,46 @@ export interface ManagerDashboard {
       defaultEmployeeId?: string | null;
     }>;
   };
+  /** Pilotage view: aggregates for critical delays, unassigned, overload, hot workstations. Optional; can be computed client-side from dashboard + today-board. */
+  attention?: ManagerDashboardAttention;
+}
+
+/** Aggregates for the Pilotage tab (critical delays, unassigned tasks, overloaded employees, workstations under pressure). */
+export interface ManagerDashboardAttention {
+  overdueCritical: Array<{
+    taskId: string;
+    title: string;
+    date: string;
+    workstationName?: string;
+  }>;
+  unassigned: Array<{
+    taskId: string;
+    title: string;
+    workstationName?: string;
+  }>;
+  overloadedEmployees: Array<{
+    employeeId: string;
+    name: string;
+    taskCount: number;
+    threshold: number;
+  }>;
+  hotWorkstations: Array<{
+    workstationId: string;
+    name: string;
+    uncompletedCount: number;
+  }>;
+  topActions: PilotageAction[];
+}
+
+/** A suggested action for the Pilotage "Top 5 actions" queue. */
+export interface PilotageAction {
+  id: string;
+  label: string;
+  kind: "assign" | "reassign" | "mark_done" | "rebalance" | "view";
+  taskIds?: string[];
+  employeeId?: string;
+  workstationId?: string;
+  priorityScore: number;
 }
 
 export interface TodayBoardTask extends DailyTask {
@@ -264,4 +306,119 @@ export interface ManualTriggerTemplateOption {
 export interface CreateTaskFromTemplateRequest {
   assignedToEmployeeId?: string;
   dueDate?: string;
+}
+
+// Manager batch operations
+
+export type BatchWriteMode = "all-or-nothing" | "partial";
+
+export interface ManagerBatchDailyTasksRequest {
+  /**
+   * Daily task ids to update (must be visible in manager dashboard / today board).
+   */
+  taskIds: string[];
+  /**
+   * Target employee for assignment / reassignment.
+   * Use null to unassign selected tasks.
+   */
+  employeeId: string | null;
+  /**
+   * Batch write mode. Defaults to "all-or-nothing" when omitted.
+   * "partial" is reserved for future progressive adoption.
+   */
+  mode?: BatchWriteMode;
+}
+
+/** One conflict item in a batch response (task/template id + reason code). */
+export interface BatchConflictItem {
+  id: string;
+  reason: string;
+}
+
+export interface ManagerBatchDailyTasksResponse {
+  success: boolean;
+  updatedCount: number;
+  /** Number of tasks skipped (e.g. due to conflicts in partial mode). */
+  skippedCount: number;
+  /** List of task IDs that could not be updated, with reason (e.g. duplicate_template_date_employee). */
+  conflicts: BatchConflictItem[];
+}
+
+type ManagerBatchTaskTemplatesBase = {
+  /**
+   * Batch write mode. Defaults to "all-or-nothing" when omitted.
+   * "partial" is reserved for future progressive adoption.
+   */
+  mode?: BatchWriteMode;
+};
+
+export type ManagerBatchTaskTemplatesAction =
+  | (ManagerBatchTaskTemplatesBase & {
+      action: "assignToEmployee";
+      templateIds: string[];
+      employeeId: string;
+    })
+  | (ManagerBatchTaskTemplatesBase & {
+      action: "assignToWorkstation";
+      templateIds: string[];
+      workstationId: string;
+    })
+  | (ManagerBatchTaskTemplatesBase & {
+      action: "clearAssignment";
+      templateIds: string[];
+    })
+  | (ManagerBatchTaskTemplatesBase & {
+      action: "setNotifyEmployee";
+      templateIds: string[];
+      notifyEmployee: boolean;
+    });
+
+export interface ManagerBatchTaskTemplatesResponse {
+  success: boolean;
+  updatedCount: number;
+  skippedCount: number;
+  conflicts: BatchConflictItem[];
+}
+
+// Weekly manager report (bottlenecks, sensitive posts, recurring delays)
+
+export interface ManagerWeeklyReportSummary {
+  totalTasks: number;
+  completedTasks: number;
+  overdueTasks: number;
+}
+
+export interface ManagerWeeklyReportEmployeeBottleneck {
+  employeeId: string;
+  name: string;
+  peakDayTaskCount: number;
+  averageDailyTaskCount: number;
+}
+
+export interface ManagerWeeklyReportWorkstationBottleneck {
+  workstationId: string | null;
+  name: string;
+  peakDayUncompletedCount: number;
+  averageDailyUncompletedCount: number;
+}
+
+export interface ManagerWeeklyReportRecurringDelay {
+  templateId: string | null;
+  title: string;
+  workstationName?: string;
+  totalOccurrences: number;
+  delayedOccurrences: number;
+  delayRate: number;
+}
+
+export interface ManagerWeeklyReport {
+  weekStart: string;
+  weekEnd: string;
+  generatedAt: string;
+  summary: ManagerWeeklyReportSummary;
+  bottlenecks: {
+    employees: ManagerWeeklyReportEmployeeBottleneck[];
+    workstations: ManagerWeeklyReportWorkstationBottleneck[];
+  };
+  recurringDelays: ManagerWeeklyReportRecurringDelay[];
 }

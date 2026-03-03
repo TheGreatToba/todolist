@@ -1,5 +1,5 @@
 import React from "react";
-import { Filter, Calendar, Download, Plus } from "lucide-react";
+import { Calendar, CheckSquare, Download, Filter, Plus } from "lucide-react";
 import type { ManagerDashboard as ManagerDashboardType } from "@shared/api";
 import type { TeamMember } from "./types";
 
@@ -14,6 +14,8 @@ interface TasksDateFiltersProps {
   workstations: ManagerDashboardType["workstations"];
   onExportCsv: () => void;
   onNewTask: () => void;
+  isMultiSelectMode: boolean;
+  onToggleMultiSelect: () => void;
 }
 
 export function TasksDateFilters({
@@ -27,19 +29,21 @@ export function TasksDateFilters({
   workstations,
   onExportCsv,
   onNewTask,
+  isMultiSelectMode,
+  onToggleMultiSelect,
 }: TasksDateFiltersProps) {
   return (
     <>
       <div className="flex flex-wrap gap-2 mb-4">
         <span className="text-sm text-muted-foreground self-center">
-          History:
+          Historique :
         </span>
         {[...Array(8)].map((_, i) => {
           const d = new Date();
           d.setDate(d.getDate() - i);
           const dateStr = d.toISOString().split("T")[0];
           const label =
-            i === 0 ? "Today" : i === 1 ? "Yesterday" : `-${i} days`;
+            i === 0 ? "Aujourd'hui" : i === 1 ? "Hier" : `-${i} jours`;
           return (
             <button
               key={dateStr}
@@ -67,16 +71,16 @@ export function TasksDateFilters({
               value={selectedDate}
               onChange={(e) => onDateChange(e.target.value)}
               className="px-4 py-2 rounded-lg border border-input bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              aria-label="Select date"
+              aria-label="Sélectionner une date"
             />
           </div>
           <select
             value={selectedEmployee ?? ""}
             onChange={(e) => onEmployeeChange(e.target.value || null)}
             className="px-4 py-2 rounded-lg border border-input bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-            aria-label="Filter by employee"
+            aria-label="Filtrer par employé"
           >
-            <option value="">All Employees</option>
+            <option value="">Tous les employés</option>
             {teamMembers.map((m) => (
               <option key={m.id} value={m.id}>
                 {m.name}
@@ -87,10 +91,10 @@ export function TasksDateFilters({
             value={selectedWorkstation ?? ""}
             onChange={(e) => onWorkstationChange(e.target.value || null)}
             className="px-4 py-2 rounded-lg border border-input bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-            aria-label="Filter by workstation"
+            aria-label="Filtrer par poste"
           >
-            <option value="">All Workstations</option>
-            <option value="__direct__">Direct assignments</option>
+            <option value="">Tous les postes</option>
+            <option value="__direct__">Affectations directes</option>
             {workstations.map((ws) => (
               <option key={ws.id} value={ws.id}>
                 {ws.name}
@@ -100,12 +104,25 @@ export function TasksDateFilters({
         </div>
         <div className="flex gap-2">
           <button
+            onClick={onToggleMultiSelect}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition ${
+              isMultiSelectMode
+                ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                : "border border-input text-foreground hover:bg-secondary"
+            }`}
+            type="button"
+            aria-pressed={isMultiSelectMode}
+          >
+            <CheckSquare className="w-4 h-4" />
+            Sélection multiple
+          </button>
+          <button
             onClick={onExportCsv}
             className="inline-flex items-center gap-2 px-4 py-2 border border-input hover:bg-secondary text-foreground rounded-lg font-medium transition"
             type="button"
           >
             <Download className="w-4 h-4" />
-            Export CSV
+            Exporter en CSV
           </button>
           <button
             onClick={onNewTask}
@@ -113,7 +130,7 @@ export function TasksDateFilters({
             type="button"
           >
             <Plus className="w-4 h-4" />
-            New Task
+            Nouvelle tâche
           </button>
         </div>
       </div>

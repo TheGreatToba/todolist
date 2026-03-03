@@ -63,12 +63,12 @@ export function EditTaskTemplateModal({
             id="edit-template-modal-title"
             className="text-xl font-bold text-foreground"
           >
-            Edit Task Template
+            Modifier le modele de tache
           </h2>
           <button
             onClick={onClose}
             className="p-1 hover:bg-secondary rounded-lg transition"
-            aria-label="Close edit template modal"
+            aria-label="Fermer la modale de modification du modele"
             type="button"
           >
             <X className="w-5 h-5 text-muted-foreground" />
@@ -81,7 +81,7 @@ export function EditTaskTemplateModal({
               htmlFor="edit-template-title"
               className="block text-sm font-medium text-foreground mb-2"
             >
-              Task Title
+              Titre de la tache
             </label>
             <input
               id="edit-template-title"
@@ -89,14 +89,14 @@ export function EditTaskTemplateModal({
               required
               value={form.title}
               onChange={(e) => onFormChange({ ...form, title: e.target.value })}
-              placeholder="e.g., Clean the workstation"
+              placeholder="Ex. : Nettoyer le poste"
               className="w-full px-4 py-2 rounded-lg border border-input bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
             />
           </div>
 
           <div>
             <span className="block text-sm font-medium text-foreground mb-2">
-              Assign To
+              Affecter a
             </span>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <label
@@ -121,7 +121,7 @@ export function EditTaskTemplateModal({
                   className="w-4 h-4"
                 />
                 <span className="text-sm font-medium text-foreground">
-                  Workstation
+                  Poste
                 </span>
               </label>
               <label
@@ -146,7 +146,7 @@ export function EditTaskTemplateModal({
                   className="w-4 h-4"
                 />
                 <span className="text-sm font-medium text-foreground">
-                  Employee
+                  Employe
                 </span>
               </label>
               {canStayUnassigned && (
@@ -173,7 +173,7 @@ export function EditTaskTemplateModal({
                     className="w-4 h-4"
                   />
                   <span className="text-sm font-medium text-foreground">
-                    Unassigned
+                    Non assignee
                   </span>
                 </label>
               )}
@@ -186,7 +186,7 @@ export function EditTaskTemplateModal({
                 htmlFor="edit-template-workstation"
                 className="block text-sm font-medium text-foreground mb-2"
               >
-                Workstation
+                Poste
               </label>
               <select
                 id="edit-template-workstation"
@@ -197,7 +197,7 @@ export function EditTaskTemplateModal({
                 }
                 className="w-full px-4 py-2 rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
               >
-                <option value="">Select a workstation</option>
+                <option value="">Selectionner un poste</option>
                 {workstations.map((ws) => (
                   <option key={ws.id} value={ws.id}>
                     {ws.name}
@@ -213,7 +213,7 @@ export function EditTaskTemplateModal({
                 htmlFor="edit-template-employee"
                 className="block text-sm font-medium text-foreground mb-2"
               >
-                Employee
+                Employe
               </label>
               <select
                 id="edit-template-employee"
@@ -227,7 +227,7 @@ export function EditTaskTemplateModal({
                 }
                 className="w-full px-4 py-2 rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
               >
-                <option value="">Select an employee</option>
+                <option value="">Selectionner un employe</option>
                 {teamMembers.map((member) => (
                   <option key={member.id} value={member.id}>
                     {member.name} ({member.email})
@@ -242,7 +242,7 @@ export function EditTaskTemplateModal({
               htmlFor="edit-template-description"
               className="block text-sm font-medium text-foreground mb-2"
             >
-              Description (optional)
+              Description (optionnelle)
             </label>
             <textarea
               id="edit-template-description"
@@ -250,7 +250,7 @@ export function EditTaskTemplateModal({
               onChange={(e) =>
                 onFormChange({ ...form, description: e.target.value })
               }
-              placeholder="Add any additional details..."
+              placeholder="Ajouter des details complementaires..."
               className="w-full px-4 py-2 rounded-lg border border-input bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary resize-none"
               rows={3}
             />
@@ -277,7 +277,7 @@ export function EditTaskTemplateModal({
               htmlFor="edit-template-recurring"
               className="text-sm text-foreground cursor-pointer flex-1"
             >
-              Recurring task (created daily)
+              Tache recurrente (cree chaque jour)
             </label>
           </div>
 
@@ -295,7 +295,7 @@ export function EditTaskTemplateModal({
               htmlFor="edit-template-notify"
               className="text-sm text-foreground cursor-pointer flex-1"
             >
-              Notify employee when task is assigned
+              Notifier l'employe lors de l'affectation
             </label>
           </div>
 
@@ -305,14 +305,14 @@ export function EditTaskTemplateModal({
               onClick={onClose}
               className="flex-1 px-4 py-2 border border-input text-foreground rounded-lg hover:bg-secondary transition font-medium"
             >
-              Cancel
+              Annuler
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
               className="flex-1 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg transition font-medium disabled:opacity-50"
             >
-              Save Changes
+              Enregistrer les modifications
             </button>
           </div>
         </form>

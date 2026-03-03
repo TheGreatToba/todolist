@@ -48,7 +48,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.error || "Login failed");
+        throw new Error(data.error || "Echec de la connexion");
       }
       return response.json() as Promise<{ user: User }>;
     },
@@ -57,7 +57,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setError(null);
     },
     onError: (err) => {
-      setError(err instanceof Error ? err.message : "An error occurred");
+      setError(err instanceof Error ? err.message : "Une erreur est survenue");
     },
   });
 
@@ -77,7 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       if (!response.ok) {
         const data = await response.json();
-        throw new Error(data.error || "Signup failed");
+        throw new Error(data.error || "Echec de la creation du compte");
       }
       return response.json() as Promise<{ user: User }>;
     },
@@ -86,7 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setError(null);
     },
     onError: (err) => {
-      setError(err instanceof Error ? err.message : "An error occurred");
+      setError(err instanceof Error ? err.message : "Une erreur est survenue");
     },
   });
 

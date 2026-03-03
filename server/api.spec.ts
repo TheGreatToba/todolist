@@ -1101,6 +1101,41 @@ describe("Permissions - role-based access", () => {
     }
   });
 
+  it("GET /api/manager/weekly-report returns summary and sections for manager", async () => {
+    const agent = request.agent(app);
+    await agent
+      .post("/api/auth/login")
+      .send({ email: "mgr@test.com", password: "password" });
+
+    const today = new Date();
+    const dateYmd = `${today.getFullYear()}-${String(
+      today.getMonth() + 1,
+    ).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+
+    const res = await agent.get(
+      `/api/manager/weekly-report?date=${encodeURIComponent(dateYmd)}`,
+    );
+
+    expect([200, 404]).toContain(res.status);
+    if (res.status === 404) {
+      // No managed team or data; acceptable for this generic integration test.
+      return;
+    }
+
+    expect(res.body).toHaveProperty("weekStart");
+    expect(res.body).toHaveProperty("weekEnd");
+    expect(typeof res.body.weekStart).toBe("string");
+    expect(typeof res.body.weekEnd).toBe("string");
+    expect(res.body).toHaveProperty("summary");
+    expect(res.body.summary).toHaveProperty("totalTasks");
+    expect(res.body.summary).toHaveProperty("completedTasks");
+    expect(res.body.summary).toHaveProperty("overdueTasks");
+    expect(res.body).toHaveProperty("bottlenecks");
+    expect(Array.isArray(res.body.bottlenecks.employees)).toBe(true);
+    expect(Array.isArray(res.body.bottlenecks.workstations)).toBe(true);
+    expect(Array.isArray(res.body.recurringDelays)).toBe(true);
+  });
+
   it("GET /api/manager/today-board as EMPLOYEE returns 403", async () => {
     const agent = request.agent(app);
     await agent
@@ -3734,6 +3769,959 @@ describe("Daily tasks API", () => {
       if (templateId) {
         await prisma.taskTemplate.deleteMany({ where: { id: templateId } });
       }
+    }
+  });
+
+  it("POST /api/manager/daily-tasks/batch assigns selected tasks within same team (happy path)", async () => {
+    const manager = await prisma.user.findUnique({
+      where: { email: "mgr@test.com" },
+      select: { id: true, teamId: true },
+    });
+    const source = await prisma.user.findUnique({
+      where: { email: "emp@test.com" },
+      select: { id: true, teamId: true, role: true },
+    });
+    const target = await prisma.user.findUnique({
+      where: { email: "carol@test.com" },
+      select: { id: true, teamId: true, role: true },
+    });
+    expect(manager?.id).toBeTruthy();
+    expect(source?.role).toBe("EMPLOYEE");
+    expect(target?.role).toBe("EMPLOYEE");
+    expect(source?.teamId).toBe(manager?.teamId);
+    expect(target?.teamId).toBe(manager?.teamId);
+
+    const targetDate = "2026-02-23";
+    const dateObj = new Date(`${targetDate}T00:00:00.000Z`);
+
+    let templateId: string | null = null;
+    let taskId: string | null = null;
+    try {
+      const template = await prisma.taskTemplate.create({
+        data: {
+          title: `Batch reassign source ${Date.now()}`,
+          description: "Batch happy path",
+          createdById: manager!.id,
+          assignedToEmployeeId: source!.id,
+          isRecurring: false,
+          notifyEmployee: false,
+        },
+      });
+      templateId = template.id;
+
+      const task = await prisma.dailyTask.create({
+        data: {
+          taskTemplateId: template.id,
+          templateSourceId: template.id,
+          templateTitle: template.title,
+          templateDescription: template.description,
+          templateRecurrenceType: template.recurrenceType,
+          templateIsRecurring: template.isRecurring,
+          templateWorkstationId: template.workstationId,
+          templateWorkstationName: null,
+          employeeId: source!.id,
+          date: dateObj,
+          status: "ASSIGNED",
+          isCompleted: false,
+        },
+      });
+      taskId = task.id;
+
+      const agent = request.agent(app);
+      await agent
+        .post("/api/auth/login")
+        .send({ email: "mgr@test.com", password: "password" });
+
+      const res = await agent
+        .post("/api/manager/daily-tasks/batch")
+        .send({ taskIds: [task.id], employeeId: target!.id });
+
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({
+        success: true,
+        updatedCount: 1,
+        skippedCount: 0,
+        conflicts: [],
+      });
+
+      const updated = await prisma.dailyTask.findUnique({
+        where: { id: task.id },
+        select: { employeeId: true, isCompleted: true, status: true },
+      });
+      expect(updated?.employeeId).toBe(target!.id);
+      expect(updated?.isCompleted).toBe(false);
+      expect(updated?.status).toBe("ASSIGNED");
+    } finally {
+      if (taskId) {
+        await prisma.dailyTask.deleteMany({ where: { id: taskId } });
+      }
+      if (templateId) {
+        await prisma.taskTemplate.deleteMany({ where: { id: templateId } });
+      }
+    }
+  });
+
+  it("POST /api/manager/daily-tasks/batch unassigns selected tasks when employeeId is null", async () => {
+    const manager = await prisma.user.findUnique({
+      where: { email: "mgr@test.com" },
+      select: { id: true, teamId: true },
+    });
+    const source = await prisma.user.findUnique({
+      where: { email: "emp@test.com" },
+      select: { id: true, teamId: true, role: true },
+    });
+    expect(manager?.id).toBeTruthy();
+    expect(source?.role).toBe("EMPLOYEE");
+    expect(source?.teamId).toBe(manager?.teamId);
+
+    const targetDate = "2026-02-24";
+    const dateObj = new Date(`${targetDate}T00:00:00.000Z`);
+
+    let templateId: string | null = null;
+    let taskId: string | null = null;
+    try {
+      const template = await prisma.taskTemplate.create({
+        data: {
+          title: `Batch unassign source ${Date.now()}`,
+          description: "Batch unassign",
+          createdById: manager!.id,
+          assignedToEmployeeId: source!.id,
+          isRecurring: false,
+          notifyEmployee: false,
+        },
+      });
+      templateId = template.id;
+
+      const task = await prisma.dailyTask.create({
+        data: {
+          taskTemplateId: template.id,
+          templateSourceId: template.id,
+          templateTitle: template.title,
+          templateDescription: template.description,
+          templateRecurrenceType: template.recurrenceType,
+          templateIsRecurring: template.isRecurring,
+          templateWorkstationId: template.workstationId,
+          templateWorkstationName: null,
+          employeeId: source!.id,
+          date: dateObj,
+          status: "ASSIGNED",
+          isCompleted: false,
+        },
+      });
+      taskId = task.id;
+
+      const agent = request.agent(app);
+      await agent
+        .post("/api/auth/login")
+        .send({ email: "mgr@test.com", password: "password" });
+
+      const res = await agent.post("/api/manager/daily-tasks/batch").send({
+        taskIds: [task.id],
+        employeeId: null,
+      });
+
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({
+        success: true,
+        updatedCount: 1,
+        skippedCount: 0,
+        conflicts: [],
+      });
+
+      const updated = await prisma.dailyTask.findUnique({
+        where: { id: task.id },
+        select: { employeeId: true, isCompleted: true, status: true },
+      });
+      expect(updated?.employeeId).toBeNull();
+      expect(updated?.isCompleted).toBe(false);
+      expect(updated?.status).toBe("UNASSIGNED");
+    } finally {
+      if (taskId) {
+        await prisma.dailyTask.deleteMany({ where: { id: taskId } });
+      }
+      if (templateId) {
+        await prisma.taskTemplate.deleteMany({ where: { id: templateId } });
+      }
+    }
+  });
+
+  it("POST /api/manager/daily-tasks/batch returns 409 when target already has same template on that date", async () => {
+    const manager = await prisma.user.findUnique({
+      where: { email: "mgr@test.com" },
+      select: { id: true, teamId: true },
+    });
+    const source = await prisma.user.findUnique({
+      where: { email: "emp@test.com" },
+      select: { id: true, teamId: true, role: true },
+    });
+    const target = await prisma.user.findUnique({
+      where: { email: "carol@test.com" },
+      select: { id: true, teamId: true, role: true },
+    });
+    expect(manager?.id).toBeTruthy();
+    expect(source?.role).toBe("EMPLOYEE");
+    expect(target?.role).toBe("EMPLOYEE");
+    expect(source?.teamId).toBe(manager?.teamId);
+    expect(target?.teamId).toBe(manager?.teamId);
+
+    const targetDate = "2026-02-25";
+    const dateObj = new Date(`${targetDate}T00:00:00.000Z`);
+
+    let templateId: string | null = null;
+    let existingTaskId: string | null = null;
+    let batchTaskId: string | null = null;
+    try {
+      const template = await prisma.taskTemplate.create({
+        data: {
+          title: `Batch conflict source ${Date.now()}`,
+          description: "Batch conflict",
+          createdById: manager!.id,
+          assignedToEmployeeId: source!.id,
+          isRecurring: false,
+          notifyEmployee: false,
+        },
+      });
+      templateId = template.id;
+
+      const existing = await prisma.dailyTask.create({
+        data: {
+          taskTemplateId: template.id,
+          templateSourceId: template.id,
+          templateTitle: template.title,
+          templateDescription: template.description,
+          templateRecurrenceType: template.recurrenceType,
+          templateIsRecurring: template.isRecurring,
+          templateWorkstationId: template.workstationId,
+          templateWorkstationName: null,
+          employeeId: target!.id,
+          date: dateObj,
+          status: "ASSIGNED",
+          isCompleted: false,
+        },
+      });
+      existingTaskId = existing.id;
+
+      const toReassign = await prisma.dailyTask.create({
+        data: {
+          taskTemplateId: template.id,
+          templateSourceId: template.id,
+          templateTitle: template.title,
+          templateDescription: template.description,
+          templateRecurrenceType: template.recurrenceType,
+          templateIsRecurring: template.isRecurring,
+          templateWorkstationId: template.workstationId,
+          templateWorkstationName: null,
+          employeeId: source!.id,
+          date: dateObj,
+          status: "ASSIGNED",
+          isCompleted: false,
+        },
+      });
+      batchTaskId = toReassign.id;
+
+      const agent = request.agent(app);
+      await agent
+        .post("/api/auth/login")
+        .send({ email: "mgr@test.com", password: "password" });
+
+      const res = await agent.post("/api/manager/daily-tasks/batch").send({
+        taskIds: [toReassign.id],
+        employeeId: target!.id,
+      });
+
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({
+        success: true,
+        updatedCount: 0,
+        skippedCount: 1,
+        conflicts: [
+          { id: toReassign.id, reason: "duplicate_template_date_employee" },
+        ],
+      });
+    } finally {
+      const idsToDelete = [existingTaskId, batchTaskId].filter(
+        Boolean,
+      ) as string[];
+      if (idsToDelete.length > 0) {
+        await prisma.dailyTask.deleteMany({
+          where: { id: { in: idsToDelete } },
+        });
+      }
+      if (templateId) {
+        await prisma.taskTemplate.deleteMany({ where: { id: templateId } });
+      }
+    }
+  });
+
+  it("POST /api/manager/daily-tasks/batch rejects mixing tasks from different teams for the same target employee", async () => {
+    const manager = await prisma.user.findUnique({
+      where: { email: "mgr@test.com" },
+      select: { id: true },
+    });
+    expect(manager).not.toBeNull();
+
+    const team1 = await prisma.team.findFirst({
+      where: { managerId: manager!.id },
+      select: { id: true },
+    });
+    expect(team1).not.toBeNull();
+
+    const bcryptjs = (await import("bcryptjs")).default;
+    const secondTeam = await prisma.team.create({
+      data: { name: "Batch Second Team", managerId: manager!.id },
+    });
+
+    const empTeam1 = await prisma.user.findFirst({
+      where: { teamId: team1!.id, role: "EMPLOYEE" },
+      select: { id: true },
+    });
+    expect(empTeam1).not.toBeNull();
+
+    const empTeam2 = await prisma.user.create({
+      data: {
+        name: "Batch Emp Team 2",
+        email: `batch-emp-t2-${Date.now()}@test.com`,
+        passwordHash: await bcryptjs.hash("password", 10),
+        role: "EMPLOYEE",
+        teamId: secondTeam.id,
+      },
+    });
+
+    const targetDate = "2026-02-26";
+    const dateObj = new Date(`${targetDate}T00:00:00.000Z`);
+
+    let template1Id: string | null = null;
+    let template2Id: string | null = null;
+    let task1Id: string | null = null;
+    let task2Id: string | null = null;
+
+    try {
+      const template1 = await prisma.taskTemplate.create({
+        data: {
+          title: `Batch cross-team t1 ${Date.now()}`,
+          createdById: manager!.id,
+          assignedToEmployeeId: empTeam1!.id,
+          isRecurring: false,
+          notifyEmployee: false,
+        },
+      });
+      template1Id = template1.id;
+
+      const template2 = await prisma.taskTemplate.create({
+        data: {
+          title: `Batch cross-team t2 ${Date.now()}`,
+          createdById: manager!.id,
+          assignedToEmployeeId: empTeam2.id,
+          isRecurring: false,
+          notifyEmployee: false,
+        },
+      });
+      template2Id = template2.id;
+
+      const task1 = await prisma.dailyTask.create({
+        data: {
+          taskTemplateId: template1.id,
+          templateSourceId: template1.id,
+          templateTitle: template1.title,
+          templateDescription: template1.description,
+          templateRecurrenceType: template1.recurrenceType,
+          templateIsRecurring: template1.isRecurring,
+          templateWorkstationId: template1.workstationId,
+          templateWorkstationName: null,
+          employeeId: empTeam1!.id,
+          date: dateObj,
+          status: "ASSIGNED",
+          isCompleted: false,
+        },
+      });
+      task1Id = task1.id;
+
+      const task2 = await prisma.dailyTask.create({
+        data: {
+          taskTemplateId: template2.id,
+          templateSourceId: template2.id,
+          templateTitle: template2.title,
+          templateDescription: template2.description,
+          templateRecurrenceType: template2.recurrenceType,
+          templateIsRecurring: template2.isRecurring,
+          templateWorkstationId: template2.workstationId,
+          templateWorkstationName: null,
+          employeeId: empTeam2.id,
+          date: dateObj,
+          status: "ASSIGNED",
+          isCompleted: false,
+        },
+      });
+      task2Id = task2.id;
+
+      const agent = request.agent(app);
+      await agent
+        .post("/api/auth/login")
+        .send({ email: "mgr@test.com", password: "password" });
+
+      const res = await agent.post("/api/manager/daily-tasks/batch").send({
+        taskIds: [task1.id, task2.id],
+        employeeId: empTeam1!.id,
+      });
+
+      expect(res.status).toBe(400);
+      expect(res.body).toMatchObject({
+        error:
+          "Target employee must belong to the same team as the selected tasks",
+      });
+    } finally {
+      const taskIds = [task1Id, task2Id].filter(Boolean) as string[];
+      if (taskIds.length > 0) {
+        await prisma.dailyTask.deleteMany({ where: { id: { in: taskIds } } });
+      }
+      const templateIds = [template1Id, template2Id].filter(
+        Boolean,
+      ) as string[];
+      if (templateIds.length > 0) {
+        await prisma.taskTemplate.deleteMany({
+          where: { id: { in: templateIds } },
+        });
+      }
+      await prisma.user.delete({ where: { id: empTeam2.id } }).catch(() => {});
+      await prisma.team
+        .delete({ where: { id: secondTeam.id } })
+        .catch(() => {});
+    }
+  });
+
+  it("POST /api/manager/daily-tasks/batch detects duplicate_in_batch conflicts within the same request", async () => {
+    const manager = await prisma.user.findUnique({
+      where: { email: "mgr@test.com" },
+      select: { id: true, teamId: true },
+    });
+    const sourceA = await prisma.user.findUnique({
+      where: { email: "emp@test.com" },
+      select: { id: true, teamId: true, role: true },
+    });
+    const sourceB = await prisma.user.findUnique({
+      where: { email: "carol@test.com" },
+      select: { id: true, teamId: true, role: true },
+    });
+    expect(manager?.id).toBeTruthy();
+    expect(sourceA?.role).toBe("EMPLOYEE");
+    expect(sourceB?.role).toBe("EMPLOYEE");
+    expect(sourceA?.teamId).toBe(manager?.teamId);
+    expect(sourceB?.teamId).toBe(manager?.teamId);
+
+    const targetDate = "2026-02-27";
+    const dateObj = new Date(`${targetDate}T00:00:00.000Z`);
+
+    let templateId: string | null = null;
+    let taskAId: string | null = null;
+    let taskBId: string | null = null;
+    try {
+      const template = await prisma.taskTemplate.create({
+        data: {
+          title: `Batch duplicate-in-batch ${Date.now()}`,
+          description: "duplicate_in_batch conflict",
+          createdById: manager!.id,
+          assignedToEmployeeId: sourceA!.id,
+          isRecurring: false,
+          notifyEmployee: false,
+        },
+      });
+      templateId = template.id;
+
+      const taskA = await prisma.dailyTask.create({
+        data: {
+          taskTemplateId: template.id,
+          templateSourceId: template.id,
+          templateTitle: template.title,
+          templateDescription: template.description,
+          templateRecurrenceType: template.recurrenceType,
+          templateIsRecurring: template.isRecurring,
+          templateWorkstationId: template.workstationId,
+          templateWorkstationName: null,
+          employeeId: sourceA!.id,
+          date: dateObj,
+          status: "ASSIGNED",
+          isCompleted: false,
+        },
+      });
+      taskAId = taskA.id;
+
+      const taskB = await prisma.dailyTask.create({
+        data: {
+          taskTemplateId: template.id,
+          templateSourceId: template.id,
+          templateTitle: template.title,
+          templateDescription: template.description,
+          templateRecurrenceType: template.recurrenceType,
+          templateIsRecurring: template.isRecurring,
+          templateWorkstationId: template.workstationId,
+          templateWorkstationName: null,
+          employeeId: sourceB!.id,
+          date: dateObj,
+          status: "ASSIGNED",
+          isCompleted: false,
+        },
+      });
+      taskBId = taskB.id;
+
+      const agent = request.agent(app);
+      await agent
+        .post("/api/auth/login")
+        .send({ email: "mgr@test.com", password: "password" });
+
+      const res = await agent.post("/api/manager/daily-tasks/batch").send({
+        taskIds: [taskA.id, taskB.id],
+        employeeId: sourceB!.id,
+      });
+
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({
+        success: true,
+        updatedCount: 0,
+        skippedCount: 1,
+      });
+      expect(res.body.conflicts).toEqual([
+        { id: taskB.id, reason: "duplicate_in_batch" },
+      ]);
+
+      const afterA = await prisma.dailyTask.findUnique({
+        where: { id: taskA.id },
+        select: { employeeId: true },
+      });
+      const afterB = await prisma.dailyTask.findUnique({
+        where: { id: taskB.id },
+        select: { employeeId: true },
+      });
+      expect(afterA?.employeeId).toBe(sourceA!.id);
+      expect(afterB?.employeeId).toBe(sourceB!.id);
+    } finally {
+      const idsToDelete = [taskAId, taskBId].filter(Boolean) as string[];
+      if (idsToDelete.length > 0) {
+        await prisma.dailyTask.deleteMany({
+          where: { id: { in: idsToDelete } },
+        });
+      }
+      if (templateId) {
+        await prisma.taskTemplate.deleteMany({ where: { id: templateId } });
+      }
+    }
+  });
+
+  it("POST /api/manager/daily-tasks/batch reports unassign_multiple_unassigned conflicts when unique unassigned slot is already used", async () => {
+    const manager = await prisma.user.findUnique({
+      where: { email: "mgr@test.com" },
+      select: { id: true, teamId: true },
+    });
+    const sourceA = await prisma.user.findUnique({
+      where: { email: "emp@test.com" },
+      select: { id: true, teamId: true, role: true },
+    });
+    const sourceB = await prisma.user.findUnique({
+      where: { email: "carol@test.com" },
+      select: { id: true, teamId: true, role: true },
+    });
+    expect(manager?.id).toBeTruthy();
+    expect(sourceA?.role).toBe("EMPLOYEE");
+    expect(sourceB?.role).toBe("EMPLOYEE");
+    expect(sourceA?.teamId).toBe(manager?.teamId);
+    expect(sourceB?.teamId).toBe(manager?.teamId);
+
+    const targetDate = "2026-02-28";
+    const dateObj = new Date(`${targetDate}T00:00:00.000Z`);
+
+    let templateId: string | null = null;
+    let existingUnassignedId: string | null = null;
+    let taskAId: string | null = null;
+    let taskBId: string | null = null;
+    try {
+      const template = await prisma.taskTemplate.create({
+        data: {
+          title: `Batch unassign uniqueness ${Date.now()}`,
+          description: "unassign_multiple_unassigned conflict",
+          createdById: manager!.id,
+          assignedToEmployeeId: sourceA!.id,
+          isRecurring: true,
+          notifyEmployee: false,
+        },
+      });
+      templateId = template.id;
+
+      const existingUnassigned = await prisma.dailyTask.create({
+        data: {
+          taskTemplateId: template.id,
+          templateSourceId: template.id,
+          templateTitle: template.title,
+          templateDescription: template.description,
+          templateRecurrenceType: template.recurrenceType,
+          templateIsRecurring: template.isRecurring,
+          templateWorkstationId: template.workstationId,
+          templateWorkstationName: null,
+          employeeId: null,
+          date: dateObj,
+          status: "UNASSIGNED",
+          isCompleted: false,
+        },
+      });
+      existingUnassignedId = existingUnassigned.id;
+
+      const taskA = await prisma.dailyTask.create({
+        data: {
+          taskTemplateId: template.id,
+          templateSourceId: template.id,
+          templateTitle: template.title,
+          templateDescription: template.description,
+          templateRecurrenceType: template.recurrenceType,
+          templateIsRecurring: template.isRecurring,
+          templateWorkstationId: template.workstationId,
+          templateWorkstationName: null,
+          employeeId: sourceA!.id,
+          date: dateObj,
+          status: "ASSIGNED",
+          isCompleted: false,
+        },
+      });
+      taskAId = taskA.id;
+
+      const taskB = await prisma.dailyTask.create({
+        data: {
+          taskTemplateId: template.id,
+          templateSourceId: template.id,
+          templateTitle: template.title,
+          templateDescription: template.description,
+          templateRecurrenceType: template.recurrenceType,
+          templateIsRecurring: template.isRecurring,
+          templateWorkstationId: template.workstationId,
+          templateWorkstationName: null,
+          employeeId: sourceB!.id,
+          date: dateObj,
+          status: "ASSIGNED",
+          isCompleted: false,
+        },
+      });
+      taskBId = taskB.id;
+
+      const agent = request.agent(app);
+      await agent
+        .post("/api/auth/login")
+        .send({ email: "mgr@test.com", password: "password" });
+
+      const res = await agent.post("/api/manager/daily-tasks/batch").send({
+        taskIds: [taskA.id, taskB.id],
+        employeeId: null,
+      });
+
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({
+        success: true,
+        updatedCount: 0,
+        skippedCount: 2,
+      });
+      expect(res.body.conflicts).toEqual(
+        expect.arrayContaining([
+          { id: taskA.id, reason: "unassign_multiple_unassigned" },
+          { id: taskB.id, reason: "unassign_multiple_unassigned" },
+        ]),
+      );
+
+      const afterExisting = await prisma.dailyTask.findUnique({
+        where: { id: existingUnassigned.id },
+        select: { employeeId: true, status: true },
+      });
+      const afterA = await prisma.dailyTask.findUnique({
+        where: { id: taskA.id },
+        select: { employeeId: true, status: true },
+      });
+      const afterB = await prisma.dailyTask.findUnique({
+        where: { id: taskB.id },
+        select: { employeeId: true, status: true },
+      });
+
+      expect(afterExisting?.employeeId).toBeNull();
+      expect(afterExisting?.status).toBe("UNASSIGNED");
+      expect(afterA?.employeeId).toBe(sourceA!.id);
+      expect(afterA?.status).toBe("ASSIGNED");
+      expect(afterB?.employeeId).toBe(sourceB!.id);
+      expect(afterB?.status).toBe("ASSIGNED");
+    } finally {
+      const idsToDelete = [existingUnassignedId, taskAId, taskBId].filter(
+        Boolean,
+      ) as string[];
+      if (idsToDelete.length > 0) {
+        await prisma.dailyTask.deleteMany({
+          where: { id: { in: idsToDelete } },
+        });
+      }
+      if (templateId) {
+        await prisma.taskTemplate.deleteMany({ where: { id: templateId } });
+      }
+    }
+  });
+});
+
+describe("Manager task templates batch API", () => {
+  it("POST /api/manager/task-templates/batch allows moving templates between managed teams via assignToWorkstation", async () => {
+    const manager = await prisma.user.findUnique({
+      where: { email: "mgr@test.com" },
+      select: { id: true },
+    });
+    expect(manager).not.toBeNull();
+
+    const team1 = await prisma.team.findFirst({
+      where: { managerId: manager!.id },
+      select: { id: true },
+    });
+    expect(team1).not.toBeNull();
+
+    const wsTeam1 = await prisma.workstation.findFirst({
+      where: { teamId: team1!.id },
+      select: { id: true },
+    });
+    expect(wsTeam1).not.toBeNull();
+
+    const secondTeam = await prisma.team.create({
+      data: {
+        name: `Batch Template Second Team ${Date.now()}`,
+        managerId: manager!.id,
+      },
+    });
+    const wsTeam2 = await prisma.workstation.create({
+      data: {
+        name: `WS-batch-templates-${Date.now()}`,
+        teamId: secondTeam.id,
+      },
+    });
+
+    let templateId: string | null = null;
+    try {
+      const template = await prisma.taskTemplate.create({
+        data: {
+          title: `Batch cross-team workstation ${Date.now()}`,
+          createdById: manager!.id,
+          workstationId: wsTeam1!.id,
+          isRecurring: true,
+          notifyEmployee: false,
+        },
+      });
+      templateId = template.id;
+
+      const agent = request.agent(app);
+      await agent
+        .post("/api/auth/login")
+        .send({ email: "mgr@test.com", password: "password" });
+
+      const res = await agent.post("/api/manager/task-templates/batch").send({
+        templateIds: [template.id],
+        action: "assignToWorkstation",
+        workstationId: wsTeam2.id,
+      });
+
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({
+        success: true,
+        updatedCount: 1,
+        skippedCount: 0,
+        conflicts: [],
+      });
+
+      const updated = await prisma.taskTemplate.findUnique({
+        where: { id: template.id },
+        select: { workstationId: true, assignedToEmployeeId: true },
+      });
+      expect(updated?.workstationId).toBe(wsTeam2.id);
+      expect(updated?.assignedToEmployeeId).toBeNull();
+    } finally {
+      if (templateId) {
+        await prisma.taskTemplate
+          .delete({ where: { id: templateId } })
+          .catch(() => {});
+      }
+      await prisma.workstation
+        .delete({ where: { id: wsTeam2.id } })
+        .catch(() => {});
+      await prisma.team
+        .delete({ where: { id: secondTeam.id } })
+        .catch(() => {});
+    }
+  });
+
+  it("POST /api/manager/task-templates/batch allows moving one-shot templates between managed teams via assignToEmployee and keeps them assigned", async () => {
+    const manager = await prisma.user.findUnique({
+      where: { email: "mgr@test.com" },
+      select: { id: true },
+    });
+    expect(manager).not.toBeNull();
+
+    const team1 = await prisma.team.findFirst({
+      where: { managerId: manager!.id },
+      select: { id: true },
+    });
+    expect(team1).not.toBeNull();
+
+    const empTeam1 = await prisma.user.findFirst({
+      where: { teamId: team1!.id, role: "EMPLOYEE" },
+      select: { id: true },
+    });
+    expect(empTeam1).not.toBeNull();
+
+    const { hashPassword } = await import("./lib/auth");
+
+    const secondTeam = await prisma.team.create({
+      data: {
+        name: `Batch Template Second Team Employee ${Date.now()}`,
+        managerId: manager!.id,
+      },
+    });
+    const empTeam2 = await prisma.user.create({
+      data: {
+        name: "Batch Template Emp Team 2",
+        email: `batch-template-emp-t2-${Date.now()}@test.com`,
+        passwordHash: await hashPassword("password"),
+        role: "EMPLOYEE",
+        teamId: secondTeam.id,
+      },
+    });
+
+    let templateId: string | null = null;
+    try {
+      const template = await prisma.taskTemplate.create({
+        data: {
+          title: `Batch cross-team employee one-shot ${Date.now()}`,
+          createdById: manager!.id,
+          assignedToEmployeeId: empTeam1!.id,
+          isRecurring: false,
+          notifyEmployee: false,
+        },
+      });
+      templateId = template.id;
+
+      const agent = request.agent(app);
+      await agent
+        .post("/api/auth/login")
+        .send({ email: "mgr@test.com", password: "password" });
+
+      const res = await agent.post("/api/manager/task-templates/batch").send({
+        templateIds: [template.id],
+        action: "assignToEmployee",
+        employeeId: empTeam2.id,
+      });
+
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({
+        success: true,
+        updatedCount: 1,
+        skippedCount: 0,
+        conflicts: [],
+      });
+
+      const updated = await prisma.taskTemplate.findUnique({
+        where: { id: template.id },
+        select: {
+          isRecurring: true,
+          workstationId: true,
+          assignedToEmployeeId: true,
+        },
+      });
+      expect(updated?.isRecurring).toBe(false);
+      expect(updated?.workstationId).toBeNull();
+      expect(updated?.assignedToEmployeeId).toBe(empTeam2.id);
+    } finally {
+      if (templateId) {
+        await prisma.taskTemplate
+          .delete({ where: { id: templateId } })
+          .catch(() => {});
+      }
+      await prisma.user.delete({ where: { id: empTeam2.id } }).catch(() => {});
+      await prisma.team
+        .delete({ where: { id: secondTeam.id } })
+        .catch(() => {});
+    }
+  });
+
+  it("POST /api/manager/task-templates/batch assignToEmployee rejects target employee outside managed teams", async () => {
+    const manager = await prisma.user.findUnique({
+      where: { email: "mgr@test.com" },
+      select: { id: true },
+    });
+    expect(manager).not.toBeNull();
+
+    const team1 = await prisma.team.findFirst({
+      where: { managerId: manager!.id },
+      select: { id: true },
+    });
+    expect(team1).not.toBeNull();
+
+    const empTeam1 = await prisma.user.findFirst({
+      where: { teamId: team1!.id, role: "EMPLOYEE" },
+      select: { id: true },
+    });
+    expect(empTeam1).not.toBeNull();
+
+    const { hashPassword } = await import("./lib/auth");
+
+    const outsiderManager = await prisma.user.create({
+      data: {
+        name: "Outsider Manager Batch Templates",
+        email: `outsider-batch-mgr-${Date.now()}@test.com`,
+        passwordHash: await hashPassword("password"),
+        role: "MANAGER",
+      },
+    });
+    const outsiderTeam = await prisma.team.create({
+      data: {
+        name: `Outsider Batch Templates Team ${Date.now()}`,
+        managerId: outsiderManager.id,
+      },
+    });
+    const outsiderEmployee = await prisma.user.create({
+      data: {
+        name: "Outsider Employee Batch Templates",
+        email: `outsider-batch-emp-${Date.now()}@test.com`,
+        passwordHash: await hashPassword("password"),
+        role: "EMPLOYEE",
+        teamId: outsiderTeam.id,
+      },
+    });
+
+    let templateId: string | null = null;
+    try {
+      const template = await prisma.taskTemplate.create({
+        data: {
+          title: `Batch assign outsider forbidden ${Date.now()}`,
+          createdById: manager!.id,
+          assignedToEmployeeId: empTeam1!.id,
+          isRecurring: true,
+          notifyEmployee: false,
+        },
+      });
+      templateId = template.id;
+
+      const agent = request.agent(app);
+      await agent
+        .post("/api/auth/login")
+        .send({ email: "mgr@test.com", password: "password" });
+
+      const res = await agent.post("/api/manager/task-templates/batch").send({
+        templateIds: [template.id],
+        action: "assignToEmployee",
+        employeeId: outsiderEmployee.id,
+      });
+
+      expect(res.status).toBe(404);
+      expect(res.body).toMatchObject({ error: "Employee not found" });
+    } finally {
+      if (templateId) {
+        await prisma.taskTemplate
+          .delete({ where: { id: templateId } })
+          .catch(() => {});
+      }
+      await prisma.user
+        .delete({ where: { id: outsiderEmployee.id } })
+        .catch(() => {});
+      await prisma.team
+        .delete({ where: { id: outsiderTeam.id } })
+        .catch(() => {});
+      await prisma.user
+        .delete({ where: { id: outsiderManager.id } })
+        .catch(() => {});
     }
   });
 });

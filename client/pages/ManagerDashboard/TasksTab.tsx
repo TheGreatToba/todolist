@@ -6,6 +6,7 @@ import { TasksProgressBar } from "./TasksProgressBar";
 import { TasksDateFilters } from "./TasksDateFilters";
 import { TasksByWorkstationList } from "./TasksByWorkstationList";
 import { buildTasksByWorkstation, type TeamMember } from "./types";
+import { trackManagerKpiEvent } from "@/lib/metrics";
 
 interface TasksTabProps {
   dashboard: ManagerDashboardType;
@@ -24,6 +25,9 @@ interface TasksTabProps {
   isPrepareAssigning?: boolean;
   pendingTaskId?: string | null;
   isTaskUpdating?: boolean;
+  onBatchAssignTasks: (taskIds: string[], employeeId: string) => void;
+  onBatchUnassignTasks: (taskIds: string[]) => void;
+  isBatchUpdatingTasks?: boolean;
 }
 
 export function TasksTab({
@@ -43,11 +47,18 @@ export function TasksTab({
   isPrepareAssigning = false,
   pendingTaskId,
   isTaskUpdating = false,
+  onBatchAssignTasks,
+  onBatchUnassignTasks,
+  isBatchUpdatingTasks = false,
 }: TasksTabProps) {
   const filteredTasks = dashboard.dailyTasks;
   const [showPreparePanel, setShowPreparePanel] = React.useState(false);
   const [selectedEmployeeByTemplate, setSelectedEmployeeByTemplate] =
     React.useState<Record<string, string>>({});
+  const [selectedTaskIds, setSelectedTaskIds] = React.useState<string[]>([]);
+  const [batchEmployeeId, setBatchEmployeeId] = React.useState<string>("");
+  const [isMultiSelectMode, setIsMultiSelectMode] =
+    React.useState<boolean>(false);
   const completedCount = filteredTasks.filter((t) => t.isCompleted).length;
   const totalCount = filteredTasks.length;
   const recurringCount = filteredTasks.filter(
@@ -68,6 +79,23 @@ export function TasksTab({
   const unassignedRecurringTemplates =
     dashboard.dayPreparation?.unassignedRecurringTemplates ?? [];
 
+  const prepareStartRef = React.useRef<number | null>(null);
+  const lastPrepareDateRef = React.useRef<string | null>(null);
+
+  React.useEffect(() => {
+    setSelectedTaskIds([]);
+    setBatchEmployeeId("");
+    setIsMultiSelectMode(false);
+  }, [selectedDate, selectedEmployee, selectedWorkstation]);
+
+  const toggleTaskSelection = (taskId: string) => {
+    setSelectedTaskIds((prev) =>
+      prev.includes(taskId)
+        ? prev.filter((id) => id !== taskId)
+        : [...prev, taskId],
+    );
+  };
+
   React.useEffect(() => {
     if (unassignedRecurringTemplates.length === 0) return;
     setSelectedEmployeeByTemplate((prev) => {
@@ -84,6 +112,27 @@ export function TasksTab({
     });
   }, [unassignedRecurringTemplates]);
 
+  React.useEffect(() => {
+    if (!showPreparePanel) return;
+    if (!dayPrepared) return;
+    if (!prepareStartRef.current) return;
+    const durationMs = Date.now() - prepareStartRef.current;
+    trackManagerKpiEvent("manager.prepare_day_completed", {
+      date: lastPrepareDateRef.current ?? selectedDate,
+      durationMs,
+      recurringToAssign,
+      recurringTemplatesTotal: recurringCount,
+    });
+    prepareStartRef.current = null;
+    lastPrepareDateRef.current = null;
+  }, [
+    dayPrepared,
+    showPreparePanel,
+    selectedDate,
+    recurringToAssign,
+    recurringCount,
+  ]);
+
   return (
     <>
       <TasksSummaryCards
@@ -95,7 +144,31 @@ export function TasksTab({
         recurringToAssign={recurringToAssign}
         dayPrepared={dayPrepared}
         showLateOpeningWarning={showLateOpeningWarning}
-        onPrepareMyDay={() => setShowPreparePanel((prev) => !prev)}
+        onPrepareMyDay={() =>
+          setShowPreparePanel((prev) => {
+            const next = !prev;
+            if (next) {
+              prepareStartRef.current = Date.now();
+              lastPrepareDateRef.current = selectedDate;
+              trackManagerKpiEvent("manager.prepare_day_started", {
+                date: selectedDate,
+                recurringToAssign,
+                recurringTemplatesTotal: recurringCount,
+              });
+            } else if (prev && !next && prepareStartRef.current) {
+              const durationMs = Date.now() - prepareStartRef.current;
+              trackManagerKpiEvent("manager.prepare_day_cancelled", {
+                date: lastPrepareDateRef.current ?? selectedDate,
+                durationMs,
+                recurringToAssign,
+                recurringTemplatesTotal: recurringCount,
+              });
+              prepareStartRef.current = null;
+              lastPrepareDateRef.current = null;
+            }
+            return next;
+          })
+        }
       />
 
       <TasksProgressBar
@@ -115,7 +188,83 @@ export function TasksTab({
         workstations={dashboard.workstations}
         onExportCsv={onExportCsv}
         onNewTask={onNewTask}
+        isMultiSelectMode={isMultiSelectMode}
+        onToggleMultiSelect={() => {
+          setIsMultiSelectMode((prev) => {
+            const next = !prev;
+            if (!next) {
+              setSelectedTaskIds([]);
+              setBatchEmployeeId("");
+            }
+            return next;
+          });
+        }}
       />
+
+      {isMultiSelectMode && selectedTaskIds.length > 0 && (
+        <div className="mb-6 flex flex-col gap-3 rounded-xl border border-primary/40 bg-primary/5 p-3 md:flex-row md:items-center md:justify-between">
+          <div className="text-sm text-foreground">
+            {selectedTaskIds.length} task
+            {selectedTaskIds.length > 1 ? "s" : ""} selected
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={batchEmployeeId}
+              onChange={(e) => setBatchEmployeeId(e.target.value)}
+              className="h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground"
+              disabled={isBatchUpdatingTasks}
+              aria-label="Select employee for batch assignment"
+            >
+              <option value="">Select employee…</option>
+              {teamMembers.map((member) => (
+                <option key={member.id} value={member.id}>
+                  {member.name}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => {
+                if (!batchEmployeeId) return;
+                onBatchAssignTasks(selectedTaskIds, batchEmployeeId);
+                trackManagerKpiEvent("manager.batch_update_daily_tasks", {
+                  mode: "assign_or_reassign",
+                  taskCount: selectedTaskIds.length,
+                  employeeId: batchEmployeeId,
+                  date: selectedDate,
+                  source: "tasks_tab",
+                });
+              }}
+              disabled={
+                !batchEmployeeId ||
+                isBatchUpdatingTasks ||
+                selectedTaskIds.length === 0
+              }
+              className="inline-flex items-center rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground shadow-sm hover:bg-primary/90 disabled:opacity-50"
+            >
+              Assigner / Reaffecter
+            </button>
+            <button
+              type="button"
+              onClick={() => onBatchUnassignTasks(selectedTaskIds)}
+              disabled={isBatchUpdatingTasks || selectedTaskIds.length === 0}
+              className="inline-flex items-center rounded-md border border-input px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-secondary/70 disabled:opacity-50"
+            >
+              Unassign
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedTaskIds([]);
+                setBatchEmployeeId("");
+              }}
+              className="inline-flex items-center rounded-md px-2.5 py-1 text-xs font-medium text-muted-foreground hover:bg-secondary/60"
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+      )}
 
       {showPreparePanel && (
         <div className="mb-6 rounded-xl border border-border bg-card p-4 shadow-sm">
@@ -124,7 +273,7 @@ export function TasksTab({
               Prepare my day
             </h3>
             <p className="text-sm text-muted-foreground">
-              Assign today&apos;s recurring tasks.
+              Assigner les taches recurrentes du jour.
             </p>
           </div>
           {unassignedRecurringTemplates.length === 0 ? (
@@ -148,8 +297,8 @@ export function TasksTab({
                       </p>
                       <p className="text-xs text-muted-foreground">
                         {item.workstation
-                          ? `Workstation: ${item.workstation.name}`
-                          : "Direct template"}
+                          ? `Poste : ${item.workstation.name}`
+                          : "Modele direct"}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
@@ -175,12 +324,29 @@ export function TasksTab({
                       <button
                         type="button"
                         disabled={!selectedEmployeeId || isPrepareAssigning}
-                        onClick={() =>
-                          onPrepareAssign(item.templateId, selectedEmployeeId)
-                        }
+                        onClick={() => {
+                          const defaultEmployeeId =
+                            item.defaultEmployeeId ??
+                            item.suggestedEmployees[0]?.id ??
+                            null;
+                          const usedSuggested =
+                            !!defaultEmployeeId &&
+                            selectedEmployeeId === defaultEmployeeId;
+                          trackManagerKpiEvent(
+                            "manager.prepare_day_assignment",
+                            {
+                              date: selectedDate,
+                              templateId: item.templateId,
+                              assignedEmployeeId: selectedEmployeeId,
+                              defaultEmployeeId,
+                              usedSuggested,
+                            },
+                          );
+                          onPrepareAssign(item.templateId, selectedEmployeeId);
+                        }}
                         className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
                       >
-                        Assign
+                        Assigner
                       </button>
                     </div>
                   </div>
@@ -198,6 +364,9 @@ export function TasksTab({
         onReassignTask={onReassignTask}
         pendingTaskId={pendingTaskId}
         isTaskUpdating={isTaskUpdating}
+        selectedTaskIds={selectedTaskIds}
+        onToggleTaskSelection={toggleTaskSelection}
+        isMultiSelectMode={isMultiSelectMode}
       />
     </>
   );

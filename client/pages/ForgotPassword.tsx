@@ -18,7 +18,9 @@ export default function ForgotPassword() {
       setError(null);
     },
     onError: (err) => {
-      setError(err.message ?? "Failed to send reset email");
+      setError(
+        err.message ?? "Échec de l'envoi de l'e-mail de réinitialisation.",
+      );
       setSuccess(false);
     },
   });
@@ -29,7 +31,7 @@ export default function ForgotPassword() {
     setSuccess(false);
 
     if (!email) {
-      setError("Please enter your email address");
+      setError("Merci de saisir votre adresse e-mail");
       return;
     }
 
@@ -45,23 +47,24 @@ export default function ForgotPassword() {
               <Mail className="w-8 h-8 text-primary" />
             </div>
             <h1 className="text-3xl font-bold text-foreground mb-2">
-              Check your email
+              Consultez votre boîte mail
             </h1>
             <p className="text-muted-foreground">
-              If an account exists with this email, a password reset link has
-              been sent.
+              Si un compte existe avec cet e-mail, un lien de réinitialisation
+              de mot de passe vous a été envoyé.
             </p>
           </div>
 
           <div className="bg-card rounded-2xl shadow-sm border border-border p-8 space-y-6">
             <div className="bg-primary/10 border border-primary/20 rounded-lg px-4 py-3 text-sm text-foreground">
               <p className="mb-2">
-                We've sent a password reset link to <strong>{email}</strong>
+                Nous avons envoyé un lien de réinitialisation de mot de passe à{" "}
+                <strong>{email}</strong>
               </p>
               <p className="text-xs text-muted-foreground">
-                The link will expire in {expiryHours} hour
-                {expiryHours === 1 ? "" : "s"}. If you don't see the email,
-                check your spam folder.
+                Le lien expirera dans {expiryHours} heure
+                {expiryHours === 1 ? "" : "s"}. Si vous ne voyez pas l'e-mail,
+                vérifiez vos courriers indésirables.
               </p>
             </div>
 
@@ -70,7 +73,7 @@ export default function ForgotPassword() {
                 onClick={() => navigate("/login")}
                 className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold py-3 rounded-lg transition"
               >
-                Back to sign in
+                Retour à la connexion
               </button>
               <button
                 onClick={() => {
@@ -79,7 +82,7 @@ export default function ForgotPassword() {
                 }}
                 className="w-full bg-secondary hover:bg-secondary/80 text-secondary-foreground font-medium py-3 rounded-lg transition"
               >
-                Send another email
+                Envoyer un autre e-mail
               </button>
             </div>
           </div>
@@ -96,11 +99,11 @@ export default function ForgotPassword() {
             <Mail className="w-8 h-8 text-primary" />
           </div>
           <h1 className="text-3xl font-bold text-foreground mb-2">
-            Forgot password?
+            Mot de passe oublié ?
           </h1>
           <p className="text-muted-foreground">
-            Enter your email address and we'll send you a link to reset your
-            password.
+            Saisissez votre adresse e-mail et nous vous enverrons un lien pour
+            réinitialiser votre mot de passe.
           </p>
         </div>
 
@@ -123,14 +126,14 @@ export default function ForgotPassword() {
               htmlFor="email"
               className="block text-sm font-medium text-foreground mb-2"
             >
-              Email
+              E-mail
             </label>
             <input
               id="email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
+              placeholder="vous@example.com"
               autoComplete="email"
               className="w-full px-4 py-3 rounded-lg border border-input bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition"
             />
@@ -144,10 +147,10 @@ export default function ForgotPassword() {
             {forgotPasswordMutation.isPending ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                Sending...
+                Envoi en cours...
               </>
             ) : (
-              "Send reset link"
+              "Envoyer le lien"
             )}
           </button>
 
@@ -157,7 +160,7 @@ export default function ForgotPassword() {
               className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition"
             >
               <ArrowLeft className="w-4 h-4" />
-              Back to sign in
+              Retour à la connexion
             </Link>
           </div>
         </form>

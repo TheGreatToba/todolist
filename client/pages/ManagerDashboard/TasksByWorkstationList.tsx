@@ -11,6 +11,9 @@ interface TasksByWorkstationListProps {
   emptyMessage?: string;
   pendingTaskId?: string | null;
   isTaskUpdating?: boolean;
+  selectedTaskIds: string[];
+  onToggleTaskSelection: (taskId: string) => void;
+  isMultiSelectMode: boolean;
 }
 
 export function TasksByWorkstationList({
@@ -21,6 +24,9 @@ export function TasksByWorkstationList({
   emptyMessage = "No tasks found",
   pendingTaskId,
   isTaskUpdating = false,
+  selectedTaskIds,
+  onToggleTaskSelection,
+  isMultiSelectMode,
 }: TasksByWorkstationListProps) {
   const values = Object.values(tasksByWorkstation);
 
@@ -53,6 +59,9 @@ export function TasksByWorkstationList({
                   onReassignTask={onReassignTask}
                   pendingTaskId={pendingTaskId}
                   isTaskUpdating={isTaskUpdating}
+                  selectedTaskIds={selectedTaskIds}
+                  onToggleTaskSelection={onToggleTaskSelection}
+                  isMultiSelectMode={isMultiSelectMode}
                 />
               ),
             )}

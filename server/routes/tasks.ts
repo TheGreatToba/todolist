@@ -1,12 +1,19 @@
 import { RequestHandler } from "express";
 import { z } from "zod";
-import prisma from "../lib/db";
 import { getIO } from "../lib/socket";
 import { sendErrorResponse } from "../lib/errors";
 import { getAuthOrThrow } from "../middleware/requireAuth";
+import { getTenantOrThrow } from "../middleware/requireTenantContext";
 import { assignDailyTasksForDate } from "../jobs/daily-task-assignment";
+import type {
+  ManagerWeeklyReport,
+  ManagerWeeklyReportEmployeeBottleneck,
+  ManagerWeeklyReportSummary,
+  ManagerWeeklyReportWorkstationBottleneck,
+  ManagerWeeklyReportRecurringDelay,
+} from "@shared/api";
 import { logger } from "../lib/logger";
-import { getManagerTeamIds, getManagerTeams } from "../lib/manager-teams";
+import { computeTaskPriorityScore } from "../lib/priority-score";
 import { paramString } from "../lib/params";
 import { sendTaskAssignmentEmail } from "../lib/email";
 import { parseDateQuery } from "../lib/parse-date-query";
@@ -23,6 +30,13 @@ import {
   createTaskTemplateTransactional,
   instantiateManualTriggerTemplateTaskTransactional,
 } from "../services/task-template.service";
+import { scopedPrisma } from "../security/scoped-prisma";
+import {
+  assertEmployeeOwnsTask,
+  assertManagerOwnsTeam,
+  assertTenantAccessToResource,
+} from "../security/tenantGuard";
+import type { TenantContext } from "../security/tenant-context";
 
 const RecurrenceModeSchema = z.enum([
   "schedule_based",
@@ -89,6 +103,31 @@ const UpdateDailyTaskSchema = z
     (data) => data.isCompleted !== undefined || data.employeeId !== undefined,
     "Either isCompleted or employeeId must be provided",
   );
+
+const BatchWriteModeSchema = z
+  .enum(["all-or-nothing", "partial"])
+  .optional()
+  .default("all-or-nothing");
+
+const ManagerBatchDailyTasksSchema = z.object({
+  taskIds: z.array(z.string().min(1)).min(1),
+  employeeId: z.string().min(1).nullable(),
+  mode: BatchWriteModeSchema,
+});
+
+const ManagerBatchTaskTemplatesSchema = z.object({
+  templateIds: z.array(z.string().min(1)).min(1),
+  action: z.enum([
+    "assignToEmployee",
+    "assignToWorkstation",
+    "clearAssignment",
+    "setNotifyEmployee",
+  ]),
+  employeeId: z.string().min(1).optional(),
+  workstationId: z.string().min(1).optional(),
+  notifyEmployee: z.boolean().optional(),
+  mode: BatchWriteModeSchema,
+});
 
 const CreateTodayBoardTaskSchema = z.object({
   title: z.string().trim().min(1),
@@ -382,6 +421,7 @@ type DailyTaskWithSnapshotProjection = DailyTaskTemplateProjection & {
     id: string;
     name: string;
     email: string;
+    teamId?: string | null;
   } | null;
 };
 
@@ -498,11 +538,25 @@ function hasDeleteConfirmation(confirm: unknown): boolean {
   return normalized === "true" || normalized === "1";
 }
 
+function hasTenantAccessToTeam(
+  tenant: TenantContext,
+  teamId: string | null | undefined,
+): boolean {
+  try {
+    assertTenantAccessToResource(tenant, teamId);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // Get all daily tasks for an employee on a specific date
 export const handleGetEmployeeDailyTasks: RequestHandler = async (req, res) => {
   try {
-    const payload = getAuthOrThrow(req, res);
-    if (!payload) return;
+    const tenant = getTenantOrThrow(req, res);
+    if (!tenant) return;
+    const scoped = scopedPrisma(tenant);
+
     const query = req.query as Record<string, unknown>;
     const parsedDate = parseDateQueryParam(query.date, query);
     if ("error" in parsedDate) {
@@ -511,9 +565,9 @@ export const handleGetEmployeeDailyTasks: RequestHandler = async (req, res) => {
     }
     const taskDate = parsedDate.date;
 
-    const tasks = await prisma.dailyTask.findMany({
+    const tasks = await scoped.dailyTask.findMany({
       where: {
-        employeeId: payload.userId,
+        employeeId: tenant.userId,
         status: { in: ["ASSIGNED", "DONE"] },
         date: {
           gte: taskDate,
@@ -549,8 +603,10 @@ export const handleGetEmployeeDailyTasks: RequestHandler = async (req, res) => {
 // Update a daily task completion status
 export const handleUpdateDailyTask: RequestHandler = async (req, res) => {
   try {
-    const payload = getAuthOrThrow(req, res);
-    if (!payload) return;
+    const tenant = getTenantOrThrow(req, res);
+    if (!tenant) return;
+    const scoped = scopedPrisma(tenant);
+
     const taskId = paramString(req.params.taskId);
     if (!taskId) {
       res.status(400).json({ error: "Invalid task ID" });
@@ -559,98 +615,61 @@ export const handleUpdateDailyTask: RequestHandler = async (req, res) => {
 
     const body = UpdateDailyTaskSchema.parse(req.body);
 
-    const task = await prisma.dailyTask.findUnique({
+    const task = await scoped.dailyTask.findFirst({
       where: { id: taskId },
+      include: {
+        employee: {
+          select: {
+            id: true,
+            teamId: true,
+          },
+        },
+        taskTemplate: {
+          select: {
+            createdById: true,
+            workstation: {
+              select: { teamId: true },
+            },
+            assignedToEmployee: {
+              select: { teamId: true, role: true },
+            },
+          },
+        },
+      },
     });
 
     if (!task) {
-      res.status(404).json({ error: "Task not found" });
-      return;
-    }
-
-    const managerTeamIds =
-      payload.role === "MANAGER"
-        ? new Set(await getManagerTeamIds(payload.userId))
-        : new Set<string>();
-
-    const taskEmployee = task.employeeId
-      ? await prisma.user.findUnique({
-          where: { id: task.employeeId },
-          select: { id: true, teamId: true },
-        })
-      : null;
-    if (task.employeeId && !taskEmployee?.teamId) {
-      res.status(404).json({ error: "Task employee not found" });
-      return;
-    }
-
-    let taskScopeTeamId = taskEmployee?.teamId ?? null;
-    if (!taskScopeTeamId && task.templateWorkstationId) {
-      const taskWorkstation = await prisma.workstation.findUnique({
-        where: { id: task.templateWorkstationId },
-        select: { teamId: true },
-      });
-      taskScopeTeamId = taskWorkstation?.teamId ?? null;
-    }
-    if (!taskScopeTeamId && task.taskTemplateId) {
-      const templateScope = await prisma.taskTemplate.findUnique({
-        where: { id: task.taskTemplateId },
-        select: {
-          createdById: true,
-          workstation: {
-            select: { teamId: true },
-          },
-          assignedToEmployee: {
-            select: { teamId: true, role: true },
-          },
-        },
-      });
-      taskScopeTeamId =
-        templateScope?.workstation?.teamId ??
-        (templateScope?.assignedToEmployee?.role === "EMPLOYEE"
-          ? (templateScope.assignedToEmployee.teamId ?? null)
-          : null);
-      if (
-        !taskScopeTeamId &&
-        payload.role === "MANAGER" &&
-        templateScope?.createdById === payload.userId
-      ) {
-        taskScopeTeamId = null;
-      }
-    }
-
-    const isQuickTaskOwnedByManager =
-      payload.role === "MANAGER" &&
-      task.employeeId === null &&
-      task.templateSourceId.startsWith(
-        quickTaskSourcePrefixForManager(payload.userId),
-      );
-    const isManagerOfTaskTeam =
-      payload.role === "MANAGER" &&
-      taskScopeTeamId !== null &&
-      managerTeamIds.has(taskScopeTeamId);
-    const canManagerAccessTaskScope =
-      payload.role === "MANAGER" &&
-      (isManagerOfTaskTeam || isQuickTaskOwnedByManager);
-    const isTaskOwner = task.employeeId === payload.userId;
-
-    if (
-      body.isCompleted !== undefined &&
-      !isTaskOwner &&
-      !canManagerAccessTaskScope
-    ) {
       res.status(403).json({ error: "Forbidden" });
       return;
     }
 
+    const taskScopeTeamId =
+      task.employee?.teamId ??
+      task.taskTemplate?.workstation?.teamId ??
+      (task.taskTemplate?.assignedToEmployee?.role === "EMPLOYEE"
+        ? (task.taskTemplate.assignedToEmployee.teamId ?? null)
+        : null);
+
+    if (tenant.role === "MANAGER" && taskScopeTeamId) {
+      assertManagerOwnsTeam(tenant, taskScopeTeamId);
+    }
+
+    if (body.isCompleted !== undefined && tenant.role === "EMPLOYEE") {
+      assertEmployeeOwnsTask(tenant, task);
+    }
+
     if (body.employeeId !== undefined) {
-      if (!canManagerAccessTaskScope) {
+      if (tenant.role !== "MANAGER") {
         res.status(403).json({ error: "Forbidden" });
         return;
       }
 
-      const targetEmployee = await prisma.user.findUnique({
-        where: { id: body.employeeId },
+      const targetEmployee = await scoped.user.findFirst({
+        where: {
+          id: body.employeeId,
+          role: "EMPLOYEE",
+          teamId: { in: tenant.teamIds },
+        },
         select: { id: true, role: true, teamId: true },
       });
       if (
@@ -661,9 +680,12 @@ export const handleUpdateDailyTask: RequestHandler = async (req, res) => {
         res.status(404).json({ error: "Employee not found" });
         return;
       }
+
+      assertTenantAccessToResource(tenant, targetEmployee.teamId);
+
       if (
-        !managerTeamIds.has(targetEmployee.teamId) ||
-        (taskScopeTeamId !== null && targetEmployee.teamId !== taskScopeTeamId)
+        taskScopeTeamId !== null &&
+        targetEmployee.teamId !== taskScopeTeamId
       ) {
         res.status(403).json({ error: "Forbidden" });
         return;
@@ -678,7 +700,7 @@ export const handleUpdateDailyTask: RequestHandler = async (req, res) => {
             : null;
 
         if (duplicateScopeWhere) {
-          const existing = await prisma.dailyTask.findFirst({
+          const existing = await scoped.dailyTask.findFirst({
             where: {
               id: { not: task.id },
               ...duplicateScopeWhere,
@@ -731,7 +753,7 @@ export const handleUpdateDailyTask: RequestHandler = async (req, res) => {
       }
     }
 
-    const updatedTask = await prisma.dailyTask.update({
+    const updatedTask = await scoped.dailyTask.update({
       where: { id: taskId },
       data: updateData,
       include: {
@@ -781,17 +803,427 @@ export const handleUpdateDailyTask: RequestHandler = async (req, res) => {
   }
 };
 
+export const handleManagerBatchUpdateDailyTasks: RequestHandler = async (
+  req,
+  res,
+) => {
+  try {
+    const payload = getAuthOrThrow(req, res);
+    if (!payload) return;
+    const tenant = getTenantOrThrow(req, res);
+    if (!tenant) return;
+    const prisma = scopedPrisma(tenant);
+    if (payload.role !== "MANAGER") {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+
+    const body = ManagerBatchDailyTasksSchema.parse(req.body);
+    const uniqueTaskIds = Array.from(new Set(body.taskIds));
+
+    const managerTeamIds = new Set(tenant.teamIds);
+    if (managerTeamIds.size === 0) {
+      res.status(404).json({ error: "Team not found" });
+      return;
+    }
+
+    const tasks = await prisma.dailyTask.findMany({
+      where: { id: { in: uniqueTaskIds } },
+      include: {
+        employee: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            teamId: true,
+            role: true,
+          },
+        },
+        taskTemplate: {
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            isRecurring: true,
+            recurrenceType: true,
+            workstation: {
+              select: { id: true, name: true, teamId: true },
+            },
+            assignedToEmployee: {
+              select: { id: true, teamId: true, role: true },
+            },
+            createdById: true,
+          },
+        },
+      },
+    });
+
+    if (tasks.length === 0) {
+      res.status(404).json({ error: "No tasks found" });
+      return;
+    }
+
+    if (tasks.length !== uniqueTaskIds.length) {
+      res.status(404).json({ error: "One or more tasks not found" });
+      return;
+    }
+
+    let targetEmployee: {
+      id: string;
+      teamId: string | null;
+      role: "EMPLOYEE" | "MANAGER";
+    } | null = null;
+
+    if (body.employeeId !== null) {
+      const employee = await prisma.user.findUnique({
+        where: { id: body.employeeId },
+        select: { id: true, role: true, teamId: true },
+      });
+      if (
+        !employee ||
+        employee.role !== "EMPLOYEE" ||
+        !employee.teamId ||
+        !hasTenantAccessToTeam(tenant, employee.teamId)
+      ) {
+        res.status(404).json({ error: "Employee not found" });
+        return;
+      }
+      targetEmployee = {
+        id: employee.id,
+        teamId: employee.teamId,
+        role: "EMPLOYEE",
+      };
+    }
+
+    const taskScopeTeamIds = new Map<string, string | null>();
+
+    for (const task of tasks) {
+      let taskTeamId: string | null = null;
+
+      if (
+        task.employee &&
+        task.employee.role === "EMPLOYEE" &&
+        task.employee.teamId
+      ) {
+        taskTeamId = task.employee.teamId;
+      } else if (task.taskTemplate?.workstation?.teamId) {
+        taskTeamId = task.taskTemplate.workstation.teamId;
+      } else if (
+        task.taskTemplate?.assignedToEmployee &&
+        task.taskTemplate.assignedToEmployee.role === "EMPLOYEE" &&
+        task.taskTemplate.assignedToEmployee.teamId
+      ) {
+        taskTeamId = task.taskTemplate.assignedToEmployee.teamId;
+      }
+
+      const isQuickTaskOwnedByManager =
+        payload.role === "MANAGER" &&
+        task.employeeId === null &&
+        task.templateSourceId.startsWith(
+          quickTaskSourcePrefixForManager(payload.userId),
+        );
+
+      if (
+        taskTeamId !== null &&
+        !hasTenantAccessToTeam(tenant, taskTeamId) &&
+        !isQuickTaskOwnedByManager
+      ) {
+        res.status(403).json({ error: "Forbidden" });
+        return;
+      }
+
+      if (taskTeamId === null && !isQuickTaskOwnedByManager) {
+        res.status(403).json({ error: "Forbidden" });
+        return;
+      }
+
+      taskScopeTeamIds.set(task.id, taskTeamId);
+    }
+
+    if (targetEmployee) {
+      for (const task of tasks) {
+        const taskTeamId = taskScopeTeamIds.get(task.id);
+        if (
+          taskTeamId &&
+          targetEmployee.teamId &&
+          taskTeamId !== targetEmployee.teamId
+        ) {
+          res.status(400).json({
+            error:
+              "Target employee must belong to the same team as the selected tasks",
+          });
+          return;
+        }
+      }
+    }
+
+    const mode = body.mode ?? "all-or-nothing";
+
+    type ConflictItem = { id: string; reason: string };
+    const conflicts: ConflictItem[] = [];
+    const conflictTaskIds = new Set<string>();
+
+    const { updatedTasks } = await prisma.$transaction(async (tx) => {
+      if (body.employeeId !== null && targetEmployee) {
+        // 1) Intra-selection conflict detection: avoid assigning twice the same
+        //    template/snapshot to the same employee for the same date in a single batch.
+        const seenScopes = new Map<string, string>();
+        for (const task of tasks) {
+          const snapshotSourceId = normalizeSnapshotValue(
+            task.templateSourceId,
+          );
+          const scopeKey = task.taskTemplateId ?? snapshotSourceId ?? null;
+          if (!scopeKey) continue;
+          const dateKey = formatDateYmd(task.date);
+          const compositeKey = `${scopeKey}:${dateKey}:${body.employeeId}`;
+          if (seenScopes.has(compositeKey)) {
+            conflicts.push({
+              id: task.id,
+              reason: "duplicate_in_batch",
+            });
+            conflictTaskIds.add(task.id);
+            continue;
+          }
+          seenScopes.set(compositeKey, task.id);
+        }
+
+        // 2) Existing DB conflicts for other tasks on the same day.
+        for (const task of tasks) {
+          if (
+            conflictTaskIds.has(task.id) ||
+            body.employeeId === task.employeeId
+          ) {
+            continue;
+          }
+
+          const snapshotSourceId = normalizeSnapshotValue(
+            task.templateSourceId,
+          );
+          const duplicateScopeWhere = task.taskTemplateId
+            ? { taskTemplateId: task.taskTemplateId }
+            : snapshotSourceId
+              ? { templateSourceId: snapshotSourceId }
+              : null;
+
+          if (!duplicateScopeWhere) continue;
+
+          const existing = await tx.dailyTask.findFirst({
+            where: {
+              // Only consider conflicts with tasks that are NOT part of the current batch
+              // selection. Intra-batch duplicates are reported as "duplicate_in_batch".
+              id: { notIn: uniqueTaskIds },
+              ...duplicateScopeWhere,
+              employeeId: body.employeeId,
+              date: {
+                gte: new Date(new Date(task.date).setHours(0, 0, 0, 0)),
+                lt: new Date(new Date(task.date).setHours(24, 0, 0, 0)),
+              },
+            },
+            select: { id: true },
+          });
+
+          if (existing) {
+            conflicts.push({
+              id: task.id,
+              reason: "duplicate_template_date_employee",
+            });
+            conflictTaskIds.add(task.id);
+          }
+        }
+      }
+
+      // When unassigning, ensure we won't violate the partial unique index
+      // DailyTask_unassigned_template_date_unique (taskTemplateId, date, employeeId NULL, status UNASSIGNED).
+      if (body.employeeId === null) {
+        type UnassignGroup = {
+          templateId: string;
+          date: Date;
+          taskIdsToUnassign: string[];
+        };
+        const unassignGroups = new Map<string, UnassignGroup>();
+
+        for (const task of tasks) {
+          if (!task.taskTemplateId) continue;
+          const willBecomeUnassigned =
+            task.employeeId !== null || task.status !== "UNASSIGNED";
+          if (!willBecomeUnassigned) continue;
+
+          const key = `${task.taskTemplateId}:${task.date.toISOString()}`;
+          let group = unassignGroups.get(key);
+          if (!group) {
+            group = {
+              templateId: task.taskTemplateId,
+              date: task.date,
+              taskIdsToUnassign: [],
+            };
+            unassignGroups.set(key, group);
+          }
+          group.taskIdsToUnassign.push(task.id);
+        }
+
+        for (const group of unassignGroups.values()) {
+          if (group.taskIdsToUnassign.length === 0) continue;
+
+          const existingUnassigned = await tx.dailyTask.findFirst({
+            where: {
+              taskTemplateId: group.templateId,
+              date: group.date,
+              employeeId: null,
+              status: "UNASSIGNED",
+            },
+            select: { id: true },
+          });
+
+          const existingCount = existingUnassigned ? 1 : 0;
+          const allowedUnassign = Math.max(0, 1 - existingCount);
+          const toMark = group.taskIdsToUnassign.slice(allowedUnassign);
+          for (const taskId of toMark) {
+            conflicts.push({
+              id: taskId,
+              reason: "unassign_multiple_unassigned",
+            });
+            conflictTaskIds.add(taskId);
+          }
+        }
+      }
+
+      if (conflicts.length > 0 && mode === "all-or-nothing") {
+        return { updatedTasks: [] as DailyTaskWithSnapshotProjection[] };
+      }
+
+      const tasksToUpdate =
+        mode === "partial"
+          ? tasks.filter((t) => !conflictTaskIds.has(t.id))
+          : tasks;
+
+      const results: DailyTaskWithSnapshotProjection[] = [];
+      for (const task of tasksToUpdate) {
+        const updateData: {
+          isCompleted?: boolean;
+          completedAt?: Date | null;
+          employeeId?: string | null;
+          status?: "UNASSIGNED" | "ASSIGNED" | "DONE";
+        } = {};
+
+        if (body.employeeId === null) {
+          updateData.employeeId = null;
+          updateData.isCompleted = false;
+          updateData.completedAt = null;
+          updateData.status = "UNASSIGNED";
+        } else if (targetEmployee) {
+          if (body.employeeId !== task.employeeId) {
+            updateData.employeeId = body.employeeId;
+            updateData.status = "ASSIGNED";
+            if (task.isCompleted) {
+              updateData.isCompleted = false;
+              updateData.completedAt = null;
+            }
+          }
+        }
+
+        if (
+          Object.keys(updateData).length === 0 ||
+          (updateData.employeeId === task.employeeId &&
+            updateData.isCompleted === task.isCompleted)
+        ) {
+          continue;
+        }
+
+        const updated = await tx.dailyTask.update({
+          where: { id: task.id },
+          data: updateData,
+          include: {
+            taskTemplate: {
+              select: {
+                id: true,
+                title: true,
+                description: true,
+                isRecurring: true,
+                recurrenceType: true,
+                workstation: {
+                  select: {
+                    id: true,
+                    name: true,
+                  },
+                },
+              },
+            },
+            employee: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                teamId: true,
+              },
+            },
+          },
+        });
+        results.push(updated as unknown as DailyTaskWithSnapshotProjection);
+      }
+
+      return { updatedTasks: results };
+    });
+
+    const io = getIO();
+
+    for (const task of updatedTasks) {
+      const serializedTask = serializeDailyTaskResponse(task);
+      const taskScopeTeamId = taskScopeTeamIds.get(task.id) ?? null;
+      const socketTeamId = task.employee?.teamId ?? taskScopeTeamId;
+      if (io && socketTeamId) {
+        const taskTitle = serializedTask.taskTemplate.title || "Task";
+        io.to(`team:${socketTeamId}`).emit("task:updated", {
+          taskId: task.id,
+          employeeId: task.employeeId,
+          isCompleted: task.isCompleted,
+          taskTitle,
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      updatedCount: updatedTasks.length,
+      skippedCount: conflicts.length,
+      conflicts,
+    });
+  } catch (error) {
+    // Map unique constraint violations on daily tasks to a clear 409 business error.
+    const err = error as {
+      code?: string;
+      name?: string;
+      meta?: { target?: string };
+    };
+    if (err && err.code === "P2002") {
+      const indexTarget = err.meta?.target;
+      const errorMessage =
+        indexTarget === "DailyTask_unassigned_template_date_unique"
+          ? "Cannot create another unassigned occurrence for the same template and date."
+          : "This employee already has one of the selected task templates for the same date.";
+      res.status(409).json({
+        error: errorMessage,
+        code: "CONFLICT",
+      });
+      return;
+    }
+    sendErrorResponse(res, error, req);
+  }
+};
+
 export const handleGetManagerTodayBoard: RequestHandler = async (req, res) => {
   try {
     const payload = getAuthOrThrow(req, res);
     if (!payload) return;
+    const tenant = getTenantOrThrow(req, res);
+    if (!tenant) return;
+    const prisma = scopedPrisma(tenant);
 
     const { todayYmd, todayStart, tomorrowStart } = getOperationalTodayWindow();
 
     // Ensure recurring tasks for today exist before assembling operational board data.
     await assignDailyTasksForDate(todayStart);
 
-    const teamIds = await getManagerTeamIds(payload.userId);
+    const teamIds = tenant.teamIds;
     if (teamIds.length === 0) {
       res.status(404).json({ error: "Team not found" });
       return;
@@ -901,7 +1333,19 @@ export const handleGetManagerTodayBoard: RequestHandler = async (req, res) => {
       if (seenTaskIds.has(row.id)) continue;
       seenTaskIds.add(row.id);
 
-      const task = serializeDailyTaskResponse(row);
+      const serialized = serializeDailyTaskResponse(row);
+      const task = {
+        ...serialized,
+        priorityScore: computeTaskPriorityScore(
+          {
+            date: row.date,
+            isCompleted: row.isCompleted,
+            employeeId: row.employeeId,
+          },
+          todayStart,
+          tomorrowStart,
+        ),
+      };
       const completedAt = row.completedAt;
       if (
         completedAt &&
@@ -940,6 +1384,9 @@ export const handleCreateManagerTodayBoardTask: RequestHandler = async (
   try {
     const payload = getAuthOrThrow(req, res);
     if (!payload) return;
+    const tenant = getTenantOrThrow(req, res);
+    if (!tenant) return;
+    const prisma = scopedPrisma(tenant);
 
     const body = CreateTodayBoardTaskSchema.parse(req.body);
     const { todayStart } = getOperationalTodayWindow();
@@ -958,7 +1405,7 @@ export const handleCreateManagerTodayBoardTask: RequestHandler = async (
       }
     }
 
-    const managerTeamIds = new Set(await getManagerTeamIds(payload.userId));
+    const managerTeamIds = new Set(tenant.teamIds);
     if (managerTeamIds.size === 0) {
       res.status(404).json({ error: "Team not found" });
       return;
@@ -978,7 +1425,7 @@ export const handleCreateManagerTodayBoardTask: RequestHandler = async (
         !employee ||
         employee.role !== "EMPLOYEE" ||
         !employee.teamId ||
-        !managerTeamIds.has(employee.teamId)
+        !hasTenantAccessToTeam(tenant, employee.teamId)
       ) {
         res.status(404).json({ error: "Employee not found" });
         return;
@@ -1039,9 +1486,13 @@ export const handleCreateTaskTemplate: RequestHandler = async (req, res) => {
   try {
     const payload = getAuthOrThrow(req, res);
     if (!payload) return;
+    const tenant = getTenantOrThrow(req, res);
+    if (!tenant) return;
+    const prisma = scopedPrisma(tenant);
     const taskTemplate = await createTaskTemplateTransactional({
       userId: payload.userId,
       body: req.body,
+      db: prisma,
     });
 
     res.status(201).json(serializeTemplateResponse(taskTemplate));
@@ -1058,9 +1509,11 @@ export const handleAssignTaskFromTemplate: RequestHandler = async (
   try {
     const payload = getAuthOrThrow(req, res);
     if (!payload) return;
+    const tenant = getTenantOrThrow(req, res);
+    if (!tenant) return;
+    const prisma = scopedPrisma(tenant);
     const body = AssignTaskFromTemplateSchema.parse(req.body);
 
-    const managerTeamIds = new Set(await getManagerTeamIds(payload.userId));
     const template = await prisma.taskTemplate.findUnique({
       where: { id: body.templateId },
       include: {
@@ -1083,7 +1536,8 @@ export const handleAssignTaskFromTemplate: RequestHandler = async (
       templateTeamId === null && template.createdBy.id === payload.userId;
     if (
       (templateTeamId === null && !canAccessUnassignedTemplate) ||
-      (templateTeamId !== null && !managerTeamIds.has(templateTeamId))
+      (templateTeamId !== null &&
+        !hasTenantAccessToTeam(tenant, templateTeamId))
     ) {
       res.status(404).json({ error: "Template not found" });
       return;
@@ -1106,7 +1560,7 @@ export const handleAssignTaskFromTemplate: RequestHandler = async (
         !employee ||
         employee.role !== "EMPLOYEE" ||
         !employee.teamId ||
-        !managerTeamIds.has(employee.teamId)
+        !hasTenantAccessToTeam(tenant, employee.teamId)
       ) {
         res.status(404).json({ error: "Employee not found" });
         return;
@@ -1120,7 +1574,7 @@ export const handleAssignTaskFromTemplate: RequestHandler = async (
       if (
         !workstation ||
         !workstation.teamId ||
-        !managerTeamIds.has(workstation.teamId)
+        !hasTenantAccessToTeam(tenant, workstation.teamId)
       ) {
         res.status(404).json({ error: "Workstation not found" });
         return;
@@ -1251,8 +1705,11 @@ export const handleGetManualTriggerTemplates: RequestHandler = async (
   try {
     const payload = getAuthOrThrow(req, res);
     if (!payload) return;
+    const tenant = getTenantOrThrow(req, res);
+    if (!tenant) return;
+    const prisma = scopedPrisma(tenant);
 
-    const managerTeamIds = await getManagerTeamIds(payload.userId);
+    const managerTeamIds = tenant.teamIds;
 
     const templates = await prisma.taskTemplate.findMany({
       where: {
@@ -1298,6 +1755,9 @@ export const handleCreateTaskFromTemplate: RequestHandler = async (
   try {
     const payload = getAuthOrThrow(req, res);
     if (!payload) return;
+    const tenant = getTenantOrThrow(req, res);
+    if (!tenant) return;
+    const prisma = scopedPrisma(tenant);
     const templateId = paramString(req.params.templateId);
     if (!templateId) {
       res.status(400).json({ error: "Invalid template ID" });
@@ -1323,6 +1783,7 @@ export const handleCreateTaskFromTemplate: RequestHandler = async (
       templateId,
       dueDate,
       assignedToEmployeeId: body.assignedToEmployeeId ?? null,
+      db: prisma,
     });
 
     res
@@ -1338,8 +1799,11 @@ export const handleGetTaskTemplates: RequestHandler = async (req, res) => {
   try {
     const payload = getAuthOrThrow(req, res);
     if (!payload) return;
+    const tenant = getTenantOrThrow(req, res);
+    if (!tenant) return;
+    const prisma = scopedPrisma(tenant);
 
-    const managerTeamIds = await getManagerTeamIds(payload.userId);
+    const managerTeamIds = tenant.teamIds;
     if (managerTeamIds.length === 0) {
       res.json([]);
       return;
@@ -1436,14 +1900,14 @@ export const handleGetTaskTemplates: RequestHandler = async (req, res) => {
       // Verify workstation belongs to managed team
       if (
         template.workstation?.teamId &&
-        managerTeamIds.includes(template.workstation.teamId)
+        hasTenantAccessToTeam(tenant, template.workstation.teamId)
       ) {
         // If template has assignedToEmployee, verify it also belongs to managed team
         // Otherwise, don't expose the cross-team relationship
         if (template.assignedToEmployee) {
           if (
             template.assignedToEmployee.teamId &&
-            managerTeamIds.includes(template.assignedToEmployee.teamId)
+            hasTenantAccessToTeam(tenant, template.assignedToEmployee.teamId)
           ) {
             templateMap.set(template.id, template);
           } else {
@@ -1464,7 +1928,7 @@ export const handleGetTaskTemplates: RequestHandler = async (req, res) => {
       // Verify assignedToEmployee belongs to managed team
       if (
         template.assignedToEmployee?.teamId &&
-        managerTeamIds.includes(template.assignedToEmployee.teamId)
+        hasTenantAccessToTeam(tenant, template.assignedToEmployee.teamId)
       ) {
         // If template already exists in map (from workstation query), skip if it's the same
         if (!templateMap.has(template.id)) {
@@ -1472,7 +1936,7 @@ export const handleGetTaskTemplates: RequestHandler = async (req, res) => {
           if (template.workstation) {
             if (
               template.workstation.teamId &&
-              managerTeamIds.includes(template.workstation.teamId)
+              hasTenantAccessToTeam(tenant, template.workstation.teamId)
             ) {
               templateMap.set(template.id, template);
             } else {
@@ -1504,11 +1968,11 @@ export const handleGetTaskTemplates: RequestHandler = async (req, res) => {
         const workstationOk =
           t.workstation &&
           t.workstation.teamId &&
-          managerTeamIds.includes(t.workstation.teamId);
+          hasTenantAccessToTeam(tenant, t.workstation.teamId);
         const employeeOk =
           t.assignedToEmployee &&
           t.assignedToEmployee.teamId &&
-          managerTeamIds.includes(t.assignedToEmployee.teamId);
+          hasTenantAccessToTeam(tenant, t.assignedToEmployee.teamId);
         return {
           id: t.id,
           title: t.title,
@@ -1545,11 +2009,204 @@ export const handleGetTaskTemplates: RequestHandler = async (req, res) => {
   }
 };
 
+export const handleManagerBatchUpdateTaskTemplates: RequestHandler = async (
+  req,
+  res,
+) => {
+  try {
+    const payload = getAuthOrThrow(req, res);
+    if (!payload) return;
+    const tenant = getTenantOrThrow(req, res);
+    if (!tenant) return;
+    const prisma = scopedPrisma(tenant);
+    if (payload.role !== "MANAGER") {
+      res.status(403).json({ error: "Forbidden" });
+      return;
+    }
+
+    const body = ManagerBatchTaskTemplatesSchema.parse(req.body);
+    const uniqueTemplateIds = Array.from(new Set(body.templateIds));
+
+    const managerTeamIds = tenant.teamIds;
+    if (managerTeamIds.length === 0) {
+      res.status(404).json({ error: "Team not found" });
+      return;
+    }
+
+    if (
+      (body.action === "assignToEmployee" && !body.employeeId) ||
+      (body.action === "assignToWorkstation" && !body.workstationId) ||
+      (body.action === "setNotifyEmployee" && body.notifyEmployee === undefined)
+    ) {
+      res.status(400).json({ error: "Invalid batch payload" });
+      return;
+    }
+
+    const templates = await prisma.taskTemplate.findMany({
+      where: { id: { in: uniqueTemplateIds } },
+      include: {
+        createdBy: {
+          select: { id: true },
+        },
+        workstation: {
+          select: { teamId: true },
+        },
+        assignedToEmployee: {
+          select: { teamId: true, role: true },
+        },
+      },
+    });
+
+    if (templates.length === 0) {
+      res.status(404).json({ error: "No templates found" });
+      return;
+    }
+    if (templates.length !== uniqueTemplateIds.length) {
+      res.status(404).json({ error: "One or more templates not found" });
+      return;
+    }
+
+    for (const template of templates) {
+      const templateTeamId =
+        template.workstation?.teamId || template.assignedToEmployee?.teamId;
+      const canAccessUnassignedTemplate =
+        !templateTeamId && template.createdBy.id === payload.userId;
+      if (
+        (!templateTeamId && !canAccessUnassignedTemplate) ||
+        (templateTeamId && !hasTenantAccessToTeam(tenant, templateTeamId))
+      ) {
+        res.status(404).json({ error: "Template not found" });
+        return;
+      }
+    }
+
+    let targetWorkstationId: string | null = null;
+    let targetEmployeeId: string | null = null;
+
+    if (body.action === "assignToWorkstation" && body.workstationId) {
+      const workstation = await prisma.workstation.findUnique({
+        where: { id: body.workstationId },
+        select: { id: true, teamId: true },
+      });
+      if (
+        !workstation ||
+        !workstation.teamId ||
+        !hasTenantAccessToTeam(tenant, workstation.teamId)
+      ) {
+        res.status(404).json({ error: "Workstation not found" });
+        return;
+      }
+      targetWorkstationId = workstation.id;
+    }
+
+    if (body.action === "assignToEmployee" && body.employeeId) {
+      const employee = await prisma.user.findUnique({
+        where: { id: body.employeeId },
+        select: { id: true, teamId: true, role: true },
+      });
+      if (
+        !employee ||
+        employee.role !== "EMPLOYEE" ||
+        !employee.teamId ||
+        !hasTenantAccessToTeam(tenant, employee.teamId)
+      ) {
+        res.status(404).json({ error: "Employee not found" });
+        return;
+      }
+      targetEmployeeId = employee.id;
+    }
+
+    if (body.action === "clearAssignment") {
+      const invalidOneShot = templates.find((t) => !t.isRecurring);
+      if (invalidOneShot) {
+        res.status(400).json({
+          error:
+            "Cannot clear assignment for one-shot templates. Only recurring templates can be left unassigned.",
+        });
+        return;
+      }
+    }
+
+    if (
+      body.action === "setNotifyEmployee" &&
+      body.notifyEmployee !== undefined
+    ) {
+      const result = await prisma.taskTemplate.updateMany({
+        where: { id: { in: uniqueTemplateIds } },
+        data: { notifyEmployee: body.notifyEmployee },
+      });
+
+      res.json({
+        success: true,
+        updatedCount: result.count,
+        skippedCount: 0,
+        conflicts: [],
+      });
+      return;
+    }
+
+    let updatedCount = 0;
+
+    if (body.action === "assignToEmployee" && targetEmployeeId) {
+      await prisma.$transaction(async (tx) => {
+        for (const template of templates) {
+          await tx.taskTemplate.update({
+            where: { id: template.id },
+            data: {
+              assignedToEmployeeId: targetEmployeeId,
+              workstationId: null,
+            },
+          });
+          updatedCount += 1;
+        }
+      });
+    } else if (body.action === "assignToWorkstation" && targetWorkstationId) {
+      await prisma.$transaction(async (tx) => {
+        for (const template of templates) {
+          await tx.taskTemplate.update({
+            where: { id: template.id },
+            data: {
+              workstationId: targetWorkstationId,
+              assignedToEmployeeId: null,
+            },
+          });
+          updatedCount += 1;
+        }
+      });
+    } else if (body.action === "clearAssignment") {
+      await prisma.$transaction(async (tx) => {
+        for (const template of templates) {
+          await tx.taskTemplate.update({
+            where: { id: template.id },
+            data: {
+              workstationId: null,
+              assignedToEmployeeId: null,
+            },
+          });
+          updatedCount += 1;
+        }
+      });
+    }
+
+    res.json({
+      success: true,
+      updatedCount,
+      skippedCount: 0,
+      conflicts: [],
+    });
+  } catch (error) {
+    sendErrorResponse(res, error, req);
+  }
+};
+
 // Update a task template (manager only)
 export const handleUpdateTaskTemplate: RequestHandler = async (req, res) => {
   try {
     const payload = getAuthOrThrow(req, res);
     if (!payload) return;
+    const tenant = getTenantOrThrow(req, res);
+    if (!tenant) return;
+    const prisma = scopedPrisma(tenant);
     const templateId = paramString(req.params.templateId);
     if (!templateId) {
       res.status(400).json({ error: "Invalid template ID" });
@@ -1579,8 +2236,6 @@ export const handleUpdateTaskTemplate: RequestHandler = async (req, res) => {
       return;
     }
 
-    const managerTeamIds = new Set(await getManagerTeamIds(payload.userId));
-
     // Check if template belongs to a managed team
     const templateTeamId =
       existingTemplate.workstation?.teamId ||
@@ -1589,7 +2244,7 @@ export const handleUpdateTaskTemplate: RequestHandler = async (req, res) => {
       !templateTeamId && existingTemplate.createdBy.id === payload.userId;
     if (
       (!templateTeamId && !canAccessUnassignedTemplate) ||
-      (templateTeamId && !managerTeamIds.has(templateTeamId))
+      (templateTeamId && !hasTenantAccessToTeam(tenant, templateTeamId))
     ) {
       res.status(404).json({ error: "Template not found" });
       return;
@@ -1608,7 +2263,7 @@ export const handleUpdateTaskTemplate: RequestHandler = async (req, res) => {
         if (
           !workstation ||
           !workstation.teamId ||
-          !managerTeamIds.has(workstation.teamId)
+          !hasTenantAccessToTeam(tenant, workstation.teamId)
         ) {
           res.status(404).json({ error: "Workstation not found" });
           return;
@@ -1633,7 +2288,7 @@ export const handleUpdateTaskTemplate: RequestHandler = async (req, res) => {
           !user ||
           user.role !== "EMPLOYEE" ||
           !user.teamId ||
-          !managerTeamIds.has(user.teamId)
+          !hasTenantAccessToTeam(tenant, user.teamId)
         ) {
           res.status(404).json({ error: "Employee not found" });
           return;
@@ -1808,6 +2463,9 @@ export const handleDeleteTaskTemplate: RequestHandler = async (req, res) => {
   try {
     const payload = getAuthOrThrow(req, res);
     if (!payload) return;
+    const tenant = getTenantOrThrow(req, res);
+    if (!tenant) return;
+    const prisma = scopedPrisma(tenant);
     const templateId = paramString(req.params.templateId);
     if (!templateId) {
       res.status(400).json({ error: "Invalid template ID" });
@@ -1844,15 +2502,13 @@ export const handleDeleteTaskTemplate: RequestHandler = async (req, res) => {
       return;
     }
 
-    const managerTeamIds = new Set(await getManagerTeamIds(payload.userId));
-
     const templateTeamId =
       template.workstation?.teamId || template.assignedToEmployee?.teamId;
     const canAccessUnassignedTemplate =
       !templateTeamId && template.createdBy.id === payload.userId;
     if (
       (!templateTeamId && !canAccessUnassignedTemplate) ||
-      (templateTeamId && !managerTeamIds.has(templateTeamId))
+      (templateTeamId && !hasTenantAccessToTeam(tenant, templateTeamId))
     ) {
       res.status(404).json({ error: "Template not found" });
       return;
@@ -1899,11 +2555,373 @@ export const handleDailyTaskAssignment: RequestHandler = async (req, res) => {
   }
 };
 
+function formatDateOnly(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function getWeekRangeContaining(date: Date): {
+  weekStart: Date;
+  weekEnd: Date;
+} {
+  const dayStart = new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    date.getDate(),
+  );
+  const dayOfWeek = dayStart.getDay(); // 0 (Sun) - 6 (Sat)
+  const diffToMonday = (dayOfWeek + 6) % 7; // days since Monday
+  const weekStart = new Date(
+    dayStart.getTime() - diffToMonday * 24 * 60 * 60 * 1000,
+  );
+  const weekEnd = new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000); // exclusive
+  return { weekStart, weekEnd };
+}
+
+function isDelayedOccurrence(
+  task: {
+    date: Date;
+    isCompleted: boolean;
+    completedAt: Date | null;
+  },
+  now: Date,
+): boolean {
+  const dueTime = task.date.getTime();
+  const endOfDueDay = new Date(task.date);
+  endOfDueDay.setHours(24, 0, 0, 0);
+  const endOfDueDayTime = endOfDueDay.getTime();
+
+  if (!task.isCompleted) {
+    return now.getTime() > endOfDueDayTime;
+  }
+  if (!task.completedAt) return false;
+  return (
+    task.completedAt.getTime() > endOfDueDayTime &&
+    task.completedAt.getTime() > dueTime
+  );
+}
+
+export const handleGetManagerWeeklyReport: RequestHandler = async (
+  req,
+  res,
+) => {
+  try {
+    const payload = getAuthOrThrow(req, res);
+    if (!payload) return;
+    const tenant = getTenantOrThrow(req, res);
+    if (!tenant) return;
+    const prisma = scopedPrisma(tenant);
+
+    const query = req.query as Record<string, unknown>;
+    const parsedDate = parseDateQueryParam(query.date, query);
+    if ("error" in parsedDate) {
+      res.status(400).json({ error: parsedDate.error });
+      return;
+    }
+    const referenceDate = parsedDate.date;
+    const { weekStart, weekEnd } = getWeekRangeContaining(referenceDate);
+
+    const teamIds = tenant.teamIds;
+    if (teamIds.length === 0) {
+      res.status(404).json({ error: "Team not found" });
+      return;
+    }
+
+    const workstationRows = await prisma.workstation.findMany({
+      where: {
+        teamId: { in: teamIds },
+      },
+      select: { id: true },
+    });
+    const workstationIds = workstationRows.map((row) => row.id);
+
+    const taskVisibilityScopes: Array<Record<string, unknown>> = [
+      {
+        employee: {
+          role: "EMPLOYEE",
+          teamId: { in: teamIds },
+        },
+      },
+      {
+        employeeId: null,
+        taskTemplate: {
+          workstation: {
+            teamId: { in: teamIds },
+          },
+        },
+      },
+      {
+        employeeId: null,
+        taskTemplate: {
+          assignedToEmployee: {
+            role: "EMPLOYEE",
+            teamId: { in: teamIds },
+          },
+        },
+      },
+      {
+        employeeId: null,
+        templateSourceId: {
+          startsWith: quickTaskSourcePrefixForManager(payload.userId),
+        },
+      },
+    ];
+    if (workstationIds.length > 0) {
+      taskVisibilityScopes.push({
+        employeeId: null,
+        templateWorkstationId: { in: workstationIds },
+      });
+    }
+
+    const rows = await prisma.dailyTask.findMany({
+      where: {
+        AND: [
+          { OR: taskVisibilityScopes },
+          {
+            date: {
+              gte: weekStart,
+              lt: weekEnd,
+            },
+          },
+        ],
+      },
+      include: {
+        employee: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        taskTemplate: {
+          select: {
+            id: true,
+            title: true,
+            isRecurring: true,
+            workstation: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: [{ date: "asc" }, { createdAt: "asc" }],
+    });
+
+    const now = new Date();
+    const daysInRange = Math.max(
+      1,
+      Math.round(
+        (weekEnd.getTime() - weekStart.getTime()) / (24 * 60 * 60 * 1000),
+      ),
+    );
+
+    const summary: ManagerWeeklyReportSummary = {
+      totalTasks: rows.length,
+      completedTasks: rows.filter((t) => t.isCompleted).length,
+      overdueTasks: rows.filter((t) => !t.isCompleted && t.date < now).length,
+    };
+
+    // Bottlenecks - employees
+    const employeeDayCounts = new Map<
+      string,
+      { name: string; days: Map<string, number> }
+    >();
+
+    for (const row of rows) {
+      if (!row.employee) continue;
+      const employeeId = row.employee.id;
+      const dayKey = formatDateOnly(row.date);
+      let entry = employeeDayCounts.get(employeeId);
+      if (!entry) {
+        entry = { name: row.employee.name, days: new Map<string, number>() };
+        employeeDayCounts.set(employeeId, entry);
+      }
+      entry.days.set(dayKey, (entry.days.get(dayKey) ?? 0) + 1);
+    }
+
+    const employeeBottlenecks: ManagerWeeklyReportEmployeeBottleneck[] = [];
+    for (const [employeeId, entry] of employeeDayCounts.entries()) {
+      const counts = Array.from(entry.days.values());
+      const total = counts.reduce((sum, c) => sum + c, 0);
+      const peak = counts.length > 0 ? Math.max(...counts) : 0;
+      const avg = total / daysInRange;
+      employeeBottlenecks.push({
+        employeeId,
+        name: entry.name,
+        peakDayTaskCount: peak,
+        averageDailyTaskCount: Number(avg.toFixed(2)),
+      });
+    }
+
+    if (employeeBottlenecks.length > 0) {
+      const meanPeak =
+        employeeBottlenecks.reduce((sum, e) => sum + e.peakDayTaskCount, 0) /
+        employeeBottlenecks.length;
+      const threshold = Math.ceil(meanPeak) + 1;
+      employeeBottlenecks.sort(
+        (a, b) => b.peakDayTaskCount - a.peakDayTaskCount,
+      );
+      // Keep only employees clearly above average and cap list size
+      const filtered = employeeBottlenecks.filter(
+        (e) => e.peakDayTaskCount >= threshold,
+      );
+      employeeBottlenecks.length = 0;
+      employeeBottlenecks.push(...filtered.slice(0, 5));
+    }
+
+    // Bottlenecks - workstations (sensitive posts)
+    const workstationDayUncompleted = new Map<
+      string,
+      { name: string; days: Map<string, number> }
+    >();
+
+    for (const row of rows) {
+      if (row.isCompleted) continue;
+      const wsId =
+        row.taskTemplate?.workstation?.id ??
+        row.templateWorkstationId ??
+        "direct";
+      const wsName =
+        row.taskTemplate?.workstation?.name ??
+        row.templateWorkstationName ??
+        "Direct";
+      const dayKey = formatDateOnly(row.date);
+      let entry = workstationDayUncompleted.get(wsId);
+      if (!entry) {
+        entry = { name: wsName, days: new Map<string, number>() };
+        workstationDayUncompleted.set(wsId, entry);
+      }
+      entry.days.set(dayKey, (entry.days.get(dayKey) ?? 0) + 1);
+    }
+
+    const workstationBottlenecks: ManagerWeeklyReportWorkstationBottleneck[] =
+      [];
+    for (const [wsId, entry] of workstationDayUncompleted.entries()) {
+      const counts = Array.from(entry.days.values());
+      const total = counts.reduce((sum, c) => sum + c, 0);
+      const peak = counts.length > 0 ? Math.max(...counts) : 0;
+      const avg = total / daysInRange;
+      workstationBottlenecks.push({
+        workstationId: wsId === "direct" ? null : wsId,
+        name: entry.name,
+        peakDayUncompletedCount: peak,
+        averageDailyUncompletedCount: Number(avg.toFixed(2)),
+      });
+    }
+
+    if (workstationBottlenecks.length > 0) {
+      const meanPeak =
+        workstationBottlenecks.reduce(
+          (sum, ws) => sum + ws.peakDayUncompletedCount,
+          0,
+        ) / workstationBottlenecks.length;
+      const threshold = Math.ceil(meanPeak) + 1;
+      workstationBottlenecks.sort(
+        (a, b) => b.peakDayUncompletedCount - a.peakDayUncompletedCount,
+      );
+      const filtered = workstationBottlenecks.filter(
+        (ws) => ws.peakDayUncompletedCount >= threshold,
+      );
+      workstationBottlenecks.length = 0;
+      workstationBottlenecks.push(...filtered.slice(0, 5));
+    }
+
+    // Recurring delays
+    const recurringByTemplate = new Map<
+      string,
+      {
+        title: string;
+        workstationName?: string;
+        total: number;
+        delayed: number;
+      }
+    >();
+
+    for (const row of rows) {
+      if (!row.taskTemplate || !row.taskTemplate.isRecurring) continue;
+      const templateId = row.taskTemplate.id ?? row.taskTemplateId ?? "";
+      if (!templateId) continue;
+      let entry = recurringByTemplate.get(templateId);
+      if (!entry) {
+        entry = {
+          title: row.taskTemplate.title,
+          workstationName: row.taskTemplate.workstation?.name ?? undefined,
+          total: 0,
+          delayed: 0,
+        };
+        recurringByTemplate.set(templateId, entry);
+      }
+      entry.total += 1;
+      if (
+        isDelayedOccurrence(
+          {
+            date: row.date,
+            isCompleted: row.isCompleted,
+            completedAt: row.completedAt,
+          },
+          now,
+        )
+      ) {
+        entry.delayed += 1;
+      }
+    }
+
+    const recurringDelays: ManagerWeeklyReportRecurringDelay[] = [];
+    for (const [templateId, entry] of recurringByTemplate.entries()) {
+      if (entry.total === 0) continue;
+      const delayRate = entry.delayed / entry.total;
+      // Only surface meaningful patterns (at least 2 delayed and 30%+ delayed)
+      if (entry.delayed < 2 || delayRate < 0.3) continue;
+      recurringDelays.push({
+        templateId,
+        title: entry.title,
+        workstationName: entry.workstationName,
+        totalOccurrences: entry.total,
+        delayedOccurrences: entry.delayed,
+        delayRate: Number(delayRate.toFixed(2)),
+      });
+    }
+
+    recurringDelays.sort((a, b) => {
+      if (b.delayRate !== a.delayRate) {
+        return b.delayRate - a.delayRate;
+      }
+      return b.delayedOccurrences - a.delayedOccurrences;
+    });
+
+    const report: ManagerWeeklyReport = {
+      weekStart: formatDateOnly(weekStart),
+      weekEnd: formatDateOnly(
+        new Date(weekEnd.getTime() - 24 * 60 * 60 * 1000),
+      ),
+      generatedAt: new Date().toISOString(),
+      summary,
+      bottlenecks: {
+        employees: employeeBottlenecks,
+        workstations: workstationBottlenecks,
+      },
+      recurringDelays: recurringDelays.slice(0, 10),
+    };
+
+    res.json(report);
+  } catch (error) {
+    sendErrorResponse(res, error, req);
+  }
+};
+
 // Get dashboard data for manager (all managed teams; multi-team supported)
 export const handleGetManagerDashboard: RequestHandler = async (req, res) => {
   try {
     const payload = getAuthOrThrow(req, res);
     if (!payload) return;
+    const tenant = getTenantOrThrow(req, res);
+    if (!tenant) return;
+    const prisma = scopedPrisma(tenant);
     const parsedQuery = parseManagerDashboardQuery(req.query);
     if ("error" in parsedQuery) {
       res.status(400).json({ error: parsedQuery.error });
@@ -1923,14 +2941,21 @@ export const handleGetManagerDashboard: RequestHandler = async (req, res) => {
       await assignDailyTasksForDate(taskDate);
     }
 
-    const teamIds = await getManagerTeamIds(payload.userId);
+    const teamIds = tenant.teamIds;
     if (teamIds.length === 0) {
       res.status(404).json({ error: "Team not found" });
       return;
     }
 
-    const teams = await getManagerTeams(payload.userId);
-    const firstTeam = teams[0];
+    const firstTeam = await prisma.team.findFirst({
+      where: { id: { in: teamIds } },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    });
+    if (!firstTeam) {
+      res.status(404).json({ error: "Team not found" });
+      return;
+    }
 
     // All members from all managed teams (for filters and display)
     const members = await prisma.user.findMany({
@@ -1996,9 +3021,22 @@ export const handleGetManagerDashboard: RequestHandler = async (req, res) => {
       },
       orderBy: [{ employee: { name: "asc" } }, { createdAt: "asc" }],
     });
-    const dailyTasks = dailyTaskRows.map((task) =>
-      serializeDailyTaskResponse(task),
-    );
+    const dayEnd = new Date(taskDate.getTime() + 24 * 60 * 60 * 1000);
+    const dailyTasks = dailyTaskRows.map((task) => {
+      const serialized = serializeDailyTaskResponse(task);
+      return {
+        ...serialized,
+        priorityScore: computeTaskPriorityScore(
+          {
+            date: task.date,
+            isCompleted: task.isCompleted,
+            employeeId: task.employeeId,
+          },
+          taskDate,
+          dayEnd,
+        ),
+      };
+    });
 
     // Day preparation summary: recurring templates expected today and those still unassigned.
     const recurringTemplates = await prisma.taskTemplate.findMany({
@@ -2127,10 +3165,10 @@ export const handleGetManagerDashboard: RequestHandler = async (req, res) => {
       .map((template) => {
         const workstationAllowed =
           !!template.workstation?.teamId &&
-          teamIds.includes(template.workstation.teamId);
+          hasTenantAccessToTeam(tenant, template.workstation.teamId);
         const employeeAllowed =
           !!template.assignedToEmployee?.teamId &&
-          teamIds.includes(template.assignedToEmployee.teamId);
+          hasTenantAccessToTeam(tenant, template.assignedToEmployee.teamId);
 
         const suggestedEmployees = employeeAllowed
           ? [

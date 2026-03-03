@@ -1,6 +1,6 @@
 import React from "react";
 import { NavLink } from "react-router-dom";
-import { LogOut, Settings, Users } from "lucide-react";
+import { LogOut, Settings, Users, Gauge } from "lucide-react";
 
 interface ManagerDashboardHeaderProps {
   teamName: string;
@@ -22,14 +22,16 @@ export function ManagerDashboardHeader({
         <div className="flex items-center justify-between mb-4">
           <div>
             <h1 className="text-2xl font-bold text-foreground">{teamName}</h1>
-            <p className="text-sm text-muted-foreground">Manager Dashboard</p>
+            <p className="text-sm text-muted-foreground">
+              Tableau de bord manager
+            </p>
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={onOpenSettings}
               className="inline-flex items-center gap-2 px-4 py-2 border border-input hover:bg-secondary text-foreground rounded-lg font-medium transition"
-              title="Settings"
-              aria-label="Open team settings"
+              title="Paramètres"
+              aria-label="Ouvrir les paramètres de l'équipe"
               type="button"
             >
               <Settings className="w-4 h-4" />
@@ -37,8 +39,8 @@ export function ManagerDashboardHeader({
             <button
               onClick={onLogout}
               className="inline-flex items-center gap-2 px-3 py-2 text-muted-foreground hover:text-foreground hover:bg-secondary rounded-lg transition"
-              title="Sign out"
-              aria-label="Sign out"
+              title="Se déconnecter"
+              aria-label="Se déconnecter"
               type="button"
             >
               <LogOut className="w-4 h-4" />
@@ -55,7 +57,7 @@ export function ManagerDashboardHeader({
                 `${navLinkClass} ${isActive ? "border-primary text-primary" : ""}`
               }
             >
-              Today
+              Aujourd'hui
             </NavLink>
             <NavLink
               to="/manager/dashboard"
@@ -64,7 +66,17 @@ export function ManagerDashboardHeader({
                 `${navLinkClass} ${isActive ? "border-primary text-primary" : ""}`
               }
             >
-              Dashboard
+              Tableau de bord
+            </NavLink>
+            <NavLink
+              to="/manager/pilotage"
+              end
+              className={({ isActive }) =>
+                `${navLinkClass} ${isActive ? "border-primary text-primary" : ""}`
+              }
+            >
+              <Gauge className="w-4 h-4 inline mr-1.5 sm:mr-2 flex-shrink-0" />
+              Pilotage
             </NavLink>
             <NavLink
               to="/manager/workstations"
@@ -73,7 +85,7 @@ export function ManagerDashboardHeader({
                 `${navLinkClass} ${isActive ? "border-primary text-primary" : ""}`
               }
             >
-              Workstations
+              Postes
             </NavLink>
             <NavLink
               to="/manager/employees"
@@ -83,7 +95,7 @@ export function ManagerDashboardHeader({
               }
             >
               <Users className="w-4 h-4 inline mr-1.5 sm:mr-2 flex-shrink-0" />
-              Employees
+              Employés
             </NavLink>
             <NavLink
               to="/manager/task"
@@ -92,7 +104,7 @@ export function ManagerDashboardHeader({
                 `${navLinkClass} ${isActive ? "border-primary text-primary" : ""}`
               }
             >
-              Task
+              Tâches
             </NavLink>
           </div>
         </div>

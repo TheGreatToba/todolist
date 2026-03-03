@@ -21,17 +21,17 @@ const NotFound = () => {
         </div>
         <h1 className="text-5xl font-bold text-foreground mb-2">404</h1>
         <h2 className="text-2xl font-semibold text-foreground mb-4">
-          Page Not Found
+          Page introuvable
         </h2>
         <p className="text-muted-foreground mb-8">
-          The page you're looking for doesn't exist. It might have been removed
-          or the URL might be incorrect.
+          La page que vous recherchez n&apos;existe pas. Elle a peut-être été
+          supprimée ou l&apos;adresse est incorrecte.
         </p>
         <button
           onClick={() => navigate("/")}
           className="px-6 py-3 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-medium transition inline-block"
         >
-          Return to Home
+          Retour à l&apos;accueil
         </button>
       </div>
     </div>

@@ -8,6 +8,24 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 
+// Lightweight ResizeObserver polyfill for jsdom/Vitest environment
+const globalWithResizeObserver = globalThis as typeof globalThis & {
+  ResizeObserver?: {
+    new (callback: ResizeObserverCallback): ResizeObserver;
+  };
+};
+
+if (!globalWithResizeObserver.ResizeObserver) {
+  globalWithResizeObserver.ResizeObserver = class ResizeObserver {
+    constructor(callback: ResizeObserverCallback) {
+      void callback;
+    }
+    observe(): void {}
+    unobserve(): void {}
+    disconnect(): void {}
+  };
+}
+
 vi.mock("react-router-dom", async () => {
   const actual =
     await vi.importActual<typeof import("react-router-dom")>(
@@ -282,4 +300,6 @@ describe("ManagerDashboard Settings modal", () => {
       externalRoot.remove();
     }
   });
+
+  // Global search is opened via an explicit button (no keyboard shortcut)
 });

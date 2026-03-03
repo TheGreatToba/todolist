@@ -15,14 +15,18 @@ export default function Login() {
     setLocalError(null);
 
     if (!email || !password) {
-      setLocalError("Please fill in all fields");
+      setLocalError("Merci de renseigner tous les champs");
       return;
     }
 
     try {
       await login(email, password);
     } catch (err) {
-      setLocalError(err instanceof Error ? err.message : "Login failed");
+      setLocalError(
+        err instanceof Error
+          ? err.message
+          : "Échec de la connexion. Merci de réessayer.",
+      );
     }
   };
 
@@ -51,7 +55,7 @@ export default function Login() {
             Tasty Crousty
           </h1>
           <p className="text-muted-foreground">
-            Manage your daily tasks with ease
+            Gérez vos tâches quotidiennes en toute simplicité
           </p>
         </div>
 
@@ -63,7 +67,7 @@ export default function Login() {
           {(error || localError) && (
             <div
               role="alert"
-              aria-label={error || localError || "Error"}
+              aria-label={error || localError || "Erreur"}
               className="bg-destructive/10 border border-destructive/20 rounded-lg px-4 py-3 text-sm text-destructive"
             >
               {error || localError}
@@ -75,14 +79,14 @@ export default function Login() {
               htmlFor="email"
               className="block text-sm font-medium text-foreground mb-2"
             >
-              Email
+              E-mail
             </label>
             <input
               id="email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
+              placeholder="vous@example.com"
               className="w-full px-4 py-3 rounded-lg border border-input bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition"
             />
           </div>
@@ -92,7 +96,7 @@ export default function Login() {
               htmlFor="password"
               className="block text-sm font-medium text-foreground mb-2"
             >
-              Password
+              Mot de passe
             </label>
             <input
               id="password"
@@ -112,10 +116,10 @@ export default function Login() {
             {isLoading ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                Signing in...
+                Connexion en cours...
               </>
             ) : (
-              "Sign in"
+              "Se connecter"
             )}
           </button>
 
@@ -126,17 +130,17 @@ export default function Login() {
                 onClick={() => navigate("/forgot-password")}
                 className="text-primary hover:text-primary/90 font-medium transition"
               >
-                Forgot your password?
+                Mot de passe oublié ?
               </button>
             </div>
             <div className="text-center text-sm text-muted-foreground">
-              Don't have an account?{" "}
+              Pas encore de compte ?{" "}
               <button
                 type="button"
                 onClick={() => navigate("/signup")}
                 className="text-primary hover:text-primary/90 font-medium transition"
               >
-                Create one
+                Créer un compte
               </button>
             </div>
           </div>
@@ -145,11 +149,11 @@ export default function Login() {
         {/* Demo Info */}
         <div className="mt-6 bg-secondary/30 rounded-xl p-4 border border-border text-center">
           <p className="text-sm text-muted-foreground">
-            <strong>Demo credentials:</strong>
+            <strong>Identifiants de démonstration :</strong>
             <br />
-            Employee: emp@test.com / password
+            Employé : emp@test.com / password
             <br />
-            Manager: mgr@test.com / password
+            Manager : mgr@test.com / mot de passe : password
           </p>
         </div>
       </div>

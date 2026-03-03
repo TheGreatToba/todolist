@@ -20,7 +20,10 @@ export default function SetPassword() {
         data.user.role === "MANAGER" ? "/manager/today" : "/employee";
     },
     onError: (err) => {
-      setError(err.message ?? "Failed to set password");
+      setError(
+        err.message ??
+          "Échec de la création du mot de passe. Merci de réessayer.",
+      );
     },
   });
 
@@ -29,17 +32,19 @@ export default function SetPassword() {
     setError(null);
 
     if (!token) {
-      setError("Invalid link. Please use the link from your welcome email.");
+      setError(
+        "Lien invalide. Merci d'utiliser le lien reçu dans votre e-mail de bienvenue.",
+      );
       return;
     }
 
     if (password.length < 6) {
-      setError("Password must be at least 6 characters.");
+      setError("Le mot de passe doit comporter au moins 6 caractères.");
       return;
     }
 
     if (password !== confirmPassword) {
-      setError("Passwords do not match.");
+      setError("Les mots de passe ne correspondent pas.");
       return;
     }
 
@@ -54,17 +59,17 @@ export default function SetPassword() {
             <Lock className="w-8 h-8 text-destructive" />
           </div>
           <h1 className="text-2xl font-bold text-foreground mb-2">
-            Invalid link
+            Lien invalide
           </h1>
           <p className="text-muted-foreground mb-6">
-            Please use the link from your welcome email to set your password.
-            The link may have expired.
+            Merci d&apos;utiliser le lien reçu dans votre e-mail de bienvenue
+            pour définir votre mot de passe. Le lien a peut-être expiré.
           </p>
           <button
             onClick={() => navigate("/login")}
             className="px-6 py-3 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-medium transition"
           >
-            Go to sign in
+            Aller à la page de connexion
           </button>
         </div>
       </div>
@@ -79,10 +84,10 @@ export default function SetPassword() {
             <Lock className="w-8 h-8 text-primary" />
           </div>
           <h1 className="text-3xl font-bold text-foreground mb-2">
-            Set your password
+            Définissez votre mot de passe
           </h1>
           <p className="text-muted-foreground">
-            Create a secure password for your Tasty Crousty account
+            Créez un mot de passe sécurisé pour votre compte Tasty Crousty
           </p>
         </div>
 
@@ -101,7 +106,7 @@ export default function SetPassword() {
               htmlFor="password"
               className="block text-sm font-medium text-foreground mb-2"
             >
-              New password
+              Nouveau mot de passe
             </label>
             <input
               id="password"
@@ -113,7 +118,7 @@ export default function SetPassword() {
               className="w-full px-4 py-3 rounded-lg border border-input bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition"
             />
             <p className="text-xs text-muted-foreground mt-1">
-              At least 6 characters
+              Au moins 6 caractères
             </p>
           </div>
 
@@ -122,7 +127,7 @@ export default function SetPassword() {
               htmlFor="confirmPassword"
               className="block text-sm font-medium text-foreground mb-2"
             >
-              Confirm password
+              Confirmer le mot de passe
             </label>
             <input
               id="confirmPassword"
@@ -143,10 +148,10 @@ export default function SetPassword() {
             {setPasswordMutation.isPending ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                Setting password...
+                Enregistrement du mot de passe...
               </>
             ) : (
-              "Set password & sign in"
+              "Enregistrer et se connecter"
             )}
           </button>
         </form>

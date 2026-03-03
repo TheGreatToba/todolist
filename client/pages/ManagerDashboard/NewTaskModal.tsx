@@ -69,12 +69,12 @@ export function NewTaskModal({
             id="new-task-modal-title"
             className="text-xl font-bold text-foreground"
           >
-            Create New Task
+            Creer une nouvelle tache
           </h2>
           <button
             onClick={onClose}
             className="p-1 hover:bg-secondary rounded-lg transition"
-            aria-label="Close new task modal"
+            aria-label="Fermer la modale de nouvelle tache"
             type="button"
           >
             <X className="w-5 h-5 text-muted-foreground" />
@@ -106,8 +106,8 @@ export function NewTaskModal({
               }
               className="w-full px-4 py-2 rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
             >
-              <option value="create">Create new template</option>
-              <option value="template">Use existing template</option>
+              <option value="create">Creer un nouveau modele</option>
+              <option value="template">Utiliser un modele existant</option>
             </select>
           </div>
 
@@ -117,18 +117,63 @@ export function NewTaskModal({
                 htmlFor="task-template"
                 className="block text-sm font-medium text-foreground mb-2"
               >
-                Existing template
+                Modele existant
               </label>
               <select
                 id="task-template"
                 required
                 value={form.templateId}
-                onChange={(e) =>
-                  onFormChange({ ...form, templateId: e.target.value })
-                }
+                onChange={(e) => {
+                  const nextTemplateId = e.target.value;
+                  const nextTemplate = templates.find(
+                    (template) => template.id === nextTemplateId,
+                  );
+
+                  let nextForm: NewTaskFormState = {
+                    ...form,
+                    templateId: nextTemplateId,
+                  };
+
+                  if (nextTemplate) {
+                    // Heuristic: prefer explicit employee assignment, then workstation.
+                    if (nextTemplate.assignedToEmployeeId) {
+                      nextForm = {
+                        ...nextForm,
+                        assignmentType: "employee",
+                        assignedToEmployeeId: nextTemplate.assignedToEmployeeId,
+                        workstationId: "",
+                      };
+                    } else if (nextTemplate.workstationId) {
+                      nextForm = {
+                        ...nextForm,
+                        assignmentType: "workstation",
+                        workstationId: nextTemplate.workstationId,
+                        assignedToEmployeeId: "",
+                      };
+                    } else {
+                      // Template sans affectation : repartir neutre (ne pas garder l’état précédent).
+                      nextForm = {
+                        ...nextForm,
+                        assignmentType: "workstation",
+                        workstationId: "",
+                        assignedToEmployeeId: "",
+                      };
+                    }
+
+                    // Align notification preference with template when possible.
+                    if (typeof nextTemplate.notifyEmployee === "boolean") {
+                      nextForm = {
+                        ...nextForm,
+                        notifyEmployee: nextTemplate.notifyEmployee,
+                      };
+                    }
+                  }
+
+                  onFormChange(nextForm);
+                }}
                 className="w-full px-4 py-2 rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
               >
-                <option value="">Select a template</option>
+                <option value="">Selectionner un modele</option>
                 {templates.map((template) => (
                   <option key={template.id} value={template.id}>
                     {template.title}
@@ -137,7 +182,7 @@ export function NewTaskModal({
               </select>
               {selectedTemplate && (
                 <p className="text-xs text-muted-foreground mt-2">
-                  {selectedTemplate.description || "No description"}
+                  {selectedTemplate.description || "Aucune description"}
                 </p>
               )}
             </div>
@@ -149,7 +194,7 @@ export function NewTaskModal({
                 htmlFor="task-title"
                 className="block text-sm font-medium text-foreground mb-2"
               >
-                Task Title
+                Titre de la tache
               </label>
               <input
                 id="task-title"
@@ -159,7 +204,7 @@ export function NewTaskModal({
                 onChange={(e) =>
                   onFormChange({ ...form, title: e.target.value })
                 }
-                placeholder="e.g., Clean the workstation"
+                placeholder="Ex. : Nettoyer le poste"
                 className="w-full px-4 py-2 rounded-lg border border-input bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
@@ -168,7 +213,7 @@ export function NewTaskModal({
           {form.creationMode === "create" && (
             <div>
               <span className="block text-sm font-medium text-foreground mb-2">
-                Task Type
+                Type de tache
               </span>
               <div className="flex gap-3">
                 <label
@@ -188,7 +233,7 @@ export function NewTaskModal({
                     className="w-4 h-4"
                   />
                   <span className="text-sm font-medium text-foreground">
-                    Recurring
+                    Recurrente
                   </span>
                 </label>
                 <label
@@ -215,7 +260,7 @@ export function NewTaskModal({
                     className="w-4 h-4"
                   />
                   <span className="text-sm font-medium text-foreground">
-                    One-shot
+                    Ponctuelle
                   </span>
                 </label>
               </div>
@@ -224,7 +269,7 @@ export function NewTaskModal({
 
           <div>
             <span className="block text-sm font-medium text-foreground mb-2">
-              Assign To
+              Affecter a
             </span>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <label
@@ -249,7 +294,7 @@ export function NewTaskModal({
                   className="w-4 h-4"
                 />
                 <span className="text-sm font-medium text-foreground">
-                  Workstation
+                  Poste
                 </span>
               </label>
               <label
@@ -274,7 +319,7 @@ export function NewTaskModal({
                   className="w-4 h-4"
                 />
                 <span className="text-sm font-medium text-foreground">
-                  Employee
+                  Employe
                 </span>
               </label>
               {canStayUnassigned && (
@@ -301,7 +346,7 @@ export function NewTaskModal({
                     className="w-4 h-4"
                   />
                   <span className="text-sm font-medium text-foreground">
-                    Unassigned
+                    Non assignee
                   </span>
                 </label>
               )}
@@ -314,7 +359,7 @@ export function NewTaskModal({
                 htmlFor="task-workstation"
                 className="block text-sm font-medium text-foreground mb-2"
               >
-                Workstation
+                Poste
               </label>
               <select
                 id="task-workstation"
@@ -325,7 +370,7 @@ export function NewTaskModal({
                 }
                 className="w-full px-4 py-2 rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
               >
-                <option value="">Select a workstation</option>
+                <option value="">Selectionner un poste</option>
                 {workstations.map((ws) => (
                   <option key={ws.id} value={ws.id}>
                     {ws.name}
@@ -341,7 +386,7 @@ export function NewTaskModal({
                 htmlFor="task-employee"
                 className="block text-sm font-medium text-foreground mb-2"
               >
-                Employee
+                Employe
               </label>
               <select
                 id="task-employee"
@@ -355,7 +400,7 @@ export function NewTaskModal({
                 }
                 className="w-full px-4 py-2 rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
               >
-                <option value="">Select an employee</option>
+                <option value="">Selectionner un employe</option>
                 {teamMembers.map((member) => (
                   <option key={member.id} value={member.id}>
                     {member.name} ({member.email})
@@ -371,7 +416,7 @@ export function NewTaskModal({
                 htmlFor="task-description"
                 className="block text-sm font-medium text-foreground mb-2"
               >
-                Description (optional)
+                Description (optionnelle)
               </label>
               <textarea
                 id="task-description"
@@ -379,7 +424,7 @@ export function NewTaskModal({
                 onChange={(e) =>
                   onFormChange({ ...form, description: e.target.value })
                 }
-                placeholder="Add any additional details..."
+                placeholder="Ajouter des details complementaires..."
                 className="w-full px-4 py-2 rounded-lg border border-input bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary resize-none"
                 rows={3}
               />
@@ -400,7 +445,7 @@ export function NewTaskModal({
               htmlFor="notifyEmployee"
               className="text-sm text-foreground cursor-pointer flex-1"
             >
-              Notify employee when task is assigned
+              Notifier l'employe lors de l'affectation
             </label>
           </div>
 
@@ -410,14 +455,16 @@ export function NewTaskModal({
               onClick={onClose}
               className="flex-1 px-4 py-2 border border-input text-foreground rounded-lg hover:bg-secondary transition font-medium"
             >
-              Cancel
+              Annuler
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
               className="flex-1 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg transition font-medium disabled:opacity-50"
             >
-              {form.creationMode === "template" ? "Assign Task" : "Create Task"}
+              {form.creationMode === "template"
+                ? "Affecter la tache"
+                : "Creer la tache"}
             </button>
           </div>
         </form>

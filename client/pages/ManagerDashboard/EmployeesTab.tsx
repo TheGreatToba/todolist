@@ -44,7 +44,7 @@ export function EmployeesTab({
     <div>
       <div className="mb-6">
         <h2 className="text-xl font-bold text-foreground mb-4">
-          Create New Employee
+          Créer un nouvel employé
         </h2>
 
         <form
@@ -52,8 +52,8 @@ export function EmployeesTab({
           className="bg-card rounded-xl border border-border p-6 shadow-sm mb-8 space-y-4"
         >
           <p className="text-sm text-muted-foreground -mt-2">
-            The employee will receive an email with a secure link to set their
-            password (no password sent by email).
+            L&apos;employé recevra un e-mail avec un lien sécurisé pour définir
+            son mot de passe (aucun mot de passe n&apos;est envoyé par e-mail).
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -61,7 +61,7 @@ export function EmployeesTab({
                 htmlFor="employee-name"
                 className="block text-sm font-medium text-foreground mb-2"
               >
-                Full Name
+                Nom complet
               </label>
               <input
                 id="employee-name"
@@ -71,7 +71,7 @@ export function EmployeesTab({
                 onChange={(e) =>
                   onNewEmployeeChange({ ...newEmployee, name: e.target.value })
                 }
-                placeholder="John Doe"
+                placeholder="Jean Dupont"
                 className="w-full px-4 py-2 rounded-lg border border-input bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
@@ -81,7 +81,7 @@ export function EmployeesTab({
                 htmlFor="employee-email"
                 className="block text-sm font-medium text-foreground mb-2"
               >
-                Email
+                E-mail
               </label>
               <input
                 id="employee-email"
@@ -94,20 +94,20 @@ export function EmployeesTab({
                     email: e.target.value,
                   })
                 }
-                placeholder="john@example.com"
+                placeholder="jean@example.com"
                 className="w-full px-4 py-2 rounded-lg border border-input bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-foreground mb-2">
-                Workstations (Select one or more)
+                Postes (sélectionnez-en un ou plusieurs)
               </label>
               <div className="space-y-2 max-h-40 overflow-y-auto border border-input rounded-lg p-3 bg-background">
                 {workstations.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
-                    No workstations available. Create one in the Workstations
-                    tab first.
+                    Aucun poste disponible. Créez-en un dans l&apos;onglet
+                    Postes d&apos;abord.
                   </p>
                 ) : (
                   workstations.map((ws) => (
@@ -150,19 +150,19 @@ export function EmployeesTab({
             type="submit"
             className="w-full px-6 py-3 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-medium transition"
           >
-            Create Employee
+            Créer l&apos;employé
           </button>
         </form>
       </div>
 
       <h3 className="text-lg font-semibold text-foreground mb-4">
-        Team Members ({teamMembers.length})
+        Membres de l&apos;équipe ({teamMembers.length})
       </h3>
       <div className="space-y-3">
         {teamMembers.length === 0 ? (
           <div className="text-center py-8 bg-card rounded-xl border border-border">
             <p className="text-muted-foreground">
-              No employees yet. Create one above!
+              Aucun employé pour l&apos;instant. Créez-en un ci-dessus !
             </p>
           </div>
         ) : (
@@ -220,7 +220,7 @@ export function EmployeesTab({
                       className="flex-1 min-w-0 px-3 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-medium transition text-sm"
                       type="button"
                     >
-                      Save
+                      Enregistrer
                     </button>
                     <button
                       onClick={() => {
@@ -230,22 +230,14 @@ export function EmployeesTab({
                       className="flex-1 min-w-0 px-3 py-2 border border-input text-foreground hover:bg-secondary rounded-lg transition text-sm"
                       type="button"
                     >
-                      Cancel
+                      Annuler
                     </button>
                     <button
-                      onClick={() => {
-                        if (
-                          window.confirm(
-                            `Delete "${member.name}"? This cannot be undone.`,
-                          )
-                        ) {
-                          onDeleteEmployee(member.id);
-                        }
-                      }}
+                      onClick={() => onDeleteEmployee(member.id)}
                       className="px-3 py-2 text-destructive hover:bg-destructive/10 rounded-lg transition text-sm border border-destructive/30"
                       type="button"
                     >
-                      Delete employee
+                      Supprimer l&apos;employé
                     </button>
                   </div>
                 </div>
@@ -273,9 +265,9 @@ export function EmployeesTab({
                     <button
                       onClick={() => onResendWelcomeEmail(member.id)}
                       className="p-2 text-muted-foreground hover:bg-secondary hover:text-foreground rounded-lg transition"
-                      title="Resend welcome email"
+                      title="Renvoyer l'e-mail de bienvenue"
                       type="button"
-                      aria-label={`Resend welcome email to ${member.name}`}
+                      aria-label={`Renvoyer l'e-mail de bienvenue à ${member.name}`}
                     >
                       <Mail className="w-4 h-4" />
                     </button>
@@ -287,26 +279,18 @@ export function EmployeesTab({
                         );
                       }}
                       className="p-2 text-primary hover:bg-primary/10 rounded-lg transition"
-                      title="Edit workstations"
+                      title="Modifier les postes"
                       type="button"
-                      aria-label={`Edit workstations for ${member.name}`}
+                      aria-label={`Modifier les postes de ${member.name}`}
                     >
                       <Edit2 className="w-4 h-4" />
                     </button>
                     <button
-                      onClick={() => {
-                        if (
-                          window.confirm(
-                            `Delete "${member.name}"? This cannot be undone.`,
-                          )
-                        ) {
-                          onDeleteEmployee(member.id);
-                        }
-                      }}
+                      onClick={() => onDeleteEmployee(member.id)}
                       className="p-2 text-destructive hover:bg-destructive/10 rounded-lg transition"
-                      title="Delete employee"
+                      title="Supprimer l'employé"
                       type="button"
-                      aria-label={`Delete ${member.name}`}
+                      aria-label={`Supprimer ${member.name}`}
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>

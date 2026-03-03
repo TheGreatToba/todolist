@@ -42,24 +42,28 @@ export default function Signup() {
       !formData.password ||
       !formData.confirmPassword
     ) {
-      setLocalError("Please fill in all fields");
+      setLocalError("Merci de renseigner tous les champs");
       return;
     }
 
     if (formData.password !== formData.confirmPassword) {
-      setLocalError("Passwords do not match");
+      setLocalError("Les mots de passe ne correspondent pas");
       return;
     }
 
     if (formData.password.length < 6) {
-      setLocalError("Password must be at least 6 characters");
+      setLocalError("Le mot de passe doit comporter au moins 6 caractères");
       return;
     }
 
     try {
       await signup(formData.name, formData.email, formData.password);
     } catch (err) {
-      setLocalError(err instanceof Error ? err.message : "Signup failed");
+      setLocalError(
+        err instanceof Error
+          ? err.message
+          : "Échec de la création du compte. Merci de réessayer.",
+      );
     }
   };
 
@@ -74,10 +78,10 @@ export default function Signup() {
             className="h-20 w-auto object-contain mx-auto mb-4"
           />
           <h1 className="text-3xl font-bold text-foreground mb-2">
-            Create Account
+            Créer un compte
           </h1>
           <p className="text-muted-foreground">
-            Join Tasty Crousty and manage your tasks
+            Rejoignez Tasty Crousty et gérez vos tâches
           </p>
         </div>
 
@@ -97,7 +101,7 @@ export default function Signup() {
               htmlFor="name"
               className="block text-sm font-medium text-foreground mb-2"
             >
-              Full Name
+              Nom complet
             </label>
             <input
               id="name"
@@ -105,7 +109,7 @@ export default function Signup() {
               name="name"
               value={formData.name}
               onChange={handleChange}
-              placeholder="John Doe"
+              placeholder="Jean Dupont"
               className="w-full px-4 py-3 rounded-lg border border-input bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition"
             />
           </div>
@@ -115,7 +119,7 @@ export default function Signup() {
               htmlFor="email"
               className="block text-sm font-medium text-foreground mb-2"
             >
-              Email
+              E-mail
             </label>
             <input
               id="email"
@@ -123,7 +127,7 @@ export default function Signup() {
               name="email"
               value={formData.email}
               onChange={handleChange}
-              placeholder="you@example.com"
+              placeholder="vous@example.com"
               className="w-full px-4 py-3 rounded-lg border border-input bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition"
             />
           </div>
@@ -133,7 +137,7 @@ export default function Signup() {
               htmlFor="password"
               className="block text-sm font-medium text-foreground mb-2"
             >
-              Password
+              Mot de passe
             </label>
             <input
               id="password"
@@ -151,7 +155,7 @@ export default function Signup() {
               htmlFor="confirmPassword"
               className="block text-sm font-medium text-foreground mb-2"
             >
-              Confirm Password
+              Confirmer le mot de passe
             </label>
             <input
               id="confirmPassword"
@@ -165,10 +169,10 @@ export default function Signup() {
           </div>
 
           <div className="bg-secondary/50 border border-border rounded-lg p-3">
-            <p className="text-foreground font-medium">Manager account</p>
+            <p className="text-foreground font-medium">Compte manager</p>
             <p className="text-xs text-muted-foreground mt-1">
-              Only managers can sign up directly. Employees are created by their
-              manager from the dashboard.
+              Seuls les managers peuvent créer un compte ici. Les comptes
+              employés sont créés par leur manager depuis le tableau de bord.
             </p>
           </div>
 
@@ -180,21 +184,21 @@ export default function Signup() {
             {isLoading ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                Creating account...
+                Création du compte...
               </>
             ) : (
-              "Create Account"
+              "Créer un compte"
             )}
           </button>
 
           <div className="text-center text-sm text-muted-foreground">
-            Already have an account?{" "}
+            Vous avez déjà un compte ?{" "}
             <button
               type="button"
               onClick={() => navigate("/login")}
               className="text-primary hover:text-primary/90 font-medium transition"
             >
-              Sign in
+              Se connecter
             </button>
           </div>
         </form>

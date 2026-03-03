@@ -43,13 +43,13 @@ export default function Home() {
               onClick={() => navigate("/login")}
               className="px-4 py-2 text-foreground hover:text-primary transition font-medium"
             >
-              Sign in
+              Se connecter
             </button>
             <button
               onClick={() => navigate("/signup")}
               className="px-6 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-medium transition"
             >
-              Get started
+              Commencer
             </button>
           </div>
         </div>
@@ -58,11 +58,12 @@ export default function Home() {
       {/* Hero Section */}
       <section className="max-w-6xl mx-auto px-4 py-20 md:py-32 text-center">
         <h2 className="text-4xl md:text-5xl font-bold text-foreground mb-6">
-          Daily Task Management Made Simple
+          La gestion des tâches quotidiennes, simplifiée
         </h2>
         <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
-          Empower your employees with a mobile-first checklist. Monitor task
-          completion in real-time. Manage your team with clarity and ease.
+          Donnez à vos équipes une checklist mobile. Suivez l&apos;avancement
+          des tâches en temps réel. Pilotez votre équipe avec clarté et
+          sérénité.
         </p>
 
         <div className="flex flex-col sm:flex-row gap-4 justify-center mb-16">
@@ -70,13 +71,13 @@ export default function Home() {
             onClick={() => navigate("/signup")}
             className="px-8 py-4 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-semibold text-lg transition shadow-lg hover:shadow-xl"
           >
-            Start Free Trial
+            Essai gratuit
           </button>
           <button
             onClick={() => navigate("/login")}
             className="px-8 py-4 border-2 border-primary text-primary hover:bg-primary/5 rounded-lg font-semibold text-lg transition"
           >
-            Sign in
+            Se connecter
           </button>
         </div>
 
@@ -89,25 +90,25 @@ export default function Home() {
                 <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
                   <span className="text-sm font-bold text-primary">📱</span>
                 </div>
-                <h3 className="font-semibold text-foreground">Employee View</h3>
+                <h3 className="font-semibold text-foreground">Vue employé</h3>
               </div>
               <div className="space-y-2 text-left">
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-primary" />
                   <span className="text-sm text-muted-foreground">
-                    Mobile-first design
+                    Conçu d&apos;abord pour le mobile
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-primary" />
                   <span className="text-sm text-muted-foreground">
-                    Daily task checklist
+                    Checklist des tâches quotidiennes
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-primary" />
                   <span className="text-sm text-muted-foreground">
-                    Real-time sync
+                    Synchronisation en temps réel
                   </span>
                 </div>
               </div>
@@ -119,27 +120,25 @@ export default function Home() {
                 <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
                   <span className="text-sm font-bold text-primary">📊</span>
                 </div>
-                <h3 className="font-semibold text-foreground">
-                  Manager Dashboard
-                </h3>
+                <h3 className="font-semibold text-foreground">Vue manager</h3>
               </div>
               <div className="space-y-2 text-left">
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-primary" />
                   <span className="text-sm text-muted-foreground">
-                    Team overview
+                    Vue d&apos;ensemble de l&apos;équipe
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-primary" />
                   <span className="text-sm text-muted-foreground">
-                    Live task tracking
+                    Suivi des tâches en direct
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-primary" />
                   <span className="text-sm text-muted-foreground">
-                    Progress analytics
+                    Statistiques de progression
                   </span>
                 </div>
               </div>
@@ -151,7 +150,7 @@ export default function Home() {
       {/* Features Section */}
       <section className="max-w-6xl mx-auto px-4 py-16">
         <h2 className="text-3xl font-bold text-foreground mb-12 text-center">
-          Key Features
+          Fonctionnalités clés
         </h2>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -160,11 +159,11 @@ export default function Home() {
               <Users className="w-6 h-6 text-primary" />
             </div>
             <h3 className="text-lg font-semibold text-foreground mb-2">
-              Team Management
+              Gestion d&apos;équipe
             </h3>
             <p className="text-muted-foreground">
-              Organize employees by workstations and teams. Assign tasks
-              automatically.
+              Organisez les employés par postes et par équipes. Assignez les
+              tâches automatiquement.
             </p>
           </div>
 
@@ -173,10 +172,11 @@ export default function Home() {
               <Zap className="w-6 h-6 text-primary" />
             </div>
             <h3 className="text-lg font-semibold text-foreground mb-2">
-              Real-time Updates
+              Mises à jour en temps réel
             </h3>
             <p className="text-muted-foreground">
-              See task completions instantly. No refresh needed. Stay informed.
+              Visualisez les tâches terminées instantanément. Sans rechargement.
+              Restez informé en permanence.
             </p>
           </div>
 
@@ -185,10 +185,11 @@ export default function Home() {
               <BarChart3 className="w-6 h-6 text-primary" />
             </div>
             <h3 className="text-lg font-semibold text-foreground mb-2">
-              Analytics
+              Analyses
             </h3>
             <p className="text-muted-foreground">
-              Track completion rates and team performance. Data-driven insights.
+              Suivez les taux d&apos;accomplissement et la performance des
+              équipes. Décisions guidées par la donnée.
             </p>
           </div>
 
@@ -197,10 +198,11 @@ export default function Home() {
               <Clock className="w-6 h-6 text-primary" />
             </div>
             <h3 className="text-lg font-semibold text-foreground mb-2">
-              Daily Recurring
+              Récurrence quotidienne
             </h3>
             <p className="text-muted-foreground">
-              Set recurring tasks that auto-assign each day. Less admin work.
+              Créez des tâches récurrentes qui s&apos;attribuent automatiquement
+              chaque jour. Moins d&apos;administratif.
             </p>
           </div>
 
@@ -209,10 +211,10 @@ export default function Home() {
               <Shield className="w-6 h-6 text-primary" />
             </div>
             <h3 className="text-lg font-semibold text-foreground mb-2">
-              Secure Auth
+              Authentification sécurisée
             </h3>
             <p className="text-muted-foreground">
-              Role-based access control. Secure JWT authentication included.
+              Droits d&apos;accès par rôle. Authentification sécurisée par JWT.
             </p>
           </div>
 
@@ -221,10 +223,11 @@ export default function Home() {
               <CheckCircle2 className="w-6 h-6 text-primary" />
             </div>
             <h3 className="text-lg font-semibold text-foreground mb-2">
-              Simple Interface
+              Interface simple
             </h3>
             <p className="text-muted-foreground">
-              Intuitive design. Easy to learn. No training needed.
+              Design intuitif. Facile à prendre en main. Aucune formation
+              nécessaire.
             </p>
           </div>
         </div>
@@ -234,7 +237,7 @@ export default function Home() {
       <section className="bg-card border-t border-b border-border py-16">
         <div className="max-w-6xl mx-auto px-4">
           <h2 className="text-3xl font-bold text-foreground mb-12 text-center">
-            Perfect For
+            Idéal pour
           </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -246,11 +249,11 @@ export default function Home() {
               </div>
               <div>
                 <h3 className="text-lg font-semibold text-foreground">
-                  Retail & Hospitality
+                  Commerce & restauration
                 </h3>
                 <p className="text-muted-foreground mt-2">
-                  Daily checklists for checkout, kitchen, reception, and store
-                  operations.
+                  Checklists quotidiennes pour la caisse, la cuisine,
+                  l&apos;accueil et les opérations en magasin.
                 </p>
               </div>
             </div>
@@ -263,11 +266,11 @@ export default function Home() {
               </div>
               <div>
                 <h3 className="text-lg font-semibold text-foreground">
-                  Manufacturing
+                  Industrie & production
                 </h3>
                 <p className="text-muted-foreground mt-2">
-                  Workshop, assembly, and quality control station task
-                  management.
+                  Gestion des tâches d&apos;atelier, d&apos;assemblage et de
+                  contrôle qualité.
                 </p>
               </div>
             </div>
@@ -279,11 +282,10 @@ export default function Home() {
                 </div>
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-foreground">
-                  Healthcare
-                </h3>
+                <h3 className="text-lg font-semibold text-foreground">Santé</h3>
                 <p className="text-muted-foreground mt-2">
-                  Patient care checklists and departmental task assignments.
+                  Checklists de soins aux patients et répartition des tâches par
+                  service.
                 </p>
               </div>
             </div>
@@ -296,10 +298,11 @@ export default function Home() {
               </div>
               <div>
                 <h3 className="text-lg font-semibold text-foreground">
-                  Corporate
+                  Entreprises
                 </h3>
                 <p className="text-muted-foreground mt-2">
-                  Department-wide task coordination and team management.
+                  Coordination des tâches entre services et management des
+                  équipes.
                 </p>
               </div>
             </div>
@@ -310,11 +313,11 @@ export default function Home() {
       {/* CTA Section */}
       <section className="max-w-6xl mx-auto px-4 py-20 text-center">
         <h2 className="text-3xl font-bold text-foreground mb-6">
-          Ready to get started?
+          Prêt à démarrer ?
         </h2>
         <p className="text-lg text-muted-foreground mb-8">
-          Join teams already using Tasty Crousty to manage daily tasks
-          efficiently.
+          Rejoignez les équipes qui utilisent déjà Tasty Crousty pour gérer
+          leurs tâches quotidiennes efficacement.
         </p>
 
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -322,13 +325,13 @@ export default function Home() {
             onClick={() => navigate("/signup")}
             className="px-8 py-4 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-semibold text-lg transition shadow-lg hover:shadow-xl"
           >
-            Create Account
+            Créer un compte
           </button>
           <button
             onClick={() => navigate("/login")}
             className="px-8 py-4 border-2 border-primary text-primary hover:bg-primary/5 rounded-lg font-semibold text-lg transition"
           >
-            Sign in
+            Se connecter
           </button>
         </div>
       </section>
@@ -336,7 +339,7 @@ export default function Home() {
       {/* Footer */}
       <footer className="bg-card border-t border-border py-8 mt-12">
         <div className="max-w-6xl mx-auto px-4 text-center text-muted-foreground text-sm">
-          <p>&copy; 2025 Tasty Crousty. All rights reserved.</p>
+          <p>&copy; 2025 Tasty Crousty. Tous droits réservés.</p>
         </div>
       </footer>
     </div>

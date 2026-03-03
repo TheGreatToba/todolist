@@ -28,7 +28,7 @@ export function AccountSettingsForm({
     e.preventDefault();
     if (!user) return;
     if (password && password !== confirmPassword) {
-      toastError("Password confirmation does not match.");
+      toastError("La confirmation du mot de passe ne correspond pas.");
       return;
     }
 
@@ -39,7 +39,7 @@ export function AccountSettingsForm({
     if (password) payload.password = password;
 
     if (Object.keys(payload).length === 0) {
-      toastSuccess("No changes to save.");
+      toastSuccess("Aucune modification à enregistrer.");
       return;
     }
 
@@ -47,10 +47,10 @@ export function AccountSettingsForm({
       await updateProfile.mutateAsync(payload);
       setPassword("");
       setConfirmPassword("");
-      toastSuccess("Profile updated successfully.");
+      toastSuccess("Profil mis à jour avec succès.");
       onSaved?.();
     } catch (error) {
-      toastError(getErrorMessage(error, "Failed to update profile."));
+      toastError(getErrorMessage(error, "Échec de la mise à jour du profil."));
     }
   };
 
@@ -58,7 +58,7 @@ export function AccountSettingsForm({
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
         <label className="block text-sm font-medium text-foreground mb-2">
-          Name
+          Nom
         </label>
         <input
           type="text"
@@ -70,7 +70,7 @@ export function AccountSettingsForm({
 
       <div>
         <label className="block text-sm font-medium text-foreground mb-2">
-          Email
+          E-mail
         </label>
         <input
           type="email"
@@ -82,20 +82,20 @@ export function AccountSettingsForm({
 
       <div>
         <label className="block text-sm font-medium text-foreground mb-2">
-          New Password
+          Nouveau mot de passe
         </label>
         <input
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          placeholder="Leave blank to keep current password"
+          placeholder="Laisser vide pour conserver le mot de passe actuel"
           className="w-full px-4 py-2 rounded-lg border border-input bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
         />
       </div>
 
       <div>
         <label className="block text-sm font-medium text-foreground mb-2">
-          Confirm Password
+          Confirmer le mot de passe
         </label>
         <input
           type="password"
@@ -111,7 +111,7 @@ export function AccountSettingsForm({
           disabled={updateProfile.isPending}
           className="px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg transition text-sm disabled:opacity-50"
         >
-          Save account
+          Enregistrer le compte
         </button>
       </div>
     </form>

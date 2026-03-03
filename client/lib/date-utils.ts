@@ -11,7 +11,7 @@ export function isToday(dateStr: string): boolean {
 }
 
 export function formatTaskDateLabel(dateStr: string): string {
-  if (isToday(dateStr)) return "Today's Tasks";
+  if (isToday(dateStr)) return "Taches du jour";
   const d = new Date(dateStr + "T12:00:00");
   return (
     d.toLocaleDateString(undefined, {
@@ -19,6 +19,6 @@ export function formatTaskDateLabel(dateStr: string): string {
       month: "short",
       day: "numeric",
       year: "numeric",
-    }) + " - Tasks"
+    }) + " - Taches"
   );
 }

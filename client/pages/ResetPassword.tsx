@@ -20,7 +20,10 @@ export default function ResetPassword() {
         data.user.role === "MANAGER" ? "/manager/today" : "/employee";
     },
     onError: (err) => {
-      setError(err.message ?? "Failed to reset password");
+      setError(
+        err.message ??
+          "Échec de la réinitialisation du mot de passe. Merci de réessayer.",
+      );
     },
   });
 
@@ -30,18 +33,18 @@ export default function ResetPassword() {
 
     if (!token) {
       setError(
-        "Invalid link. Please use the link from your password reset email.",
+        "Lien invalide. Merci d'utiliser le lien reçu dans l'e-mail de réinitialisation de mot de passe.",
       );
       return;
     }
 
     if (password.length < 6) {
-      setError("Password must be at least 6 characters.");
+      setError("Le mot de passe doit comporter au moins 6 caractères.");
       return;
     }
 
     if (password !== confirmPassword) {
-      setError("Passwords do not match.");
+      setError("Les mots de passe ne correspondent pas.");
       return;
     }
 
@@ -56,17 +59,17 @@ export default function ResetPassword() {
             <Lock className="w-8 h-8 text-destructive" />
           </div>
           <h1 className="text-2xl font-bold text-foreground mb-2">
-            Invalid link
+            Lien invalide
           </h1>
           <p className="text-muted-foreground mb-6">
-            Please use the link from your password reset email. The link may
-            have expired.
+            Merci d&apos;utiliser le lien reçu dans votre e-mail de
+            réinitialisation de mot de passe. Le lien a peut-être expiré.
           </p>
           <button
             onClick={() => navigate("/forgot-password")}
             className="px-6 py-3 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-medium transition"
           >
-            Request new reset link
+            Demander un nouveau lien
           </button>
         </div>
       </div>
@@ -81,9 +84,11 @@ export default function ResetPassword() {
             <Lock className="w-8 h-8 text-primary" />
           </div>
           <h1 className="text-3xl font-bold text-foreground mb-2">
-            Reset your password
+            Réinitialisez votre mot de passe
           </h1>
-          <p className="text-muted-foreground">Enter your new password below</p>
+          <p className="text-muted-foreground">
+            Saisissez votre nouveau mot de passe ci-dessous
+          </p>
         </div>
 
         <form
@@ -105,7 +110,7 @@ export default function ResetPassword() {
               htmlFor="password"
               className="block text-sm font-medium text-foreground mb-2"
             >
-              New password
+              Nouveau mot de passe
             </label>
             <input
               id="password"
@@ -118,7 +123,7 @@ export default function ResetPassword() {
               className="w-full px-4 py-3 rounded-lg border border-input bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition"
             />
             <p className="text-xs text-muted-foreground mt-1">
-              At least 6 characters
+              Au moins 6 caractères
             </p>
           </div>
 
@@ -127,7 +132,7 @@ export default function ResetPassword() {
               htmlFor="confirmPassword"
               className="block text-sm font-medium text-foreground mb-2"
             >
-              Confirm password
+              Confirmer le mot de passe
             </label>
             <input
               id="confirmPassword"
@@ -149,10 +154,10 @@ export default function ResetPassword() {
             {resetPasswordMutation.isPending ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                Resetting password...
+                Réinitialisation du mot de passe...
               </>
             ) : (
-              "Reset password & sign in"
+              "Réinitialiser et se connecter"
             )}
           </button>
         </form>

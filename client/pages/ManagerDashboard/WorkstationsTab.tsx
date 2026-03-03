@@ -65,7 +65,7 @@ export function WorkstationsTab({
     <div>
       <div className="mb-6">
         <h2 className="text-xl font-bold text-foreground mb-4">
-          Manage Workstations
+          Gérer les postes
         </h2>
 
         <form onSubmit={onSubmitCreate} className="flex gap-2 mb-6">
@@ -73,15 +73,15 @@ export function WorkstationsTab({
             type="text"
             value={newWorkstation}
             onChange={(e) => onNewWorkstationChange(e.target.value)}
-            placeholder="e.g., Checkout, Kitchen, Reception"
+            placeholder="ex. Caisse, Cuisine, Accueil"
             className="flex-1 px-4 py-3 rounded-lg border border-input bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-            aria-label="Workstation name"
+            aria-label="Nom du poste"
           />
           <button
             type="submit"
             className="px-6 py-3 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-medium transition"
           >
-            Add Workstation
+            Ajouter un poste
           </button>
         </form>
       </div>
@@ -101,15 +101,15 @@ export function WorkstationsTab({
                 <button
                   onClick={() => onDelete(ws.id)}
                   className="p-2 text-destructive hover:bg-destructive/10 rounded-lg transition"
-                  title="Delete"
+                  title="Supprimer"
                   type="button"
-                  aria-label={`Delete workstation ${ws.name}`}
+                  aria-label={`Supprimer le poste ${ws.name}`}
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>
               <p className="text-sm text-muted-foreground">
-                {ws.employees?.length ?? 0} employee
+                {ws.employees?.length ?? 0} employé
                 {(ws.employees?.length ?? 0) !== 1 ? "s" : ""}
               </p>
 
@@ -118,7 +118,7 @@ export function WorkstationsTab({
                   {ws.employees && ws.employees.length > 0 && (
                     <div className="mt-3 pt-3 border-t border-border">
                       <p className="text-xs text-muted-foreground mb-2">
-                        Assigned to:
+                        Affecté à :
                       </p>
                       <div className="space-y-1">
                         {ws.employees.map((ew) => (
@@ -137,7 +137,7 @@ export function WorkstationsTab({
                     onClick={() => startEdit(ws.id)}
                     className="mt-4 px-3 py-2 border border-input text-foreground rounded-lg hover:bg-secondary transition text-sm"
                   >
-                    Manage employees
+                    Gérer les employés
                   </button>
                 </>
               )}
@@ -145,7 +145,7 @@ export function WorkstationsTab({
               {isEditing && (
                 <div className="mt-4 pt-3 border-t border-border">
                   <p className="text-xs text-muted-foreground mb-2">
-                    Select employees:
+                    Sélectionner les employés :
                   </p>
                   <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
                     {teamMembers.map((member) => (
@@ -171,14 +171,14 @@ export function WorkstationsTab({
                       disabled={isSavingEmployees}
                       className="px-3 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg transition text-sm disabled:opacity-50"
                     >
-                      Save
+                      Enregistrer
                     </button>
                     <button
                       type="button"
                       onClick={cancelEdit}
                       className="px-3 py-2 border border-input text-foreground rounded-lg hover:bg-secondary transition text-sm"
                     >
-                      Cancel
+                      Annuler
                     </button>
                   </div>
                 </div>

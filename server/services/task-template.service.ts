@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 import { z } from "zod";
 import prisma from "../lib/db";
 import { AppError } from "../lib/errors";
@@ -319,7 +319,9 @@ async function createDependentDailyTasks(
 export async function createTaskTemplateTransactional(input: {
   userId: string;
   body: unknown;
+  db?: PrismaClient;
 }): Promise<TaskTemplateWithRelations> {
+  const db = input.db ?? prisma;
   const body = CreateTaskTemplateSchema.parse(input.body);
   const taskDate = parseDateQuery(body.date);
   if (!taskDate) {
@@ -330,7 +332,7 @@ export async function createTaskTemplateTransactional(input: {
   let attempt = 1;
   while (true) {
     try {
-      return await prisma.$transaction(
+      return await db.$transaction(
         async (tx) => {
           await validateAndResolveTeamContext(tx, body, input.userId);
 
@@ -457,13 +459,15 @@ export async function instantiateManualTriggerTemplateTaskTransactional(input: {
   templateId: string;
   dueDate: Date;
   assignedToEmployeeId?: string | null;
+  db?: PrismaClient;
 }): Promise<{ task: ManualTriggerTaskWithRelations; created: boolean }> {
+  const db = input.db ?? prisma;
   const maxAttempts = 3;
   let attempt = 1;
 
   while (true) {
     try {
-      return await prisma.$transaction(
+      return await db.$transaction(
         async (tx) => {
           const managedTeams = await tx.team.findMany({
             where: { managerId: input.managerUserId },

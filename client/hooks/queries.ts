@@ -30,6 +30,11 @@ import type {
   CreateTaskFromTemplateRequest,
   UpdateTaskTemplateRequest,
   UpdateWorkstationEmployeesRequest,
+  ManagerBatchDailyTasksRequest,
+  ManagerBatchDailyTasksResponse,
+  ManagerBatchTaskTemplatesAction,
+  ManagerBatchTaskTemplatesResponse,
+  ManagerWeeklyReport,
 } from "@shared/api";
 import { api, fetchWithCsrf, parseApiError } from "@/lib/api";
 
@@ -52,6 +57,8 @@ export const queryKeys = {
     teamMembers: ["manager", "teamMembers"] as const,
     taskTemplates: ["manager", "taskTemplates"] as const,
     manualTriggerTemplates: ["manager", "manualTriggerTemplates"] as const,
+    weeklyReport: (params: { date?: string }) =>
+      ["manager", "weeklyReport", params] as const,
   },
   tasks: {
     daily: (date: string) => ["tasks", "daily", date] as const,
@@ -101,6 +108,22 @@ export async function fetchManagerTodayBoard(): Promise<ManagerTodayBoardType | 
     throw new Error(await parseApiError(res));
   }
   return res.json() as Promise<ManagerTodayBoardType>;
+}
+
+export async function fetchManagerWeeklyReport(params: {
+  date?: string;
+}): Promise<ManagerWeeklyReport | null> {
+  const search = new URLSearchParams();
+  if (params.date) search.set("date", params.date);
+  const url = `/api/manager/weekly-report${
+    search.toString() ? `?${search.toString()}` : ""
+  }`;
+  const res = await api.get(url);
+  if (!res.ok) {
+    if (res.status === 404) return null;
+    throw new Error(await parseApiError(res));
+  }
+  return res.json() as Promise<ManagerWeeklyReport>;
 }
 
 export interface WorkstationEmployeeSummary {
@@ -180,6 +203,20 @@ export function useManagerTodayBoardQuery(
   return useQuery({
     queryKey: queryKeys.manager.todayBoard,
     queryFn: fetchManagerTodayBoard,
+    ...options,
+  });
+}
+
+export function useManagerWeeklyReportQuery(
+  params: { date?: string },
+  options?: Omit<
+    UseQueryOptions<ManagerWeeklyReport | null, Error>,
+    "queryKey" | "queryFn"
+  >,
+) {
+  return useQuery({
+    queryKey: queryKeys.manager.weeklyReport(params),
+    queryFn: () => fetchManagerWeeklyReport(params),
     ...options,
   });
 }
@@ -471,7 +508,7 @@ export function useCreateTaskFromTemplateMutation(
           completedAt: null,
           taskTemplate: {
             id: variables.templateId,
-            title: selectedTemplate?.title || "Template task",
+            title: selectedTemplate?.title || "Tache modele",
             description: selectedTemplate?.description ?? null,
             isRecurring: true,
           },
@@ -748,7 +785,8 @@ export function useUpdateProfileMutation(
         body: JSON.stringify(body),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to update profile");
+      if (!res.ok)
+        throw new Error(data.error || "Echec de la mise a jour du profil");
       return data as UpdateProfileResponse;
     },
     ...options,
@@ -776,7 +814,7 @@ export function useCreateWorkstationMutation(
       });
       const data = await res.json();
       if (!res.ok)
-        throw new Error(data.error || "Failed to create workstation");
+        throw new Error(data.error || "Echec de la creation du poste");
       return data;
     },
     ...options,
@@ -803,7 +841,7 @@ export function useDeleteWorkstationMutation(
       });
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.error || "Failed to delete workstation");
+        throw new Error(data.error || "Echec de la suppression du poste");
       }
     },
     ...options,
@@ -845,7 +883,9 @@ export function useUpdateWorkstationEmployeesMutation(
       );
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || "Failed to update workstation employees");
+        throw new Error(
+          data.error || "Echec de la mise a jour des employes du poste",
+        );
       }
       return data as WorkstationWithEmployees;
     },
@@ -889,7 +929,8 @@ export function useCreateEmployeeMutation(
         body: JSON.stringify(body),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to create employee");
+      if (!res.ok)
+        throw new Error(data.error || "Echec de la creation de l'employe");
       return data;
     },
     ...options,
@@ -930,7 +971,8 @@ export function useUpdateEmployeeWorkstationsMutation(
         },
       );
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to update employee");
+      if (!res.ok)
+        throw new Error(data.error || "Echec de la mise a jour de l'employe");
     },
     ...options,
     onSuccess: (data, variables, ctx) => {
@@ -956,7 +998,7 @@ export function useDeleteEmployeeMutation(
       });
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.error || "Failed to delete employee");
+        throw new Error(data.error || "Echec de la suppression de l'employe");
       }
     },
     ...options,
@@ -991,8 +1033,8 @@ export function useResendWelcomeEmailMutation(
       const data = await res.json();
       if (!res.ok) {
         const message = data.detail
-          ? `${data.error || "Failed to resend email"}: ${data.detail}`
-          : data.error || "Failed to resend email";
+          ? `${data.error || "Echec du renvoi de l'e-mail"}: ${data.detail}`
+          : data.error || "Echec du renvoi de l'e-mail";
         throw new Error(message);
       }
       return data as { success: true; emailSent: boolean };
@@ -1054,7 +1096,8 @@ export function useCreateTaskTemplateMutation(
         body: JSON.stringify(body),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to create task");
+      if (!res.ok)
+        throw new Error(data.error || "Echec de la creation de la tache");
       return data;
     },
     ...options,
@@ -1086,7 +1129,8 @@ export function useAssignTaskFromTemplateMutation(
         body: JSON.stringify(body),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to assign task");
+      if (!res.ok)
+        throw new Error(data.error || "Echec de l'affectation de la tache");
       return data;
     },
     ...options,
@@ -1100,6 +1144,81 @@ export function useAssignTaskFromTemplateMutation(
       queryClient.invalidateQueries({
         queryKey: queryKeys.tasks.dailyPrefix,
       });
+      options?.onSuccess?.(data, variables, ctx);
+    },
+  });
+}
+
+export function useBatchUpdateDailyTasksMutation(
+  options?: UseMutationOptions<
+    ManagerBatchDailyTasksResponse,
+    Error,
+    ManagerBatchDailyTasksRequest
+  >,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: ManagerBatchDailyTasksRequest) => {
+      const res = await fetchWithCsrf("/api/manager/daily-tasks/batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok)
+        throw new Error(
+          data.error || "Echec de la mise a jour des taches en lot",
+        );
+      return data as ManagerBatchDailyTasksResponse;
+    },
+    ...options,
+    onSuccess: (data, variables, ctx) => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.manager.dashboardPrefix,
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.manager.todayBoardPrefix,
+      });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tasks.dailyPrefix });
+      options?.onSuccess?.(data, variables, ctx);
+    },
+  });
+}
+
+export function useBatchUpdateTaskTemplatesMutation(
+  options?: UseMutationOptions<
+    ManagerBatchTaskTemplatesResponse,
+    Error,
+    ManagerBatchTaskTemplatesAction
+  >,
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: ManagerBatchTaskTemplatesAction) => {
+      const res = await fetchWithCsrf("/api/manager/task-templates/batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok)
+        throw new Error(
+          data.error || "Echec de la mise a jour des modeles en lot",
+        );
+      return data as ManagerBatchTaskTemplatesResponse;
+    },
+    ...options,
+    onSuccess: (data, variables, ctx) => {
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.manager.taskTemplates,
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.manager.dashboardPrefix,
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.manager.todayBoardPrefix,
+      });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tasks.dailyPrefix });
       options?.onSuccess?.(data, variables, ctx);
     },
   });
@@ -1128,7 +1247,9 @@ export function useUpdateTaskTemplateMutation(
       });
       const responseData = await res.json();
       if (!res.ok)
-        throw new Error(responseData.error || "Failed to update template");
+        throw new Error(
+          responseData.error || "Echec de la mise a jour du modele",
+        );
       return responseData as TaskTemplateWithRelations;
     },
     ...options,
@@ -1162,7 +1283,7 @@ export function useDeleteTaskTemplateMutation(
       );
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.error || "Failed to delete template");
+        throw new Error(data.error || "Echec de la suppression du modele");
       }
     },
     ...options,
@@ -1204,7 +1325,8 @@ export function useSetPasswordMutation(
         body: JSON.stringify({ token, password }),
       });
       const raw = await res.json();
-      if (!res.ok) throw new Error(raw.error ?? "Failed to set password");
+      if (!res.ok)
+        throw new Error(raw.error ?? "Echec de la definition du mot de passe");
       return raw as { user: User };
     },
     ...options,
@@ -1226,7 +1348,10 @@ export function useForgotPasswordMutation(
         body: JSON.stringify({ email }),
       });
       const raw = await res.json();
-      if (!res.ok) throw new Error(raw.error ?? "Failed to send reset email");
+      if (!res.ok)
+        throw new Error(
+          raw.error ?? "Echec de l'envoi de l'e-mail de reinitialisation",
+        );
       return raw as ForgotPasswordResponse;
     },
     ...options,
@@ -1254,7 +1379,10 @@ export function useResetPasswordMutation(
         body: JSON.stringify({ token, password }),
       });
       const raw = await res.json();
-      if (!res.ok) throw new Error(raw.error ?? "Failed to reset password");
+      if (!res.ok)
+        throw new Error(
+          raw.error ?? "Echec de la reinitialisation du mot de passe",
+        );
       return raw as ResetPasswordResponse;
     },
     ...options,

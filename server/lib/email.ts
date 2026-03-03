@@ -59,13 +59,15 @@ async function getTransporter(): Promise<nodemailer.Transporter> {
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         logger.error("Ethereal createTestAccount failed:", msg);
-        throw new Error(
+        const error = new Error(
           "Impossible d'utiliser le service d'email de test (Ethereal). " +
             "Configurez SMTP (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS) dans .env ou vérifiez votre connexion. " +
             "Détail: " +
             msg,
-          { cause: err },
         );
+        // Attach original error for debugging without relying on ErrorOptions (ES2022).
+        (error as { cause?: unknown }).cause = err;
+        throw error;
       }
       transporter = nodemailer.createTransport({
         host: "smtp.ethereal.email",

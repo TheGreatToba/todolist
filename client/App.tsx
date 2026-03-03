@@ -137,6 +137,7 @@ const App = () => (
                   <Route index element={<Navigate to="dashboard" replace />} />
                   <Route path="today" element={<TodayBoard />} />
                   <Route path="dashboard" element={<ManagerDashboard />} />
+                  <Route path="pilotage" element={<ManagerDashboard />} />
                   <Route path="workstations" element={<ManagerDashboard />} />
                   <Route path="employees" element={<ManagerDashboard />} />
                   <Route path="task" element={<ManagerDashboard />} />

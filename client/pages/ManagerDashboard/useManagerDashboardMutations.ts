@@ -18,15 +18,15 @@ import { toastSuccess, toastError } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/get-error-message";
 
 const FALLBACK = {
-  createWorkstation: "Failed to create workstation.",
-  deleteWorkstation: "Failed to delete workstation.",
-  createEmployee: "Failed to create employee.",
-  updateWorkstations: "Failed to update employee workstations.",
-  deleteEmployee: "Failed to delete employee.",
-  resendWelcomeEmail: "Failed to resend welcome email.",
-  createTask: "Failed to create task.",
-  updateTemplate: "Failed to update template.",
-  deleteTemplate: "Failed to delete template.",
+  createWorkstation: "Echec de la creation du poste.",
+  deleteWorkstation: "Echec de la suppression du poste.",
+  createEmployee: "Echec de la creation de l'employe.",
+  updateWorkstations: "Echec de la mise a jour des postes de l'employe.",
+  deleteEmployee: "Echec de la suppression de l'employe.",
+  resendWelcomeEmail: "Echec du renvoi de l'e-mail de bienvenue.",
+  createTask: "Echec de la creation de la tache.",
+  updateTemplate: "Echec de la mise a jour du modele.",
+  deleteTemplate: "Echec de la suppression du modele.",
 } as const;
 
 export const initialNewTask = {
@@ -67,7 +67,7 @@ export function useManagerDashboardMutations(
   const createWorkstation = useCreateWorkstationMutation({
     onSuccess: () => {
       setNewWorkstation("");
-      toastSuccess("Workstation created successfully!");
+      toastSuccess("Poste cree avec succes!");
     },
     onError: (err) => {
       toastError(getErrorMessage(err, FALLBACK.createWorkstation));
@@ -75,7 +75,7 @@ export function useManagerDashboardMutations(
   });
   const deleteWorkstation = useDeleteWorkstationMutation({
     onSuccess: () => {
-      toastSuccess("Workstation deleted successfully!");
+      toastSuccess("Poste supprime avec succes!");
     },
     onError: (err) => {
       toastError(getErrorMessage(err, FALLBACK.deleteWorkstation));
@@ -99,7 +99,7 @@ export function useManagerDashboardMutations(
     onSuccess: () => {
       setEditingEmployee(null);
       setEditingWorkstations([]);
-      toastSuccess("Employee workstations updated successfully!");
+      toastSuccess("Postes de l'employe mis a jour avec succes!");
     },
     onError: (err) => {
       toastError(getErrorMessage(err, FALLBACK.updateWorkstations));
@@ -109,7 +109,7 @@ export function useManagerDashboardMutations(
     onSuccess: () => {
       setEditingEmployee(null);
       setEditingWorkstations([]);
-      toastSuccess("Employee deleted successfully.");
+      toastSuccess("Employe supprime avec succes.");
     },
     onError: (err) => {
       toastError(getErrorMessage(err, FALLBACK.deleteEmployee));
@@ -119,8 +119,8 @@ export function useManagerDashboardMutations(
     onSuccess: (data) => {
       toastSuccess(
         data?.emailSent
-          ? "Welcome email sent again successfully."
-          : "Email sent.",
+          ? "E-mail de bienvenue renvoye avec succes."
+          : "E-mail envoye.",
       );
     },
     onError: (err) => {
@@ -147,7 +147,7 @@ export function useManagerDashboardMutations(
   });
   const updateTaskTemplate = useUpdateTaskTemplateMutation({
     onSuccess: () => {
-      toastSuccess("Template updated successfully!");
+      toastSuccess("Modele mis a jour avec succes!");
       // Note: Modal closing is handled in ManagerDashboard component's onSuccess callback
     },
     onError: (err) => {
@@ -157,7 +157,7 @@ export function useManagerDashboardMutations(
   });
   const deleteTaskTemplate = useDeleteTaskTemplateMutation({
     onSuccess: () => {
-      toastSuccess("Template deleted successfully!");
+      toastSuccess("Modele supprime avec succes!");
     },
     onError: (err) => {
       toastError(getErrorMessage(err, FALLBACK.deleteTemplate));
@@ -208,12 +208,12 @@ function useSocketTaskEvents(
         const name = (data.employeeName ?? "").trim();
         const message =
           title && name
-            ? `Task "${title}" assigned to ${name}`
+            ? `Tache "${title}" affectee a ${name}`
             : title
-              ? `Task "${title}" assigned`
+              ? `Tache "${title}" affectee`
               : name
-                ? `Task assigned to ${name}`
-                : "Task assigned";
+                ? `Tache affectee a ${name}`
+                : "Tache affectee";
         toastSuccess(message);
       },
     );

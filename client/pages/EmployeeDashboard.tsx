@@ -63,9 +63,12 @@ export default function EmployeeDashboard() {
     try {
       await updateTask.mutateAsync({ taskId, isCompleted: !isCompleted });
     } catch (error) {
-      logger.error("Failed to update task:", error);
+      logger.error("Echec de mise a jour de la tache:", error);
       toastError(
-        getErrorMessage(error, "Failed to update task. Please try again."),
+        getErrorMessage(
+          error,
+          "Echec de la mise a jour de la tache. Reessayez.",
+        ),
       );
     }
   };
@@ -86,7 +89,7 @@ export default function EmployeeDashboard() {
                 {formatTaskDateLabel(selectedDate)}
               </h1>
               <p className="text-sm text-muted-foreground">
-                Welcome, {user?.name}
+                Bienvenue, {user?.name}
               </p>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
@@ -97,13 +100,13 @@ export default function EmployeeDashboard() {
                   value={selectedDate}
                   onChange={(e) => setSelectedDate(e.target.value)}
                   className="rounded-lg border border-border bg-background px-2 py-1.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                  aria-label="Select date"
+                  aria-label="Sélectionner une date"
                 />
               </label>
               <button
                 onClick={logout}
                 className="inline-flex items-center gap-2 px-3 py-2 text-muted-foreground hover:text-foreground hover:bg-secondary rounded-lg transition"
-                title="Sign out"
+                title="Se déconnecter"
               >
                 <LogOut className="w-4 h-4" />
               </button>
@@ -119,7 +122,7 @@ export default function EmployeeDashboard() {
                   : "border-transparent text-muted-foreground hover:text-foreground"
               }`}
             >
-              Tasks
+              Tâches
             </button>
             <button
               type="button"
@@ -130,7 +133,7 @@ export default function EmployeeDashboard() {
                   : "border-transparent text-muted-foreground hover:text-foreground"
               }`}
             >
-              Settings
+              Paramètres
             </button>
           </div>
         </div>
@@ -145,8 +148,10 @@ export default function EmployeeDashboard() {
                 <div>
                   <p className="text-sm text-muted-foreground font-medium">
                     {isToday(selectedDate)
-                      ? "Today's Progress"
-                      : `Progress for ${new Date(selectedDate + "T12:00:00").toLocaleDateString()}`}
+                      ? "Progression du jour"
+                      : `Progression du ${new Date(
+                          selectedDate + "T12:00:00",
+                        ).toLocaleDateString()}`}
                   </p>
                   <p className="text-3xl font-bold text-foreground mt-1">
                     {completedCount}
@@ -159,7 +164,7 @@ export default function EmployeeDashboard() {
                   <p className="text-4xl font-bold text-primary">
                     {progressPercent}%
                   </p>
-                  <p className="text-xs text-muted-foreground mt-1">Complete</p>
+                  <p className="text-xs text-muted-foreground mt-1">Terminé</p>
                 </div>
               </div>
               <div className="w-full bg-border rounded-full h-3 overflow-hidden">
@@ -183,12 +188,14 @@ export default function EmployeeDashboard() {
                   <Check className="w-8 h-8 text-primary" />
                 </div>
                 <h3 className="text-lg font-semibold text-foreground mb-2">
-                  All tasks completed!
+                  Toutes les tâches sont terminées !
                 </h3>
                 <p className="text-muted-foreground">
                   {isToday(selectedDate)
-                    ? "Great job! You've finished all your tasks for today."
-                    : `No tasks for ${new Date(selectedDate + "T12:00:00").toLocaleDateString()}.`}
+                    ? "Bravo ! Vous avez terminé toutes vos tâches pour aujourd'hui."
+                    : `Aucune tâche pour le ${new Date(
+                        selectedDate + "T12:00:00",
+                      ).toLocaleDateString()}.`}
                 </p>
               </div>
             ) : (
@@ -243,8 +250,8 @@ export default function EmployeeDashboard() {
                                 className="text-[10px] uppercase"
                               >
                                 {task.taskTemplate.isRecurring
-                                  ? "Recurring"
-                                  : "One-shot"}
+                                  ? "Récurrente"
+                                  : "Ponctuelle"}
                               </Badge>
                             </div>
                             {task.taskTemplate.description && (
@@ -260,13 +267,13 @@ export default function EmployeeDashboard() {
                             )}
                             {task.taskTemplate.workstation && (
                               <p className="text-xs text-muted-foreground mt-2">
-                                WS: {task.taskTemplate.workstation.name}
+                                Poste : {task.taskTemplate.workstation.name}
                               </p>
                             )}
                           </div>
                           {task.completedAt && (
                             <div className="text-xs text-primary font-medium flex-shrink-0">
-                              Done
+                              Fait
                             </div>
                           )}
                         </div>
@@ -284,7 +291,7 @@ export default function EmployeeDashboard() {
         <div className="max-w-2xl mx-auto px-4 py-6">
           <div className="bg-card rounded-xl border border-border p-6 shadow-sm">
             <h2 className="text-lg font-semibold text-foreground mb-4">
-              My account
+              Mon compte
             </h2>
             <AccountSettingsForm user={user} />
           </div>

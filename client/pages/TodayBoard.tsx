@@ -68,8 +68,8 @@ function TaskSection({
                 }`}
                 aria-label={
                   task.isCompleted
-                    ? `Mark task ${task.taskTemplate.title} as pending`
-                    : `Mark task ${task.taskTemplate.title} as done`
+                    ? `Marquer la tâche ${task.taskTemplate.title} comme en attente`
+                    : `Marquer la tâche ${task.taskTemplate.title} comme faite`
                 }
               >
                 {task.isCompleted && (
@@ -99,12 +99,12 @@ function TaskSection({
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
                   {task.employee
-                    ? `Assigned to ${task.employee.name}`
-                    : "Unassigned"}
+                    ? `Assignée à ${task.employee.name}`
+                    : "Non assignée"}
                 </p>
                 {task.completedAt && (
                   <p className="mt-1 text-xs text-muted-foreground">
-                    Completed at {formatTime(task.completedAt)}
+                    Terminée à {formatTime(task.completedAt)}
                   </p>
                 )}
               </div>
@@ -122,6 +122,28 @@ export default function TodayBoard() {
   const { data: board, isLoading } = useManagerTodayBoardQuery();
   const updateDailyTask = useUpdateDailyTaskMutation();
 
+  const sortedOverdue = React.useMemo(
+    () =>
+      [...(board?.overdue ?? [])].sort(
+        (a, b) => (b.priorityScore ?? 0) - (a.priorityScore ?? 0),
+      ),
+    [board?.overdue],
+  );
+  const sortedToday = React.useMemo(
+    () =>
+      [...(board?.today ?? [])].sort(
+        (a, b) => (b.priorityScore ?? 0) - (a.priorityScore ?? 0),
+      ),
+    [board?.today],
+  );
+  const sortedCompletedToday = React.useMemo(
+    () =>
+      [...(board?.completedToday ?? [])].sort(
+        (a, b) => (b.priorityScore ?? 0) - (a.priorityScore ?? 0),
+      ),
+    [board?.completedToday],
+  );
+
   const handleLogout = () => {
     logout();
     navigate("/", { replace: true });
@@ -134,7 +156,12 @@ export default function TodayBoard() {
         isCompleted: !task.isCompleted,
       });
     } catch (error) {
-      toastError(getErrorMessage(error, "Failed to update task."));
+      toastError(
+        getErrorMessage(
+          error,
+          "Échec de la mise à jour de la tâche. Merci de réessayer.",
+        ),
+      );
     }
   };
 
@@ -150,9 +177,11 @@ export default function TodayBoard() {
     return (
       <div className="min-h-screen bg-gradient-to-b from-primary/5 to-background flex items-center justify-center px-4">
         <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 text-center">
-          <h1 className="text-xl font-bold text-foreground">Team not found</h1>
+          <h1 className="text-xl font-bold text-foreground">
+            Équipe introuvable
+          </h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Please contact your administrator.
+            Merci de contacter votre administrateur.
           </p>
           <button
             type="button"
@@ -160,7 +189,7 @@ export default function TodayBoard() {
             className="mt-6 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
           >
             <LogOut className="h-4 w-4" />
-            Sign out
+            Se déconnecter
           </button>
         </div>
       </div>
@@ -172,28 +201,28 @@ export default function TodayBoard() {
       <main className="mx-auto w-full max-w-6xl space-y-6 px-4 py-6">
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
           <TaskSection
-            title="Overdue"
+            title="En retard"
             accentClass="border-l-4 border-l-red-500"
-            emptyMessage="No overdue tasks."
-            tasks={board.overdue}
+            emptyMessage="Aucune tâche en retard."
+            tasks={sortedOverdue}
             pendingTaskId={updateDailyTask.variables?.taskId ?? null}
             isTaskUpdating={updateDailyTask.isPending}
             onToggleTask={handleToggleTask}
           />
           <TaskSection
-            title="Today"
+            title="Aujourd'hui"
             accentClass="border-l-4 border-l-amber-500"
-            emptyMessage="No pending tasks for today."
-            tasks={board.today}
+            emptyMessage="Aucune tâche en attente pour aujourd'hui."
+            tasks={sortedToday}
             pendingTaskId={updateDailyTask.variables?.taskId ?? null}
             isTaskUpdating={updateDailyTask.isPending}
             onToggleTask={handleToggleTask}
           />
           <TaskSection
-            title="Completed"
+            title="Terminées"
             accentClass="border-l-4 border-l-emerald-500"
-            emptyMessage="No completed tasks yet."
-            tasks={board.completedToday}
+            emptyMessage="Aucune tâche terminée pour l'instant."
+            tasks={sortedCompletedToday}
             pendingTaskId={updateDailyTask.variables?.taskId ?? null}
             isTaskUpdating={updateDailyTask.isPending}
             onToggleTask={handleToggleTask}

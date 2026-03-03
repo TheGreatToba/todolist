@@ -10,6 +10,9 @@ interface EmployeeTaskCardProps {
   onReassignTask: (taskId: string, employeeId: string) => void;
   pendingTaskId?: string | null;
   isTaskUpdating?: boolean;
+  selectedTaskIds: string[];
+  onToggleTaskSelection: (taskId: string) => void;
+  isMultiSelectMode: boolean;
 }
 
 export function EmployeeTaskCard({
@@ -19,6 +22,9 @@ export function EmployeeTaskCard({
   onReassignTask,
   pendingTaskId,
   isTaskUpdating = false,
+  selectedTaskIds,
+  onToggleTaskSelection,
+  isMultiSelectMode,
 }: EmployeeTaskCardProps) {
   const { employee, tasks } = group;
   const [reassigningTaskId, setReassigningTaskId] = useState<string | null>(
@@ -52,6 +58,15 @@ export function EmployeeTaskCard({
         {tasks.map((task) => (
           <div key={task.id} className="space-y-2">
             <div className="flex items-center gap-3">
+              {isMultiSelectMode && (
+                <input
+                  type="checkbox"
+                  checked={selectedTaskIds.includes(task.id)}
+                  onChange={() => onToggleTaskSelection(task.id)}
+                  className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+                  aria-label={`Selectionner la tache ${task.taskTemplate.title}`}
+                />
+              )}
               <button
                 type="button"
                 onClick={() => onToggleTask(task.id, task.isCompleted)}
@@ -63,8 +78,8 @@ export function EmployeeTaskCard({
                 }`}
                 aria-label={
                   task.isCompleted
-                    ? `Mark task ${task.taskTemplate.title} as pending`
-                    : `Mark task ${task.taskTemplate.title} as done`
+                    ? `Marquer la tache ${task.taskTemplate.title} comme en attente`
+                    : `Marquer la tache ${task.taskTemplate.title} comme terminee`
                 }
               >
                 {task.isCompleted && (
@@ -94,7 +109,9 @@ export function EmployeeTaskCard({
                 </p>
                 <div className="mt-1">
                   <Badge variant="secondary" className="text-[10px] uppercase">
-                    {task.taskTemplate.isRecurring ? "Recurring" : "One-shot"}
+                    {task.taskTemplate.isRecurring
+                      ? "Recurrente"
+                      : "Ponctuelle"}
                   </Badge>
                 </div>
                 {task.taskTemplate.description && (
@@ -112,10 +129,10 @@ export function EmployeeTaskCard({
                 }}
                 className="text-xs px-2.5 py-1 rounded-md border border-input text-muted-foreground hover:text-foreground hover:bg-secondary transition disabled:opacity-50"
               >
-                Reassign
+                Reaffecter
               </button>
               {task.isCompleted && (
-                <span className="text-xs font-medium text-primary">Done</span>
+                <span className="text-xs font-medium text-primary">Faite</span>
               )}
             </div>
 
@@ -126,7 +143,7 @@ export function EmployeeTaskCard({
                   disabled={isTaskUpdating && pendingTaskId === task.id}
                   onChange={(e) => setTargetEmployeeId(e.target.value)}
                   className="text-xs rounded-md border border-input bg-background px-2 py-1.5 text-foreground disabled:opacity-50"
-                  aria-label={`Select employee for task ${task.taskTemplate.title}`}
+                  aria-label={`Selectionner un employe pour la tache ${task.taskTemplate.title}`}
                 >
                   {teamMembers.map((member) => (
                     <option key={member.id} value={member.id}>
@@ -147,14 +164,14 @@ export function EmployeeTaskCard({
                   }}
                   className="text-xs px-2.5 py-1 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition disabled:opacity-50"
                 >
-                  Apply
+                  Appliquer
                 </button>
                 <button
                   type="button"
                   onClick={() => setReassigningTaskId(null)}
                   className="text-xs px-2.5 py-1 rounded-md border border-input hover:bg-secondary transition"
                 >
-                  Cancel
+                  Annuler
                 </button>
               </div>
             )}

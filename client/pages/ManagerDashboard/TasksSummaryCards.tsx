@@ -27,7 +27,7 @@ export function TasksSummaryCards({
     <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
       <div className="bg-card rounded-xl border border-border p-6 shadow-sm">
         <p className="text-sm text-muted-foreground font-medium">
-          Team Members
+          Membres de l&apos;équipe
         </p>
         <p className="text-3xl font-bold text-foreground mt-2">
           {teamMembersCount}
@@ -35,35 +35,37 @@ export function TasksSummaryCards({
       </div>
       <div className="bg-card rounded-xl border border-border p-6 shadow-sm">
         <p className="text-sm text-muted-foreground font-medium">
-          Today&apos;s Tasks
+          Tâches du jour
         </p>
         <p className="text-3xl font-bold text-foreground mt-2">{totalTasks}</p>
         <p className="text-xs text-muted-foreground mt-2">
-          {oneShotCount} one-shot
+          {oneShotCount} tâche(s) ponctuelle(s)
         </p>
         <p className="text-xs text-muted-foreground">
-          {recurringCount} recurring
+          {recurringCount} tâche(s) récurrente(s)
         </p>
       </div>
       <div className="bg-card rounded-xl border border-border p-6 shadow-sm">
         <p className="text-sm text-muted-foreground font-medium">
-          Completion Rate
+          Taux d&apos;achèvement
         </p>
         <p className="text-3xl font-bold text-primary mt-2">
           {progressPercent}%
         </p>
       </div>
       <div className="bg-card rounded-xl border border-border p-6 shadow-sm">
-        <p className="text-sm text-muted-foreground font-medium">Day status</p>
+        <p className="text-sm text-muted-foreground font-medium">
+          Statut de la journée
+        </p>
         <p
           className={`text-lg font-semibold mt-2 ${
             dayPrepared ? "text-emerald-600" : "text-orange-600"
           }`}
         >
-          {dayPrepared ? "Day prepared" : "Day not prepared"}
+          {dayPrepared ? "Journée préparée" : "Journée non préparée"}
         </p>
         <p className="text-sm text-muted-foreground mt-2">
-          {recurringToAssign} recurring not assigned
+          {recurringToAssign} tâche(s) récurrente(s) non assignée(s)
         </p>
         {!dayPrepared && (
           <button
@@ -71,11 +73,11 @@ export function TasksSummaryCards({
             onClick={onPrepareMyDay}
             className="mt-3 inline-flex items-center rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition"
           >
-            Prepare my day
+            Préparer ma journée
           </button>
         )}
         {showLateOpeningWarning && (
-          <p className="text-xs text-orange-700 mt-2">Opening not prepared</p>
+          <p className="text-xs text-orange-700 mt-2">Ouverture non préparée</p>
         )}
       </div>
     </div>
