@@ -1,3 +1,4 @@
+<!-- 2026-03-05 -->
 # Tasty Crousty
 
 SaaS de gestion de tâches quotidiennes par poste de travail. Les employés suivent une checklist sur mobile, les managers supervisent en temps réel.
