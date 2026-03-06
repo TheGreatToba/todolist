@@ -4,7 +4,7 @@ import { CheckCircle2, X, Loader2 } from "lucide-react";
 import { fetchWithCsrf } from "@/lib/api";
 
 type Workstation = { id: string; name: string };
-type Employee = { name: string; email: string };
+type Employee = { id: string; name: string; email: string };
 type Task = { title: string; workstationId: string };
 
 const STEPS = [
@@ -183,7 +183,9 @@ export default function Onboarding() {
           (data as { error?: string }).error || "Erreur lors de la création",
         );
       }
-      setAddedEmployees((prev) => [...prev, { name, email }]);
+      const data = (await res.json()) as { id: string };
+      const id = data.id;
+      setAddedEmployees((prev) => [...prev, { id, name, email }]);
       setEmployeeName("");
       setEmployeeEmail("");
     } catch (e) {
@@ -193,7 +195,14 @@ export default function Onboarding() {
     }
   }
 
-  function removeEmployee(index: number) {
+  async function removeEmployee(index: number) {
+    const emp = addedEmployees[index];
+    if (!emp) return;
+    try {
+      await fetchWithCsrf(`/api/employees/${emp.id}`, { method: "DELETE" });
+    } catch {
+      // best-effort: remove from UI regardless
+    }
     setAddedEmployees((prev) => prev.filter((_, i) => i !== index));
   }
 
