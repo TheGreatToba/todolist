@@ -71,10 +71,11 @@ const CreateEmployeeSchema = z.object({
   email: z.string().email(),
   workstationIds: z
     .array(z.string())
-    .min(1)
     .refine((ids) => new Set(ids).size === ids.length, {
       message: "workstationIds must not contain duplicates",
-    }),
+    })
+    .optional()
+    .default([]),
 });
 
 const UpdateEmployeeWorkstationsSchema = z.object({
