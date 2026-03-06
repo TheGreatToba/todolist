@@ -277,3 +277,141 @@ jobs:
 
           curl -fsS "http://127.0.0.1:${PORT}/health/live" >/dev/null
           curl -fsS "http://127.0.0.1:${PORT}/health/ready" >/dev/null
+
+  screenshot-gate:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect frontend changes
+        id: changes
+        run: |
+          git fetch origin ${{ github.base_ref }} --depth=1
+          CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | grep '^client/' | wc -l)
+          echo "frontend_changed=$CHANGED" >> "$GITHUB_OUTPUT"
+          echo "Frontend files changed: $CHANGED"
+
+      - name: Skip if no frontend changes
+        if: steps.changes.outputs.frontend_changed == '0'
+        run: echo "No frontend changes — skipping screenshot gate"
+
+      - uses: pnpm/action-setup@v4
+        if: steps.changes.outputs.frontend_changed != '0'
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        if: steps.changes.outputs.frontend_changed != '0'
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        if: steps.changes.outputs.frontend_changed != '0'
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        if: steps.changes.outputs.frontend_changed != '0'
+        run: pnpm exec prisma generate
+
+      - name: Build frontend
+        if: steps.changes.outputs.frontend_changed != '0'
+        run: pnpm run build:client
+        env:
+          NODE_ENV: production
+
+      - name: Install Playwright + deps
+        if: steps.changes.outputs.frontend_changed != '0'
+        run: |
+          npx playwright install chromium
+          npx playwright install-deps chromium
+
+      - name: Take screenshots
+        if: steps.changes.outputs.frontend_changed != '0'
+        run: |
+          npx vite preview --port 54321 --host 127.0.0.1 &
+          VITE_PID=$!
+
+          # Attendre que le serveur soit up
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:54321 >/dev/null 2>&1 && break || sleep 1
+          done
+
+          mkdir -p /tmp/screenshots
+
+          node << 'JSEOF'
+          const { chromium } = require('playwright');
+          const fs = require('fs');
+
+          const PAGES = [
+            { name: 'login', path: '/login' },
+            { name: 'index', path: '/' },
+            { name: 'signup', path: '/signup' },
+          ];
+
+          (async () => {
+            const browser = await chromium.launch({ headless: true });
+            const context = await browser.newContext({
+              viewport: { width: 1280, height: 800 },
+            });
+            for (const p of PAGES) {
+              const page = await context.newPage();
+              try {
+                await page.goto(`http://127.0.0.1:54321${p.path}`, { waitUntil: 'networkidle', timeout: 15000 });
+                await page.waitForTimeout(800);
+                await page.screenshot({ path: `/tmp/screenshots/${p.name}.png` });
+                console.log(`✅ ${p.name}`);
+              } catch (e) {
+                console.error(`❌ ${p.name}: ${e.message}`);
+              }
+              await page.close();
+            }
+            await browser.close();
+          })();
+          JSEOF
+
+          kill $VITE_PID 2>/dev/null || true
+
+      - name: Upload screenshots to screenshots branch
+        if: steps.changes.outputs.frontend_changed != '0'
+        run: |
+          PR_NUM="${{ github.event.pull_request.number }}"
+          REPO="${{ github.repository }}"
+          COMMENT="**📸 Screenshot Gate** — PR #${PR_NUM}\n\nPages capturées (frontend build, sans backend) :\n"
+
+          for IMG in /tmp/screenshots/*.png; do
+            NAME=$(basename "$IMG" .png)
+            CONTENT=$(base64 -w 0 "$IMG")
+            REMOTE_PATH="pr-${PR_NUM}/${NAME}.png"
+
+            # Récupérer SHA si le fichier existe
+            SHA=$(gh api "repos/${REPO}/contents/${REMOTE_PATH}?ref=screenshots" -q '.sha' 2>/dev/null || echo "")
+
+            if [ -n "$SHA" ]; then
+              gh api "repos/${REPO}/contents/${REMOTE_PATH}" \
+                -X PUT \
+                -f message="screenshots: PR #${PR_NUM} ${NAME}" \
+                -f content="${CONTENT}" \
+                -f branch="screenshots" \
+                -f sha="${SHA}" > /dev/null
+            else
+              gh api "repos/${REPO}/contents/${REMOTE_PATH}" \
+                -X PUT \
+                -f message="screenshots: PR #${PR_NUM} ${NAME}" \
+                -f content="${CONTENT}" \
+                -f branch="screenshots" > /dev/null
+            fi
+
+            URL="https://raw.githubusercontent.com/${REPO}/screenshots/${REMOTE_PATH}?$(date +%s)"
+            COMMENT="${COMMENT}\n**${NAME}**\n![${NAME}](${URL})\n"
+            echo "Uploaded: $URL"
+          done
+
+          COMMENT="${COMMENT}\n---\n*Screenshot gate automatique. Review visuel requis avant merge.*"
+          printf "%b" "$COMMENT" | gh pr comment "$PR_NUM" --body-file -
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
