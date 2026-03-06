@@ -2947,14 +2947,18 @@ export const handleGetManagerDashboard: RequestHandler = async (req, res) => {
       return;
     }
 
-    const firstTeam = await prisma.team.findFirst({
+    let firstTeam = await prisma.team.findFirst({
       where: { id: { in: teamIds } },
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     });
+    // Fallback when tenant has teamIds but team row missing (e.g. data inconsistency);
+    // keeps behavior aligned with today-board which does not require firstTeam to exist.
     if (!firstTeam) {
-      res.status(404).json({ error: "Team not found" });
-      return;
+      firstTeam = {
+        id: teamIds[0],
+        name: "Équipe",
+      };
     }
 
     // All members from all managed teams (for filters and display)
@@ -3214,13 +3218,8 @@ export const handleGetManagerDashboard: RequestHandler = async (req, res) => {
       members,
     };
 
-    const existingPreparation = await prisma.dayPreparation.findUnique({
-      where: {
-        managerId_date: {
-          managerId: payload.userId,
-          date: taskDate,
-        },
-      },
+    const existingPreparation = await prisma.dayPreparation.findFirst({
+      where: { date: taskDate },
       select: { preparedAt: true },
     });
     let preparedAt = existingPreparation?.preparedAt ?? null;

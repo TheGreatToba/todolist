@@ -83,7 +83,7 @@ export default function EmployeeDashboard() {
       {/* Header */}
       <div className="bg-card border-b border-border sticky top-0 z-10 shadow-sm">
         <div className="max-w-2xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="min-w-0">
               <h1 className="text-2xl font-bold text-foreground truncate">
                 {formatTaskDateLabel(selectedDate)}
@@ -116,22 +116,20 @@ export default function EmployeeDashboard() {
             <button
               type="button"
               onClick={() => setActiveTab("tasks")}
-              className={`px-3 py-1.5 font-medium transition border-b-2 ${
-                activeTab === "tasks"
+              className={`px-3 py-1.5 font-medium transition border-b-2 ${activeTab === "tasks"
                   ? "border-primary text-primary"
                   : "border-transparent text-muted-foreground hover:text-foreground"
-              }`}
+                }`}
             >
               Tâches
             </button>
             <button
               type="button"
               onClick={() => setActiveTab("settings")}
-              className={`px-3 py-1.5 font-medium transition border-b-2 ${
-                activeTab === "settings"
+              className={`px-3 py-1.5 font-medium transition border-b-2 ${activeTab === "settings"
                   ? "border-primary text-primary"
                   : "border-transparent text-muted-foreground hover:text-foreground"
-              }`}
+                }`}
             >
               Paramètres
             </button>
@@ -143,15 +141,15 @@ export default function EmployeeDashboard() {
         <>
           {/* Progress Card */}
           <div className="max-w-2xl mx-auto px-4 py-6">
-            <div className="bg-card rounded-xl border border-border p-6 shadow-sm">
+            <div className="bg-card rounded-xl border border-border p-4 sm:p-6 shadow-sm">
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <p className="text-sm text-muted-foreground font-medium">
                     {isToday(selectedDate)
                       ? "Progression du jour"
                       : `Progression du ${new Date(
-                          selectedDate + "T12:00:00",
-                        ).toLocaleDateString()}`}
+                        selectedDate + "T12:00:00",
+                      ).toLocaleDateString()}`}
                   </p>
                   <p className="text-3xl font-bold text-foreground mt-1">
                     {completedCount}
@@ -194,8 +192,8 @@ export default function EmployeeDashboard() {
                   {isToday(selectedDate)
                     ? "Bravo ! Vous avez terminé toutes vos tâches pour aujourd'hui."
                     : `Aucune tâche pour le ${new Date(
-                        selectedDate + "T12:00:00",
-                      ).toLocaleDateString()}.`}
+                      selectedDate + "T12:00:00",
+                    ).toLocaleDateString()}.`}
                 </p>
               </div>
             ) : (
@@ -203,11 +201,10 @@ export default function EmployeeDashboard() {
                 {tasks.map((task) => (
                   <div
                     key={task.id}
-                    className={`bg-card rounded-xl border border-border p-4 transition-all ${
-                      task.isCompleted
+                    className={`bg-card rounded-xl border border-border p-3 sm:p-4 transition-all ${task.isCompleted
                         ? "bg-secondary/30 border-primary/20"
                         : "hover:border-primary/50"
-                    }`}
+                      }`}
                   >
                     <div className="flex items-start gap-4">
                       <button
@@ -218,17 +215,16 @@ export default function EmployeeDashboard() {
                           updateTask.isPending &&
                           updateTask.variables?.taskId === task.id
                         }
-                        className={`flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all mt-1 ${
-                          task.isCompleted
+                        className={`flex-shrink-0 w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all mt-0.5 ${task.isCompleted
                             ? "bg-primary border-primary"
                             : "border-border hover:border-primary bg-background"
-                        } disabled:opacity-50`}
+                          } disabled:opacity-50`}
                       >
                         {updateTask.isPending &&
-                        updateTask.variables?.taskId === task.id ? (
-                          <Loader2 className="w-4 h-4 text-primary animate-spin" />
+                          updateTask.variables?.taskId === task.id ? (
+                          <Loader2 className="w-5 h-5 text-primary animate-spin" />
                         ) : task.isCompleted ? (
-                          <Check className="w-4 h-4 text-primary-foreground" />
+                          <Check className="w-5 h-5 text-primary-foreground" />
                         ) : null}
                       </button>
 
@@ -236,11 +232,10 @@ export default function EmployeeDashboard() {
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex-1">
                             <h3
-                              className={`font-semibold transition-all ${
-                                task.isCompleted
+                              className={`font-semibold transition-all ${task.isCompleted
                                   ? "text-muted-foreground line-through"
                                   : "text-foreground"
-                              }`}
+                                }`}
                             >
                               {task.taskTemplate.title}
                             </h3>
@@ -256,11 +251,10 @@ export default function EmployeeDashboard() {
                             </div>
                             {task.taskTemplate.description && (
                               <p
-                                className={`text-sm mt-1 ${
-                                  task.isCompleted
+                                className={`text-sm mt-1 ${task.isCompleted
                                     ? "text-muted-foreground/60"
                                     : "text-muted-foreground"
-                                }`}
+                                  }`}
                               >
                                 {task.taskTemplate.description}
                               </p>

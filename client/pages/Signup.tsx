@@ -68,8 +68,10 @@ export default function Signup() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary/10 via-background to-background flex items-center justify-center px-4">
-      <div className="w-full max-w-md">
+    <div className="min-h-screen bg-background relative overflow-hidden flex items-center justify-center p-4 selection:bg-primary/30">
+      <div className="absolute inset-0 pointer-events-none mesh-gradient-bg opacity-40 z-0"></div>
+
+      <div className="relative z-10 w-full max-w-md animate-fade-in-up my-8">
         {/* Header */}
         <div className="text-center mb-8">
           <img
@@ -86,122 +88,125 @@ export default function Signup() {
         </div>
 
         {/* Form */}
-        <form
-          onSubmit={handleSubmit}
-          className="space-y-4 bg-card rounded-2xl shadow-sm border border-border p-8"
-        >
-          {(error || localError) && (
-            <div className="bg-destructive/10 border border-destructive/20 rounded-lg px-4 py-3 text-sm text-destructive">
-              {error || localError}
-            </div>
-          )}
-
-          <div>
-            <label
-              htmlFor="name"
-              className="block text-sm font-medium text-foreground mb-2"
-            >
-              Nom complet
-            </label>
-            <input
-              id="name"
-              type="text"
-              name="name"
-              value={formData.name}
-              onChange={handleChange}
-              placeholder="Jean Dupont"
-              className="w-full px-4 py-3 rounded-lg border border-input bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition"
-            />
-          </div>
-
-          <div>
-            <label
-              htmlFor="email"
-              className="block text-sm font-medium text-foreground mb-2"
-            >
-              E-mail
-            </label>
-            <input
-              id="email"
-              type="email"
-              name="email"
-              value={formData.email}
-              onChange={handleChange}
-              placeholder="vous@example.com"
-              className="w-full px-4 py-3 rounded-lg border border-input bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition"
-            />
-          </div>
-
-          <div>
-            <label
-              htmlFor="password"
-              className="block text-sm font-medium text-foreground mb-2"
-            >
-              Mot de passe
-            </label>
-            <input
-              id="password"
-              type="password"
-              name="password"
-              value={formData.password}
-              onChange={handleChange}
-              placeholder="••••••••"
-              className="w-full px-4 py-3 rounded-lg border border-input bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition"
-            />
-          </div>
-
-          <div>
-            <label
-              htmlFor="confirmPassword"
-              className="block text-sm font-medium text-foreground mb-2"
-            >
-              Confirmer le mot de passe
-            </label>
-            <input
-              id="confirmPassword"
-              type="password"
-              name="confirmPassword"
-              value={formData.confirmPassword}
-              onChange={handleChange}
-              placeholder="••••••••"
-              className="w-full px-4 py-3 rounded-lg border border-input bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition"
-            />
-          </div>
-
-          <div className="bg-secondary/50 border border-border rounded-lg p-3">
-            <p className="text-foreground font-medium">Compte manager</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              Seuls les managers peuvent créer un compte ici. Les comptes
-              employés sont créés par leur manager depuis le tableau de bord.
-            </p>
-          </div>
-
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold py-3 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 mt-6"
+        <div className="relative">
+          <div className="absolute -inset-1 rounded-[2rem] bg-gradient-to-r from-primary via-accent to-primary opacity-20 blur-xl animate-pulse-glow pointer-events-none"></div>
+          <form
+            onSubmit={handleSubmit}
+            className="relative glass-card space-y-5 rounded-3xl shadow-2xl border border-border/50 p-8 md:p-10"
           >
-            {isLoading ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Création du compte...
-              </>
-            ) : (
-              "Créer un compte"
+            {(error || localError) && (
+              <div className="bg-destructive/10 border border-destructive/20 rounded-lg px-4 py-3 text-sm text-destructive">
+                {error || localError}
+              </div>
             )}
-          </button>
 
-          <div className="text-center text-sm text-muted-foreground">
-            Vous avez déjà un compte ?{" "}
+            <div>
+              <label
+                htmlFor="name"
+                className="block text-sm font-medium text-foreground mb-2"
+              >
+                Nom complet
+              </label>
+              <input
+                id="name"
+                type="text"
+                name="name"
+                value={formData.name}
+                onChange={handleChange}
+                placeholder="Jean Dupont"
+                className="w-full px-4 py-3 rounded-xl border border-input/60 bg-background/50 backdrop-blur-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all duration-300 shadow-inner"
+              />
+            </div>
+
+            <div>
+              <label
+                htmlFor="email"
+                className="block text-sm font-medium text-foreground mb-2"
+              >
+                E-mail
+              </label>
+              <input
+                id="email"
+                type="email"
+                name="email"
+                value={formData.email}
+                onChange={handleChange}
+                placeholder="vous@example.com"
+                className="w-full px-4 py-3 rounded-xl border border-input/60 bg-background/50 backdrop-blur-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all duration-300 shadow-inner"
+              />
+            </div>
+
+            <div>
+              <label
+                htmlFor="password"
+                className="block text-sm font-medium text-foreground mb-2"
+              >
+                Mot de passe
+              </label>
+              <input
+                id="password"
+                type="password"
+                name="password"
+                value={formData.password}
+                onChange={handleChange}
+                placeholder="••••••••"
+                className="w-full px-4 py-3 rounded-xl border border-input/60 bg-background/50 backdrop-blur-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all duration-300 shadow-inner"
+              />
+            </div>
+
+            <div>
+              <label
+                htmlFor="confirmPassword"
+                className="block text-sm font-medium text-foreground mb-2"
+              >
+                Confirmer le mot de passe
+              </label>
+              <input
+                id="confirmPassword"
+                type="password"
+                name="confirmPassword"
+                value={formData.confirmPassword}
+                onChange={handleChange}
+                placeholder="••••••••"
+                className="w-full px-4 py-3 rounded-xl border border-input/60 bg-background/50 backdrop-blur-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all duration-300 shadow-inner"
+              />
+            </div>
+
+            <div className="bg-secondary/40 border border-border/50 rounded-xl p-4 shadow-inner">
+              <p className="text-foreground font-semibold text-sm drop-shadow-sm">Compte manager uniquement</p>
+              <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
+                Seuls les managers peuvent créer un compte ici. Les comptes
+                employés sont créés par leur manager depuis le tableau de bord.
+              </p>
+            </div>
+
             <button
-              type="button"
-              onClick={() => navigate("/login")}
-              className="text-primary hover:text-primary/90 font-medium transition"
+              type="submit"
+              disabled={isLoading}
+              className="w-full bg-primary text-primary-foreground font-bold py-3.5 rounded-xl transition-all duration-300 shadow-[0_0_20px_rgba(233,30,99,0.3)] hover:shadow-[0_0_30px_rgba(233,30,99,0.5)] hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none flex items-center justify-center gap-2 mt-6"
             >
-              Se connecter
+              {isLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Création du compte...
+                </>
+              ) : (
+                "Créer un compte"
+              )}
             </button>
-          </div>
-        </form>
+
+            <div className="text-center text-sm text-muted-foreground">
+              Vous avez déjà un compte ?{" "}
+              <button
+                type="button"
+                onClick={() => navigate("/login")}
+                className="text-primary hover:text-primary/90 font-medium transition"
+              >
+                Se connecter
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
     </div>
   );
