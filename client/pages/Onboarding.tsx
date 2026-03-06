@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { CheckCircle2, X, Loader2 } from "lucide-react";
 import { fetchWithCsrf } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 
 type Workstation = { id: string; name: string };
 type Employee = { id: string; name: string; email: string };
@@ -66,6 +67,7 @@ function Stepper({ current }: { current: number }) {
 
 export default function Onboarding() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -104,7 +106,11 @@ export default function Onboarding() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetchWithCsrf("/api/team", {
+      const teamId = user?.teamId;
+      if (!teamId) {
+        throw new Error("Team introuvable");
+      }
+      const res = await fetchWithCsrf(`/api/team/${teamId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: teamName.trim() }),

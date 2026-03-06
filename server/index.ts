@@ -346,7 +346,11 @@ export function createApp(): Express {
   );
 
   // Team routes
-  app.patch("/api/team", ...withManagerTenantContext, handleUpdateTeamName);
+  app.patch(
+    "/api/team/:teamId",
+    ...withManagerTenantContext,
+    handleUpdateTeamName,
+  );
 
   // Workstation routes
   app.get(
