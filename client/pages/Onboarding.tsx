@@ -172,8 +172,9 @@ export default function Onboarding() {
         body: JSON.stringify({
           name,
           email,
-          workstationIds:
-            createdWorkstations.length > 0 ? [createdWorkstations[0].id] : [],
+          ...(createdWorkstations.length > 0 && {
+            workstationIds: [createdWorkstations[0].id],
+          }),
         }),
       });
       if (!res.ok) {
