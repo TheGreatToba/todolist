@@ -18,6 +18,7 @@ const TodayBoard = React.lazy(() => import("./pages/TodayBoard"));
 const ManagerDashboard = React.lazy(() => import("./pages/ManagerDashboard"));
 const ManagerLayout = React.lazy(() => import("./pages/ManagerLayout"));
 const NotFound = React.lazy(() => import("./pages/NotFound"));
+const Onboarding = React.lazy(() => import("./pages/Onboarding"));
 
 const queryClient = new QueryClient();
 
@@ -142,6 +143,14 @@ const App = () => (
                   <Route path="employees" element={<ManagerDashboard />} />
                   <Route path="task" element={<ManagerDashboard />} />
                 </Route>
+                <Route
+                  path="/onboarding"
+                  element={
+                    <ProtectedRoute requiredRole="MANAGER">
+                      <Onboarding />
+                    </ProtectedRoute>
+                  }
+                />
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                 <Route path="*" element={<NotFound />} />
               </Routes>

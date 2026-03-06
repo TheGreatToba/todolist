@@ -64,6 +64,7 @@ import {
   handleGetTeamMembers,
   handleUpdateEmployeeWorkstations,
   handleUpdateWorkstationEmployees,
+  handleUpdateTeamName,
 } from "./routes/workstations";
 import { handleTrackManagerKpiEvent } from "./routes/metrics";
 import { handleGetStats } from "./routes/stats";
@@ -343,6 +344,9 @@ export function createApp(): Express {
     cronLimiter,
     handleDailyTaskAssignment,
   );
+
+  // Team routes
+  app.patch("/api/team", ...withManagerTenantContext, handleUpdateTeamName);
 
   // Workstation routes
   app.get(
