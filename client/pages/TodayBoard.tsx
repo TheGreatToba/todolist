@@ -38,10 +38,10 @@ function TaskSection({
   onToggleTask: (task: TodayBoardTask) => void;
 }) {
   return (
-    <section className={`rounded-xl border bg-card shadow-sm ${accentClass}`}>
-      <header className="flex items-center justify-between border-b border-border px-5 py-4">
-        <h2 className="text-lg font-semibold text-foreground">{title}</h2>
-        <span className="rounded-full bg-background px-3 py-1 text-xs font-medium text-muted-foreground">
+    <section className={`glass-card flex flex-col overflow-hidden ${accentClass}`}>
+      <header className="flex items-center justify-between border-b border-border/50 px-5 py-4 bg-background/30 backdrop-blur-sm">
+        <h2 className="text-lg font-bold text-foreground tracking-tight drop-shadow-sm">{title}</h2>
+        <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary shadow-inner">
           {tasks.length}
         </span>
       </header>
@@ -54,18 +54,17 @@ function TaskSection({
         {tasks.map((task) => (
           <article
             key={task.id}
-            className="rounded-lg border border-border bg-background px-3 py-3"
+            className="group relative rounded-xl border border-border/50 bg-background/50 backdrop-blur-sm px-4 py-4 transition-all duration-300 hover:shadow-lg hover:-translate-y-1 hover:bg-card hover:border-primary/30"
           >
-            <div className="flex items-start gap-3">
+            <div className="flex items-start gap-4">
               <button
                 type="button"
                 onClick={() => onToggleTask(task)}
                 disabled={isTaskUpdating && pendingTaskId === task.id}
-                className={`mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border-2 transition-all disabled:opacity-50 ${
-                  task.isCompleted
-                    ? "border-primary bg-primary"
-                    : "border-border bg-card hover:border-primary"
-                }`}
+                className={`mt-1 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border-2 transition-all duration-300 disabled:opacity-50 ${task.isCompleted
+                  ? "border-primary bg-primary shadow-[0_0_10px_rgba(233,30,99,0.5)]"
+                  : "border-muted-foreground/30 bg-card hover:border-primary hover:shadow-sm"
+                  }`}
                 aria-label={
                   task.isCompleted
                     ? `Marquer la tâche ${task.taskTemplate.title} comme en attente`
@@ -89,11 +88,10 @@ function TaskSection({
               </button>
               <div className="min-w-0 flex-1">
                 <p
-                  className={`text-sm font-medium ${
-                    task.isCompleted
-                      ? "text-muted-foreground line-through"
-                      : "text-foreground"
-                  }`}
+                  className={`text-sm font-medium ${task.isCompleted
+                    ? "text-muted-foreground line-through"
+                    : "text-foreground"
+                    }`}
                 >
                   {task.taskTemplate.title}
                 </p>
@@ -112,7 +110,7 @@ function TaskSection({
           </article>
         ))}
       </div>
-    </section>
+    </section >
   );
 }
 
@@ -167,28 +165,40 @@ export default function TodayBoard() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="min-h-[calc(100vh-4rem)] bg-gradient-to-b from-primary/5 to-background p-4 flex flex-col animate-pulse">
+        <div className="w-full max-w-[1600px] mx-auto grid grid-cols-1 xl:grid-cols-3 gap-6 flex-1">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="h-full min-h-[300px] sm:min-h-[500px] bg-card/50 backdrop-blur-md rounded-xl border border-border/40 p-4 space-y-4">
+              <div className="h-6 w-32 bg-secondary/50 rounded-md"></div>
+              <div className="h-24 w-full bg-secondary/30 rounded-lg"></div>
+              <div className="h-24 w-full bg-secondary/30 rounded-lg"></div>
+              <div className="h-24 w-full bg-secondary/30 rounded-lg"></div>
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
 
   if (!board) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-primary/5 to-background flex items-center justify-center px-4">
-        <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 text-center">
-          <h1 className="text-xl font-bold text-foreground">
+      <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center px-4 animate-fade-in-up">
+        <div className="glass-card w-full max-w-md rounded-2xl border border-border/50 bg-card/80 p-8 text-center shadow-xl">
+          <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner">
+            <Loader2 className="h-8 w-8 text-primary" />
+          </div>
+          <h1 className="text-2xl font-black text-foreground tracking-tight">
             Équipe introuvable
           </h1>
-          <p className="mt-2 text-sm text-muted-foreground">
+          <p className="mt-3 text-sm text-muted-foreground mb-8">
             Merci de contacter votre administrateur.
           </p>
           <button
             type="button"
             onClick={handleLogout}
-            className="mt-6 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
+            className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-3 text-sm font-bold text-primary-foreground shadow-md transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5"
           >
-            <LogOut className="h-4 w-4" />
+            <LogOut className="h-5 w-5" />
             Se déconnecter
           </button>
         </div>
@@ -197,9 +207,9 @@ export default function TodayBoard() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-primary/5 to-background">
-      <main className="mx-auto w-full max-w-6xl space-y-6 px-4 py-6">
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+    <div className="min-h-[calc(100vh-4rem)] flex flex-col p-4 w-full">
+      <main className="w-full space-y-6 flex-1">
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-3 max-w-[1600px] mx-auto w-full h-full align-top">
           <TaskSection
             title="En retard"
             accentClass="border-l-4 border-l-red-500"

@@ -32,8 +32,11 @@ export function TasksByWorkstationList({
 
   if (values.length === 0) {
     return (
-      <div className="text-center py-12 bg-card rounded-xl border border-border">
-        <p className="text-muted-foreground">{emptyMessage}</p>
+      <div className="text-center py-16 glass-card rounded-2xl border border-border/50 shadow-sm transition-all duration-300">
+        <div className="w-16 h-16 mx-auto bg-secondary/50 rounded-full flex items-center justify-center mb-4">
+          <div className="w-6 h-6 border-2 border-muted-foreground border-t-accent rounded-full animate-spin"></div>
+        </div>
+        <p className="text-lg font-medium text-muted-foreground">{emptyMessage}</p>
       </div>
     );
   }

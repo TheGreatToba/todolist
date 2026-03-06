@@ -1,175 +1,270 @@
-# Fusion Starter
+# AGENTS.md - SaaS Restaurant (Multi-Tenant Production Rules)
 
-A production-ready full-stack React application template with integrated Express server, featuring React Router 6 SPA mode, TypeScript, Vitest, Zod and modern tooling.
+You are working on a production-grade multi-tenant B2B SaaS for restaurants.
+This system already runs in production.
 
-While the starter comes with a express server, only create endpoint when strictly neccesary, for example to encapsulate logic that must leave in the server, such as private keys handling, or certain DB operations, db...
+**Contexte produit et architecture** : [contexte.md](contexte.md) (vision, utilisateurs, flux, modèle de données, fichiers clés).
 
-## Tech Stack
+Priority order:
+1. Never break database integrity
+2. Never break tenant isolation
+3. Keep the system backward-compatible
+4. Improve code quality when safe
 
-- **PNPM**: Prefer pnpm
-- **Frontend**: React 18 + React Router 6 (spa) + TypeScript + Vite + TailwindCSS 3
-- **Backend**: Express server integrated with Vite dev server
-- **Testing**: Vitest
-- **UI**: Radix UI + TailwindCSS 3 + Lucide React icons
+---
 
-## Project Structure
+## STACK OVERVIEW
 
-```
-client/                   # React SPA frontend
-├── pages/                # Route components (Index.tsx = home)
-├── components/ui/        # Pre-built UI component library
-├── App.tsx                # App entry point and with SPA routing setup
-└── global.css            # TailwindCSS 3 theming and global styles
+Backend:
+- Node.js
+- Express 5
+- Prisma 5
+- PostgreSQL
+- JWT auth (httpOnly cookie)
+- CSRF protection
 
-server/                   # Express API backend
-├── index.ts              # Main server setup (express config + routes)
-└── routes/               # API handlers
+Frontend:
+- React 18 (SPA)
+- React Router 6
+- TypeScript
+- Vite
+- TailwindCSS 3
+- Radix UI
+- @tanstack/react-query
 
-shared/                   # Types used by both client & server
-└── api.ts                # Example of how to share api interfaces
-```
+Deployment:
+- Single PostgreSQL database
+- Logical multi-tenancy via Team
+- prisma migrate deploy in production
 
-## Key Features
+---
 
-## SPA Routing System
+## MULTI-TENANT ARCHITECTURE (CRITICAL)
 
-The routing system is powered by React Router 6:
+The application is multi-tenant using logical isolation.
 
-- `client/pages/Index.tsx` represents the home page.
-- Routes are defined in `client/App.tsx` using the `react-router-dom` import
-- Route files are located in the `client/pages/` directory
+Tenant model:
+- A Team represents a restaurant/site.
+- Managers own one or more Teams.
+- Employees belong to one Team.
+- All tenant-sensitive queries MUST respect team boundaries.
 
-For example, routes can be defined with:
+Tenant-sensitive models include:
+- team
+- user
+- workstation
+- employeeWorkstation
+- taskTemplate
+- dailyTask
+- dayPreparation
+- managerKpiEvent
 
-```typescript
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+### Critical Rule
 
-<Routes>
-  <Route path="/" element={<Index />} />
-  {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-  <Route path="*" element={<NotFound />} />
-</Routes>;
-```
+Tenant-sensitive models MUST always go through scopedPrisma:
 
-### Styling System
-
-- **Primary**: TailwindCSS 3 utility classes
-- **Theme and design tokens**: Configure in `client/global.css`
-- **UI components**: Pre-built library in `client/components/ui/`
-- **Utility**: `cn()` function combines `clsx` + `tailwind-merge` for conditional classes
-
-```typescript
-// cn utility usage
-className={cn(
-  "base-classes",
-  { "conditional-class": condition },
-  props.className  // User overrides
-)}
-```
-
-### Express Server Integration
-
-- **Development**: Single port (8080) for both frontend/backend
-- **Hot reload**: Both client and server code
-- **API endpoints**: Prefixed with `/api/`
-
-#### Example API Routes
-
-- `GET /api/ping` - Simple ping api
-- `GET /api/demo` - Demo endpoint
-
-### Shared Types
-
-Import consistent types in both client and server:
-
-```typescript
-import { DemoResponse } from "@shared/api";
+```ts
+const prisma = scopedPrisma(tenant);
 ```
 
-Path aliases:
+The scopedPrisma proxy:
+- Automatically injects tenant filters
+- Blocks unsafe queries
+- Prevents cross-tenant access
 
-- `@shared/*` - Shared folder
-- `@/*` - Client folder
+Do not use raw PrismaClient for tenant-sensitive models in routes or business logic.
 
-## Development Commands
+This rule applies to:
+- Routes
+- Services
+- Background jobs
+- Any server-side module accessing tenant data
 
-```bash
-pnpm dev        # Start dev server (client + server)
-pnpm build      # Production build
-pnpm start      # Start production server
-pnpm typecheck  # TypeScript validation
-pnpm test          # Run Vitest tests
+### Bootstrap Exception (before tenant is resolved)
+
+A raw PrismaClient call is allowed only for authentication/bootstrap flows where tenant is not known yet (for example login, session restore, list my teams).
+
+In these flows:
+- Scope queries by authenticated user identity (user id/email)
+- Return only teams the authenticated user belongs to
+- Do not perform tenant-sensitive writes before tenant resolution
+- Resolve tenant as early as possible, then switch to scopedPrisma(tenant)
+
+---
+
+## SECURITY INVARIANTS (DO NOT BREAK)
+
+1. A manager must only see their Teams.
+2. An employee must only see their own data and Team data.
+3. All backend authorization must be enforced server-side.
+4. Never rely on frontend validation for security.
+5. Never trust route params without scope validation.
+
+When creating or updating an API route:
+- Extract tenant context first
+- Extract role from authenticated payload
+- Use scopedPrisma(tenant) for tenant-sensitive models
+- Validate ownership/scope before returning data
+- Reject out-of-scope access
+
+### Access-Denied Response Policy
+
+- Default policy: return 403 for out-of-scope access.
+- If an endpoint must hide resource existence, return 404 for non-readable resources.
+- Pick one policy per endpoint and keep it consistent in tests.
+
+---
+
+## DATABASE SAFETY RULES (VERY IMPORTANT)
+
+This system is already in production.
+
+### Allowed
+
+- Add new columns (nullable or with safe defaults)
+- Add new tables
+- Add indexes (including performance indexes, but avoid long production locks)
+- Add foreign keys (after verifying no orphan data)
+- Add new enums safely
+- Add new roles
+
+### Forbidden
+
+- Dropping tables
+- Dropping columns
+- Changing column types destructively
+- Removing constraints that protect integrity
+- Resetting database
+- Data migrations that delete production data
+
+If a schema change is required:
+- Modify schema.prisma
+- Explain exactly what the migration will do
+- Do NOT assume migration has been executed
+- State that migration must be run manually in production
+
+Schema changes must follow an additive migration strategy.
+
+Safe examples:
+- Add nullable column
+- Add column with default
+- Add new table
+
+Unsafe examples:
+- Drop existing column
+- Change column type without fallback
+- Remove unique constraint
+
+If a change may impact existing production data, explain migration risk clearly.
+
+---
+
+## TRANSACTIONS
+
+Use Prisma transactions when:
+- Multiple related writes must remain consistent
+- Creating linked records
+- Performing batch updates
+
+Prefer safety over micro-optimization.
+
+For tenant-sensitive operations, always use the scoped client:
+
+```ts
+const prisma = scopedPrisma(tenant);
+await prisma.$transaction(...)
 ```
 
-## Adding Features
+Never open a transaction using the global PrismaClient for tenant-scoped operations.
 
-### Add new colors to the theme
+---
 
-Open `client/global.css` and `tailwind.config.ts` and add new tailwind colors.
+## RAW SQL SAFETY
 
-### New API Route
+Avoid `$queryRaw` / `$executeRaw` for tenant-sensitive operations.
 
-1. **Optional**: Create a shared interface in `shared/api.ts`:
+If raw SQL is unavoidable:
+- Use parameterized queries only (no string interpolation)
+- Include explicit tenant filter in the query
+- Document why scopedPrisma was insufficient
+- Add tests proving cross-tenant access is impossible
 
-```typescript
-export interface MyRouteResponse {
-  message: string;
-  // Add other response properties here
-}
-```
+---
 
-2. Create a new route handler in `server/routes/my-route.ts`:
+## ARCHITECTURE PRINCIPLES
 
-```typescript
-import { RequestHandler } from "express";
-import { MyRouteResponse } from "@shared/api"; // Optional: for type safety
+- Follow existing patterns before introducing new ones.
+- Prefer extending current structure instead of rewriting.
+- Do not refactor unrelated modules.
+- Keep changes minimal and scoped.
+- If improvement is possible without risk, suggest it.
 
-export const handleMyRoute: RequestHandler = (req, res) => {
-  const response: MyRouteResponse = {
-    message: "Hello from my endpoint!",
-  };
-  res.json(response);
-};
-```
+Improvements are welcome only if they:
+- Do not break DB integrity
+- Do not break tenant isolation
+- Remain backward-compatible
 
-3. Register the route in `server/index.ts`:
+Avoid introducing N+1 query patterns.
+Prefer efficient Prisma queries with proper where clauses.
+Be mindful of performance on large tenant datasets.
 
-```typescript
-import { handleMyRoute } from "./routes/my-route";
+---
 
-// Add to the createServer function:
-app.get("/api/my-endpoint", handleMyRoute);
-```
+## TESTING RULES
 
-4. Use in React components with type safety:
+If modifying:
+- Business logic: update or create tests
+- Tenant logic: verify isolation is preserved
+- Routes: verify role validation remains intact
 
-```typescript
-import { MyRouteResponse } from "@shared/api"; // Optional: for type safety
+Minimum tenant coverage:
+- Manager cannot read/write another manager's team data
+- Employee cannot access another team
+- Out-of-scope access returns the configured policy (403 or 404)
 
-const response = await fetch("/api/my-endpoint");
-const data: MyRouteResponse = await response.json();
-```
+All changes must pass:
+- `pnpm lint`
+- `pnpm typecheck`
+- `pnpm test`
 
-### New Page Route
+---
 
-1. Create component in `client/pages/MyPage.tsx`
-2. Add route in `client/App.tsx`:
+## PRODUCT EVOLUTION
 
-```typescript
-<Route path="/my-page" element={<MyPage />} />
-```
+The system will evolve:
+- New roles may be added
+- New tenant types may appear
+- Permissions may grow
 
-## Production Deployment
+When adding roles:
+- Do not duplicate logic
+- Prefer centralized role-check helpers (for example `requireRole` or permission maps)
+- Avoid scattering role conditions across multiple files
+- Do not hardcode fragile logic
+- Prefer extensible patterns
+- Avoid duplicating role logic inline inside route handlers
 
-- **Standard**: `pnpm build`
-- **Binary**: Self-contained executables (Linux, macOS, Windows)
-- **Cloud Deployment**: Use either Netlify or Vercel via their MCP integrations for easy deployment. Both providers work well with this starter template.
+---
 
-## Architecture Notes
+## NEVER DO
 
-- Single-port development with Vite + Express integration
-- TypeScript throughout (client, server, shared)
-- Full hot reload for rapid development
-- Production-ready with multiple deployment options
-- Comprehensive UI component library included
-- Type-safe API communication via shared interfaces
+- Never bypass scopedPrisma for tenant-sensitive models
+- Never run destructive schema/data changes in production
+- Never introduce unscoped raw SQL on tenant data
+- Never remove existing tests without reason
+- Never rewrite architecture without explicit request
+
+---
+
+## DEFINITION OF DONE
+
+A task is complete only if:
+- Tenant isolation is preserved
+- Database integrity is preserved
+- Feature works
+- No TypeScript errors
+- Tests pass
+- No unsafe query patterns introduced
+- Changes are backward-compatible
+
+Focus on stability, correctness, and safe evolution.

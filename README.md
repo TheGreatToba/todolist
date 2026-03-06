@@ -2,6 +2,8 @@
 
 SaaS de gestion de tâches quotidiennes par poste de travail. Les employés suivent une checklist sur mobile, les managers supervisent en temps réel.
 
+**Contexte produit et architecture** : voir [contexte.md](contexte.md) pour la vision, le modèle multi-tenant et les flux principaux.
+
 **CI** : `pnpm run ci` (gate complet) · `pnpm test:client` (tests frontend) — voir [Signaux CI / commandes de test](#signaux-ci--commandes-de-test).
 
 ## Prérequis

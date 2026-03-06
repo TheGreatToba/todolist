@@ -42,118 +42,123 @@ export default function Login() {
   }, [user, navigate]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary/10 via-background to-background flex items-center justify-center px-4">
-      <div className="w-full max-w-md">
+    <div className="min-h-screen bg-background relative overflow-hidden flex items-center justify-center p-4 selection:bg-primary/30">
+      <div className="absolute inset-0 pointer-events-none mesh-gradient-bg opacity-40 z-0"></div>
+
+      <div className="relative z-10 w-full max-w-md animate-fade-in-up">
         {/* Header */}
         <div className="text-center mb-8">
           <img
             src="/logo.png"
             alt="Tasty Crousty"
-            className="h-20 w-auto object-contain mx-auto mb-4"
+            className="h-16 sm:h-20 w-auto object-contain mx-auto mb-4"
           />
-          <h1 className="text-3xl font-bold text-foreground mb-2">
+          <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-2">
             Tasty Crousty
           </h1>
-          <p className="text-muted-foreground">
+          <p className="text-sm sm:text-base text-muted-foreground">
             Gérez vos tâches quotidiennes en toute simplicité
           </p>
         </div>
 
         {/* Form */}
-        <form
-          onSubmit={handleSubmit}
-          className="space-y-5 bg-card rounded-2xl shadow-sm border border-border p-8"
-        >
-          {(error || localError) && (
-            <div
-              role="alert"
-              aria-label={error || localError || "Erreur"}
-              className="bg-destructive/10 border border-destructive/20 rounded-lg px-4 py-3 text-sm text-destructive"
-            >
-              {error || localError}
-            </div>
-          )}
-
-          <div>
-            <label
-              htmlFor="email"
-              className="block text-sm font-medium text-foreground mb-2"
-            >
-              E-mail
-            </label>
-            <input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="vous@example.com"
-              className="w-full px-4 py-3 rounded-lg border border-input bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition"
-            />
-          </div>
-
-          <div>
-            <label
-              htmlFor="password"
-              className="block text-sm font-medium text-foreground mb-2"
-            >
-              Mot de passe
-            </label>
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              className="w-full px-4 py-3 rounded-lg border border-input bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition"
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold py-3 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+        <div className="relative">
+          <div className="absolute -inset-1 rounded-[2rem] bg-gradient-to-r from-primary via-accent to-primary opacity-20 blur-xl animate-pulse-glow pointer-events-none"></div>
+          <form
+            onSubmit={handleSubmit}
+            className="relative glass-card space-y-6 rounded-3xl shadow-2xl border border-border/50 p-6 sm:p-8 md:p-10"
           >
-            {isLoading ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Connexion en cours...
-              </>
-            ) : (
-              "Se connecter"
+            {(error || localError) && (
+              <div
+                role="alert"
+                aria-label={error || localError || "Erreur"}
+                className="bg-destructive/10 border border-destructive/20 rounded-lg px-4 py-3 text-sm text-destructive"
+              >
+                {error || localError}
+              </div>
             )}
-          </button>
 
-          <div className="space-y-2">
-            <div className="text-center text-sm text-muted-foreground">
-              <button
-                type="button"
-                onClick={() => navigate("/forgot-password")}
-                className="text-primary hover:text-primary/90 font-medium transition"
+            <div>
+              <label
+                htmlFor="email"
+                className="block text-sm font-medium text-foreground mb-2"
               >
-                Mot de passe oublié ?
-              </button>
+                E-mail
+              </label>
+              <input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="vous@example.com"
+                className="w-full px-4 py-3 rounded-xl border border-input/60 bg-background/50 backdrop-blur-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all duration-300 shadow-inner"
+              />
             </div>
-            <div className="text-center text-sm text-muted-foreground">
-              Pas encore de compte ?{" "}
-              <button
-                type="button"
-                onClick={() => navigate("/signup")}
-                className="text-primary hover:text-primary/90 font-medium transition"
+
+            <div>
+              <label
+                htmlFor="password"
+                className="block text-sm font-medium text-foreground mb-2"
               >
-                Créer un compte
-              </button>
+                Mot de passe
+              </label>
+              <input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                className="w-full px-4 py-3 rounded-xl border border-input/60 bg-background/50 backdrop-blur-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all duration-300 shadow-inner"
+              />
             </div>
-          </div>
-        </form>
+
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="w-full bg-primary text-primary-foreground font-bold py-3.5 rounded-xl transition-all duration-300 shadow-[0_0_20px_rgba(233,30,99,0.3)] hover:shadow-[0_0_30px_rgba(233,30,99,0.5)] hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none flex items-center justify-center gap-2 mt-2"
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Connexion en cours...
+                </>
+              ) : (
+                "Se connecter"
+              )}
+            </button>
+
+            <div className="space-y-2">
+              <div className="text-center text-sm text-muted-foreground">
+                <button
+                  type="button"
+                  onClick={() => navigate("/forgot-password")}
+                  className="text-primary hover:text-primary/90 font-medium transition"
+                >
+                  Mot de passe oublié ?
+                </button>
+              </div>
+              <div className="text-center text-sm text-muted-foreground">
+                Pas encore de compte ?{" "}
+                <button
+                  type="button"
+                  onClick={() => navigate("/signup")}
+                  className="text-primary hover:text-primary/90 font-medium transition"
+                >
+                  Créer un compte
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
 
         {/* Demo Info */}
-        <div className="mt-6 bg-secondary/30 rounded-xl p-4 border border-border text-center">
-          <p className="text-sm text-muted-foreground">
-            <strong>Identifiants de démonstration :</strong>
+        <div className="mt-8 relative z-10 glass-card rounded-xl p-5 border border-border/50 text-center shadow-lg">
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            <strong className="text-foreground">Identifiants de démonstration :</strong>
             <br />
             Employé : emp@test.com / password
             <br />
-            Manager : mgr@test.com / mot de passe : password
+            Manager : mgr@test.com / password
           </p>
         </div>
       </div>

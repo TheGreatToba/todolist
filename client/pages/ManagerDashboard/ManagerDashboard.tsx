@@ -552,25 +552,36 @@ export default function ManagerDashboard() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-primary animate-spin" />
+      <div className="min-h-screen bg-gradient-to-br from-primary/5 via-background to-secondary/10 px-4 py-8 animate-pulse">
+        <div className="max-w-6xl mx-auto space-y-8 mt-4">
+          <div className="h-8 w-64 bg-card/60 rounded-md border border-border/50"></div>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="h-32 bg-card/50 backdrop-blur-md rounded-xl border border-border/40"></div>
+            ))}
+          </div>
+          <div className="h-96 w-full bg-card/50 backdrop-blur-md rounded-xl border border-border/40 mt-8"></div>
+        </div>
       </div>
     );
   }
 
   if (!dashboard) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-primary/5 to-background flex items-center justify-center">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold text-foreground mb-2">
+      <div className="min-h-screen bg-gradient-to-b from-primary/5 to-background flex items-center justify-center px-4">
+        <div className="glass-card w-full max-w-md rounded-2xl border border-border/50 p-8 text-center shadow-xl animate-fade-in-up">
+          <div className="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner">
+            <LogOut className="w-8 h-8 text-primary" />
+          </div>
+          <h2 className="text-2xl font-black text-foreground mb-2 tracking-tight">
             Équipe introuvable
           </h2>
-          <p className="text-muted-foreground mb-6">
-            Merci de contacter votre administrateur
+          <p className="text-sm text-muted-foreground mb-8">
+            Nous n'avons pas pu charger les données de votre espace manager.
           </p>
           <button
             onClick={handleLogout}
-            className="inline-flex items-center gap-2 px-6 py-3 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-medium transition"
+            className="w-full inline-flex justify-center items-center gap-2 px-6 py-3 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-bold transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5"
             type="button"
           >
             <LogOut className="w-4 h-4" />
@@ -606,10 +617,11 @@ export default function ManagerDashboard() {
 
         {weeklyReport && (
           <div className="mb-6">
-            <div className="rounded-xl border border-border bg-card/80 p-4 shadow-sm">
-              <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="glass-card rounded-xl border border-border/50 p-6 shadow-lg relative overflow-hidden group transition-all duration-300 hover:shadow-xl">
+              <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+              <div className="flex flex-wrap items-start justify-between gap-3 relative z-10">
                 <div>
-                  <p className="text-sm font-semibold text-foreground">
+                  <p className="text-lg font-bold text-foreground tracking-tight drop-shadow-sm">
                     Analyse hebdomadaire ({weeklyReport.weekStart} -{" "}
                     {weeklyReport.weekEnd})
                   </p>

@@ -36,11 +36,11 @@ export function EmployeeTaskCard({
     tasks.length > 0 ? Math.round((empCompletedCount / tasks.length) * 100) : 0;
 
   return (
-    <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
-      <div className="px-6 py-4 border-b border-border bg-secondary/30">
+    <div className="glass-card rounded-xl border border-border/50 shadow-lg overflow-hidden transition-all duration-300 hover:shadow-xl hover:-translate-y-1">
+      <div className="px-6 py-4 border-b border-border/50 bg-background/40 backdrop-blur-md">
         <div className="flex items-center justify-between">
           <div>
-            <h4 className="font-semibold text-foreground">{employee.name}</h4>
+            <h4 className="font-bold text-foreground drop-shadow-sm">{employee.name}</h4>
             <p className="text-sm text-muted-foreground">{employee.email}</p>
           </div>
           <div className="text-right">
@@ -54,16 +54,16 @@ export function EmployeeTaskCard({
         </div>
       </div>
 
-      <div className="px-6 py-4 space-y-2">
+      <div className="px-6 py-4 space-y-3">
         {tasks.map((task) => (
-          <div key={task.id} className="space-y-2">
-            <div className="flex items-center gap-3">
+          <div key={task.id} className="group relative rounded-xl border border-border/40 bg-background/30 px-4 py-3 transition-all duration-300 hover:bg-card hover:shadow-md hover:border-primary/30">
+            <div className="flex items-center gap-4">
               {isMultiSelectMode && (
                 <input
                   type="checkbox"
                   checked={selectedTaskIds.includes(task.id)}
                   onChange={() => onToggleTaskSelection(task.id)}
-                  className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+                  className="h-4 w-4 rounded border-border text-primary focus:ring-primary shadow-sm"
                   aria-label={`Selectionner la tache ${task.taskTemplate.title}`}
                 />
               )}
@@ -71,11 +71,10 @@ export function EmployeeTaskCard({
                 type="button"
                 onClick={() => onToggleTask(task.id, task.isCompleted)}
                 disabled={isTaskUpdating && pendingTaskId === task.id}
-                className={`flex-shrink-0 w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all disabled:opacity-50 ${
-                  task.isCompleted
-                    ? "bg-primary border-primary"
-                    : "border-border bg-background hover:border-primary"
-                }`}
+                className={`flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all duration-300 disabled:opacity-50 ${task.isCompleted
+                  ? "bg-primary border-primary shadow-[0_0_10px_rgba(233,30,99,0.5)]"
+                  : "border-muted-foreground/30 bg-card hover:border-primary hover:shadow-sm"
+                  }`}
                 aria-label={
                   task.isCompleted
                     ? `Marquer la tache ${task.taskTemplate.title} comme en attente`
@@ -99,11 +98,10 @@ export function EmployeeTaskCard({
               </button>
               <div className="flex-1">
                 <p
-                  className={`text-sm font-medium transition-all ${
-                    task.isCompleted
-                      ? "text-muted-foreground line-through"
-                      : "text-foreground"
-                  }`}
+                  className={`text-sm font-medium transition-all ${task.isCompleted
+                    ? "text-muted-foreground line-through"
+                    : "text-foreground"
+                    }`}
                 >
                   {task.taskTemplate.title}
                 </p>
@@ -137,7 +135,7 @@ export function EmployeeTaskCard({
             </div>
 
             {reassigningTaskId === task.id && (
-              <div className="ml-8 flex items-center gap-2">
+              <div className="ml-2 sm:ml-8 mt-3 flex flex-wrap items-center gap-2">
                 <select
                   value={targetEmployeeId}
                   disabled={isTaskUpdating && pendingTaskId === task.id}
