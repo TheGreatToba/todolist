@@ -18,7 +18,7 @@ export default function Signup() {
   React.useEffect(() => {
     if (user) {
       if (user.role === "MANAGER") {
-        navigate("/manager/today", { replace: true });
+        navigate("/onboarding", { replace: true });
       } else if (user.role === "EMPLOYEE") {
         navigate("/employee", { replace: true });
       }
@@ -173,7 +173,9 @@ export default function Signup() {
             </div>
 
             <div className="bg-secondary/40 border border-border/50 rounded-xl p-4 shadow-inner">
-              <p className="text-foreground font-semibold text-sm drop-shadow-sm">Compte manager uniquement</p>
+              <p className="text-foreground font-semibold text-sm drop-shadow-sm">
+                Compte manager uniquement
+              </p>
               <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
                 Seuls les managers peuvent créer un compte ici. Les comptes
                 employés sont créés par leur manager depuis le tableau de bord.

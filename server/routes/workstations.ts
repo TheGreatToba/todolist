@@ -31,6 +31,36 @@ function canAccessTeam(tenant: TenantContext, teamId: string | null): boolean {
   }
 }
 
+const UpdateTeamNameSchema = z.object({
+  name: z.string().min(1),
+});
+
+export const handleUpdateTeamName: RequestHandler = async (req, res) => {
+  try {
+    const tenant = getTenantOrThrow(req, res);
+    if (!tenant) return;
+    if (tenant.role !== "MANAGER") {
+      res.status(403).json({ success: false, error: "Manager role required" });
+      return;
+    }
+    const body = UpdateTeamNameSchema.parse(req.body);
+    const scoped = scopedPrisma(tenant);
+    const teamId = tenant.teamIds[0];
+    if (!teamId) {
+      res.status(404).json({ success: false, error: "Team not found" });
+      return;
+    }
+    const team = await scoped.team.update({
+      where: { id: teamId },
+      data: { name: body.name },
+      select: { id: true, name: true },
+    });
+    res.json({ success: true, team });
+  } catch (error) {
+    sendErrorResponse(res, error, req);
+  }
+};
+
 const CreateWorkstationSchema = z.object({
   name: z.string().min(1),
   teamId: z.string().optional(),
