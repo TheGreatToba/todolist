@@ -66,6 +66,7 @@ import {
   handleUpdateWorkstationEmployees,
 } from "./routes/workstations";
 import { handleTrackManagerKpiEvent } from "./routes/metrics";
+import { handleGetStats } from "./routes/stats";
 
 export function createApp(): Express {
   const app = express();
@@ -398,6 +399,8 @@ export function createApp(): Express {
     ...withManagerTenantContext,
     handleTrackManagerKpiEvent,
   );
+
+  app.get("/api/stats", ...withTenantContext, handleGetStats);
 
   return app;
 }
