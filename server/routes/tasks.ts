@@ -3218,8 +3218,13 @@ export const handleGetManagerDashboard: RequestHandler = async (req, res) => {
       members,
     };
 
-    const existingPreparation = await prisma.dayPreparation.findFirst({
-      where: { date: taskDate },
+    const existingPreparation = await prisma.dayPreparation.findUnique({
+      where: {
+        managerId_date: {
+          managerId: payload.userId,
+          date: taskDate,
+        },
+      },
       select: { preparedAt: true },
     });
     let preparedAt = existingPreparation?.preparedAt ?? null;
