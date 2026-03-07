@@ -40,6 +40,14 @@ export function EmployeesTab({
   onDeleteEmployee,
   onResendWelcomeEmail,
 }: EmployeesTabProps) {
+  const getInitials = (name: string) =>
+    name
+      .split(" ")
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() ?? "")
+      .join("");
+
   return (
     <div>
       <div className="mb-6">
@@ -243,23 +251,49 @@ export function EmployeesTab({
                 </div>
               ) : (
                 <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium text-foreground">{member.name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {member.email}
-                    </p>
-                    {member.workstations.length > 0 && (
-                      <div className="flex gap-1 flex-wrap mt-2">
-                        {member.workstations.map((ws) => (
-                          <span
-                            key={ws.id}
-                            className="inline-block px-2 py-1 bg-primary/15 text-primary text-xs rounded-full"
-                          >
-                            {ws.name}
-                          </span>
-                        ))}
+                  <div className="flex items-start gap-3">
+                    <div className="h-10 w-10 rounded-full bg-[#FFE0F0] text-[#E91E8C] flex items-center justify-center text-xs font-bold">
+                      {getInitials(member.name)}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-foreground">
+                          {member.name}
+                        </p>
+                        <span
+                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                            (
+                              member as {
+                                role?: "MANAGER" | "EMPLOYEE";
+                              }
+                            ).role === "MANAGER"
+                              ? "bg-[#FFE0F0] text-[#E91E8C]"
+                              : "bg-[#F3E8FF] text-[#8B5CF6]"
+                          }`}
+                        >
+                          {(
+                            member as {
+                              role?: "MANAGER" | "EMPLOYEE";
+                            }
+                          ).role ?? "EMPLOYEE"}
+                        </span>
                       </div>
-                    )}
+                      <p className="text-sm text-muted-foreground">
+                        {member.email}
+                      </p>
+                      {member.workstations.length > 0 && (
+                        <div className="flex gap-1 flex-wrap mt-2">
+                          {member.workstations.map((ws) => (
+                            <span
+                              key={ws.id}
+                              className="inline-block px-2 py-1 bg-primary/15 text-primary text-xs rounded-full"
+                            >
+                              {ws.name}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
                   <div className="flex items-center gap-1">
                     <button

@@ -136,7 +136,6 @@ export function TasksTab({
   return (
     <>
       <TasksSummaryCards
-        teamMembersCount={teamMembers.length}
         totalTasks={totalCount}
         progressPercent={progressPercent}
         oneShotCount={oneShotCount}

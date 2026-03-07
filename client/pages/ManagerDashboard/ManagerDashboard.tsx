@@ -12,7 +12,7 @@ import {
   useBatchUpdateTaskTemplatesMutation,
   useManagerWeeklyReportQuery,
 } from "@/hooks/queries";
-import { Loader2, LogOut, Search } from "lucide-react";
+import { LogOut, Search } from "lucide-react";
 import { toastError, toastInfo, toastSuccess } from "@/lib/toast";
 import { formatBatchConflictSummary } from "@/lib/batch-conflict-messages";
 import { getErrorMessage } from "@/lib/get-error-message";
@@ -557,7 +557,10 @@ export default function ManagerDashboard() {
           <div className="h-8 w-64 bg-card/60 rounded-md border border-border/50"></div>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="h-32 bg-card/50 backdrop-blur-md rounded-xl border border-border/40"></div>
+              <div
+                key={i}
+                className="h-32 bg-card/50 backdrop-blur-md rounded-xl border border-border/40"
+              ></div>
             ))}
           </div>
           <div className="h-96 w-full bg-card/50 backdrop-blur-md rounded-xl border border-border/40 mt-8"></div>

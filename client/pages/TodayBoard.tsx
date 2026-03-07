@@ -1,7 +1,7 @@
 import React from "react";
 import type { TodayBoardTask } from "@shared/api";
 import { useNavigate } from "react-router-dom";
-import { Loader2, LogOut } from "lucide-react";
+import { Loader2, LogOut, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   useManagerTodayBoardQuery,
@@ -9,6 +9,8 @@ import {
 } from "@/hooks/queries";
 import { toastError } from "@/lib/toast";
 import { getErrorMessage } from "@/lib/get-error-message";
+
+type TaskStatus = "done" | "pending" | "overdue";
 
 function formatTime(value: string | null | undefined): string {
   if (!value) return "";
@@ -20,98 +22,10 @@ function formatTime(value: string | null | undefined): string {
   });
 }
 
-function TaskSection({
-  title,
-  accentClass,
-  emptyMessage,
-  tasks,
-  pendingTaskId,
-  isTaskUpdating,
-  onToggleTask,
-}: {
-  title: string;
-  accentClass: string;
-  emptyMessage: string;
-  tasks: TodayBoardTask[];
-  pendingTaskId: string | null;
-  isTaskUpdating: boolean;
-  onToggleTask: (task: TodayBoardTask) => void;
-}) {
-  return (
-    <section className={`glass-card flex flex-col overflow-hidden ${accentClass}`}>
-      <header className="flex items-center justify-between border-b border-border/50 px-5 py-4 bg-background/30 backdrop-blur-sm">
-        <h2 className="text-lg font-bold text-foreground tracking-tight drop-shadow-sm">{title}</h2>
-        <span className="rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary shadow-inner">
-          {tasks.length}
-        </span>
-      </header>
-      <div className="space-y-3 p-4">
-        {tasks.length === 0 && (
-          <p className="rounded-lg border border-dashed border-border bg-secondary/20 px-3 py-3 text-sm text-muted-foreground">
-            {emptyMessage}
-          </p>
-        )}
-        {tasks.map((task) => (
-          <article
-            key={task.id}
-            className="group relative rounded-xl border border-border/50 bg-background/50 backdrop-blur-sm px-4 py-4 transition-all duration-300 hover:shadow-lg hover:-translate-y-1 hover:bg-card hover:border-primary/30"
-          >
-            <div className="flex items-start gap-4">
-              <button
-                type="button"
-                onClick={() => onToggleTask(task)}
-                disabled={isTaskUpdating && pendingTaskId === task.id}
-                className={`mt-1 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border-2 transition-all duration-300 disabled:opacity-50 ${task.isCompleted
-                  ? "border-primary bg-primary shadow-[0_0_10px_rgba(233,30,99,0.5)]"
-                  : "border-muted-foreground/30 bg-card hover:border-primary hover:shadow-sm"
-                  }`}
-                aria-label={
-                  task.isCompleted
-                    ? `Marquer la tâche ${task.taskTemplate.title} comme en attente`
-                    : `Marquer la tâche ${task.taskTemplate.title} comme faite`
-                }
-              >
-                {task.isCompleted && (
-                  <svg
-                    className="h-3 w-3 text-primary-foreground"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                    aria-hidden
-                  >
-                    <path
-                      fillRule="evenodd"
-                      clipRule="evenodd"
-                      d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                    />
-                  </svg>
-                )}
-              </button>
-              <div className="min-w-0 flex-1">
-                <p
-                  className={`text-sm font-medium ${task.isCompleted
-                    ? "text-muted-foreground line-through"
-                    : "text-foreground"
-                    }`}
-                >
-                  {task.taskTemplate.title}
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {task.employee
-                    ? `Assignée à ${task.employee.name}`
-                    : "Non assignée"}
-                </p>
-                {task.completedAt && (
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Terminée à {formatTime(task.completedAt)}
-                  </p>
-                )}
-              </div>
-            </div>
-          </article>
-        ))}
-      </div>
-    </section >
-  );
+function getStatus(task: TodayBoardTask, overdueIds: Set<string>): TaskStatus {
+  if (task.isCompleted) return "done";
+  if (overdueIds.has(task.id)) return "overdue";
+  return "pending";
 }
 
 export default function TodayBoard() {
@@ -119,28 +33,80 @@ export default function TodayBoard() {
   const { logout } = useAuth();
   const { data: board, isLoading } = useManagerTodayBoardQuery();
   const updateDailyTask = useUpdateDailyTaskMutation();
+  const [selectedWorkstationId, setSelectedWorkstationId] = React.useState<
+    string | null
+  >(null);
 
-  const sortedOverdue = React.useMemo(
-    () =>
-      [...(board?.overdue ?? [])].sort(
-        (a, b) => (b.priorityScore ?? 0) - (a.priorityScore ?? 0),
-      ),
+  const overdueIds = React.useMemo(
+    () => new Set((board?.overdue ?? []).map((t) => t.id)),
     [board?.overdue],
   );
-  const sortedToday = React.useMemo(
+
+  const allTasks = React.useMemo(() => {
+    const map = new Map<string, TodayBoardTask>();
+    for (const list of [
+      board?.today ?? [],
+      board?.completedToday ?? [],
+      board?.overdue ?? [],
+    ]) {
+      for (const task of list) {
+        if (!map.has(task.id)) map.set(task.id, task);
+      }
+    }
+    return [...map.values()].sort(
+      (a, b) => (b.priorityScore ?? 0) - (a.priorityScore ?? 0),
+    );
+  }, [board?.today, board?.completedToday, board?.overdue]);
+
+  const workstations = React.useMemo(() => {
+    const grouped = new Map<
+      string,
+      { id: string; name: string; tasks: TodayBoardTask[] }
+    >();
+
+    for (const task of allTasks) {
+      const id = task.taskTemplate.workstation?.id ?? "__direct__";
+      const name = task.taskTemplate.workstation?.name ?? "Affectation directe";
+      const existing = grouped.get(id);
+      if (existing) {
+        existing.tasks.push(task);
+      } else {
+        grouped.set(id, { id, name, tasks: [task] });
+      }
+    }
+
+    return [...grouped.values()]
+      .map((group) => {
+        const done = group.tasks.filter((task) => task.isCompleted).length;
+        const progress =
+          group.tasks.length > 0
+            ? Math.round((done / group.tasks.length) * 100)
+            : 0;
+        return {
+          ...group,
+          done,
+          progress,
+          pending: group.tasks.filter(
+            (task) => getStatus(task, overdueIds) === "pending",
+          ).length,
+          overdue: group.tasks.filter(
+            (task) => getStatus(task, overdueIds) === "overdue",
+          ).length,
+        };
+      })
+      .sort((a, b) => b.tasks.length - a.tasks.length);
+  }, [allTasks, overdueIds]);
+
+  const selectedWorkstation = React.useMemo(
     () =>
-      [...(board?.today ?? [])].sort(
-        (a, b) => (b.priorityScore ?? 0) - (a.priorityScore ?? 0),
-      ),
-    [board?.today],
+      workstations.find((item) => item.id === selectedWorkstationId) ?? null,
+    [workstations, selectedWorkstationId],
   );
-  const sortedCompletedToday = React.useMemo(
-    () =>
-      [...(board?.completedToday ?? [])].sort(
-        (a, b) => (b.priorityScore ?? 0) - (a.priorityScore ?? 0),
-      ),
-    [board?.completedToday],
-  );
+
+  const totalTasks = allTasks.length;
+  const doneTasks = allTasks.filter((task) => task.isCompleted).length;
+  const globalProgress =
+    totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
 
   const handleLogout = () => {
     logout();
@@ -165,15 +131,14 @@ export default function TodayBoard() {
 
   if (isLoading) {
     return (
-      <div className="min-h-[calc(100vh-4rem)] bg-gradient-to-b from-primary/5 to-background p-4 flex flex-col animate-pulse">
-        <div className="w-full max-w-[1600px] mx-auto grid grid-cols-1 xl:grid-cols-3 gap-6 flex-1">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="h-full min-h-[300px] sm:min-h-[500px] bg-card/50 backdrop-blur-md rounded-xl border border-border/40 p-4 space-y-4">
-              <div className="h-6 w-32 bg-secondary/50 rounded-md"></div>
-              <div className="h-24 w-full bg-secondary/30 rounded-lg"></div>
-              <div className="h-24 w-full bg-secondary/30 rounded-lg"></div>
-              <div className="h-24 w-full bg-secondary/30 rounded-lg"></div>
-            </div>
+      <div className="min-h-[calc(100vh-4rem)] bg-[#FAFAFA] p-4 animate-pulse">
+        <div className="h-40 rounded-2xl bg-[#FFE0F0] mb-5" />
+        <div className="space-y-3">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div
+              key={i}
+              className="h-28 rounded-2xl bg-white border border-border/50"
+            />
           ))}
         </div>
       </div>
@@ -207,38 +172,198 @@ export default function TodayBoard() {
   }
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] flex flex-col p-4 w-full">
-      <main className="w-full space-y-6 flex-1">
-        <div className="grid grid-cols-1 gap-6 xl:grid-cols-3 max-w-[1600px] mx-auto w-full h-full align-top">
-          <TaskSection
-            title="En retard"
-            accentClass="border-l-4 border-l-red-500"
-            emptyMessage="Aucune tâche en retard."
-            tasks={sortedOverdue}
-            pendingTaskId={updateDailyTask.variables?.taskId ?? null}
-            isTaskUpdating={updateDailyTask.isPending}
-            onToggleTask={handleToggleTask}
+    <div className="min-h-[calc(100vh-4rem)] bg-[#FAFAFA] text-[#1A1A2E] w-full">
+      <div className="space-y-5">
+        <section className="rounded-3xl bg-gradient-to-br from-[#E91E8C] to-[#FF85C2] p-5 text-white shadow-lg">
+          <p className="text-xs uppercase tracking-[0.2em] text-white/85">
+            Aujourd&apos;hui
+          </p>
+          <h1 className="mt-2 text-2xl font-bold">Résumé de la journée</h1>
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <div className="rounded-2xl bg-white/15 p-3 backdrop-blur-sm">
+              <p className="text-[11px] text-white/80">Tâches</p>
+              <p className="text-2xl font-bold">{totalTasks}</p>
+            </div>
+            <div className="rounded-2xl bg-white/15 p-3 backdrop-blur-sm">
+              <p className="text-[11px] text-white/80">Progression</p>
+              <p className="text-2xl font-bold">{globalProgress}%</p>
+            </div>
+          </div>
+          <div className="mt-4">
+            <div className="h-2 w-full rounded-full bg-white/30 overflow-hidden">
+              <div
+                className="h-full bg-white transition-all duration-300"
+                style={{ width: `${globalProgress}%` }}
+              />
+            </div>
+          </div>
+        </section>
+
+        <section className="space-y-3">
+          {workstations.map((workstation) => (
+            <button
+              key={workstation.id}
+              type="button"
+              onClick={() => setSelectedWorkstationId(workstation.id)}
+              className="w-full text-left rounded-2xl border border-[#F4D3E6] bg-white p-4 shadow-sm"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-base font-semibold text-[#1A1A2E]">
+                    {workstation.name}
+                  </h2>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {workstation.tasks.length} tâche
+                    {workstation.tasks.length > 1 ? "s" : ""}
+                  </p>
+                </div>
+                <span className="text-sm font-semibold text-[#E91E8C]">
+                  {workstation.progress}%
+                </span>
+              </div>
+              <div className="mt-3 h-2 rounded-full bg-[#FFE0F0] overflow-hidden">
+                <div
+                  className="h-full bg-[#E91E8C]"
+                  style={{ width: `${workstation.progress}%` }}
+                />
+              </div>
+              <div className="mt-3 flex items-center gap-2 text-[11px]">
+                <span className="rounded-full bg-[#22C55E] px-2 py-0.5 font-semibold text-white">
+                  {workstation.done} done
+                </span>
+                <span className="rounded-full bg-[#F97316] px-2 py-0.5 font-semibold text-white">
+                  {workstation.pending} pending
+                </span>
+                <span className="rounded-full bg-[#EF4444] px-2 py-0.5 font-semibold text-white">
+                  {workstation.overdue} overdue
+                </span>
+              </div>
+            </button>
+          ))}
+        </section>
+      </div>
+
+      {selectedWorkstation && (
+        <div className="fixed inset-0 z-50">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/45"
+            onClick={() => setSelectedWorkstationId(null)}
+            aria-label="Fermer le panneau"
           />
-          <TaskSection
-            title="Aujourd'hui"
-            accentClass="border-l-4 border-l-amber-500"
-            emptyMessage="Aucune tâche en attente pour aujourd'hui."
-            tasks={sortedToday}
-            pendingTaskId={updateDailyTask.variables?.taskId ?? null}
-            isTaskUpdating={updateDailyTask.isPending}
-            onToggleTask={handleToggleTask}
-          />
-          <TaskSection
-            title="Terminées"
-            accentClass="border-l-4 border-l-emerald-500"
-            emptyMessage="Aucune tâche terminée pour l'instant."
-            tasks={sortedCompletedToday}
-            pendingTaskId={updateDailyTask.variables?.taskId ?? null}
-            isTaskUpdating={updateDailyTask.isPending}
-            onToggleTask={handleToggleTask}
-          />
+          <div className="absolute inset-0 bg-white animate-fade-in-up overflow-y-auto">
+            <div className="sticky top-0 z-10 bg-white px-4 pt-4 pb-3 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-[#1A1A2E]">
+                  {selectedWorkstation.name}
+                </h3>
+                <p className="text-xs text-slate-500">
+                  {selectedWorkstation.tasks.length} tâche
+                  {selectedWorkstation.tasks.length > 1 ? "s" : ""}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedWorkstationId(null)}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-[#FFE0F0] text-[#E91E8C]"
+                aria-label="Fermer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="px-4 pb-8 space-y-3">
+              {selectedWorkstation.tasks.map((task) => {
+                const status = getStatus(task, overdueIds);
+                return (
+                  <article
+                    key={task.id}
+                    className="rounded-2xl border border-[#F4D3E6] bg-white p-4"
+                  >
+                    <div className="flex items-start gap-3">
+                      <button
+                        type="button"
+                        onClick={() => handleToggleTask(task)}
+                        disabled={
+                          updateDailyTask.isPending &&
+                          updateDailyTask.variables?.taskId === task.id
+                        }
+                        className={`mt-0.5 h-6 w-6 rounded-full border-2 flex items-center justify-center ${
+                          task.isCompleted
+                            ? "border-[#E91E8C] bg-[#E91E8C]"
+                            : "border-slate-300"
+                        }`}
+                      >
+                        {task.isCompleted && (
+                          <svg
+                            className="h-3 w-3 text-white"
+                            viewBox="0 0 20 20"
+                            fill="currentColor"
+                            aria-hidden
+                          >
+                            <path
+                              fillRule="evenodd"
+                              clipRule="evenodd"
+                              d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                            />
+                          </svg>
+                        )}
+                      </button>
+                      <div className="min-w-0 flex-1">
+                        <p
+                          className={`text-sm font-semibold ${task.isCompleted ? "line-through text-slate-400" : "text-[#1A1A2E]"}`}
+                        >
+                          {task.taskTemplate.title}
+                        </p>
+                        <div className="mt-2 flex items-center gap-1.5 flex-wrap text-[10px] font-semibold">
+                          {status === "done" && (
+                            <span className="rounded-full bg-[#22C55E] px-2 py-0.5 text-white">
+                              done
+                            </span>
+                          )}
+                          {status === "pending" && (
+                            <span className="rounded-full bg-[#F97316] px-2 py-0.5 text-white">
+                              pending
+                            </span>
+                          )}
+                          {status === "overdue" && (
+                            <span className="rounded-full bg-[#EF4444] px-2 py-0.5 text-white">
+                              overdue
+                            </span>
+                          )}
+                          {typeof task.priorityScore === "number" && (
+                            <span
+                              className={`rounded-full px-2 py-0.5 ${
+                                task.priorityScore >= 80
+                                  ? "bg-red-100 text-red-700"
+                                  : task.priorityScore >= 50
+                                    ? "bg-amber-100 text-amber-700"
+                                    : "bg-emerald-100 text-emerald-700"
+                              }`}
+                            >
+                              Priorité {task.priorityScore}
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-2 text-xs text-slate-500">
+                          {task.employee
+                            ? `Assignée à ${task.employee.name}`
+                            : "Non assignée"}
+                        </p>
+                        {task.completedAt && (
+                          <p className="mt-1 text-xs text-slate-500">
+                            Terminée à {formatTime(task.completedAt)}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </div>
         </div>
-      </main>
+      )}
     </div>
   );
 }
