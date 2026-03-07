@@ -1493,6 +1493,7 @@ export const handleCreateTaskTemplate: RequestHandler = async (req, res) => {
       userId: payload.userId,
       body: req.body,
       db: prisma,
+      teamIds: tenant.teamIds,
     });
 
     res.status(201).json(serializeTemplateResponse(taskTemplate));

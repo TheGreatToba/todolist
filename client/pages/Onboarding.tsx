@@ -1,6 +1,6 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { CheckCircle2, X, Loader2 } from "lucide-react";
+import { CheckCircle2, X, Loader2, ChevronLeft } from "lucide-react";
 import { fetchWithCsrf } from "@/lib/api";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -97,6 +97,20 @@ export default function Onboarding() {
     employees: 0,
     tasks: 0,
   });
+
+  // Fetch existing workstations from DB when reaching step 2 (employees)
+  // so the "Aucun poste créé" warning doesn't show if workstations already exist
+  useEffect(() => {
+    if (step !== 2 || createdWorkstations.length > 0) return;
+    fetchWithCsrf("/api/workstations")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { id: string; name: string }[] | null) => {
+        if (data && data.length > 0) {
+          setCreatedWorkstations(data);
+        }
+      })
+      .catch(() => {});
+  }, [step, createdWorkstations.length]);
 
   async function handleStep1Next() {
     if (!teamName.trim()) {
@@ -401,6 +415,15 @@ export default function Onboarding() {
                   >
                     Passer cette étape
                   </button>
+                  <button
+                    onClick={() => {
+                      setError(null);
+                      setStep(0);
+                    }}
+                    className="flex items-center justify-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors py-1"
+                  >
+                    <ChevronLeft className="w-4 h-4" /> Retour
+                  </button>
                 </div>
               </div>
             )}
@@ -424,7 +447,7 @@ export default function Onboarding() {
                   </div>
                 )}
                 <div className="space-y-2">
-                  <div className="flex gap-2">
+                  <div className="flex flex-col sm:flex-row gap-2">
                     <input
                       type="text"
                       value={employeeName}
@@ -496,6 +519,15 @@ export default function Onboarding() {
                     className="text-sm text-muted-foreground hover:text-foreground transition-colors text-center py-1"
                   >
                     Passer cette étape
+                  </button>
+                  <button
+                    onClick={() => {
+                      setError(null);
+                      setStep(1);
+                    }}
+                    className="flex items-center justify-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors py-1"
+                  >
+                    <ChevronLeft className="w-4 h-4" /> Retour
                   </button>
                 </div>
               </div>
@@ -595,6 +627,15 @@ export default function Onboarding() {
                     className="text-sm text-muted-foreground hover:text-foreground transition-colors text-center py-1"
                   >
                     Passer cette étape
+                  </button>
+                  <button
+                    onClick={() => {
+                      setError(null);
+                      setStep(2);
+                    }}
+                    className="flex items-center justify-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors py-1"
+                  >
+                    <ChevronLeft className="w-4 h-4" /> Retour
                   </button>
                 </div>
               </div>
