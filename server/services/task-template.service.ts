@@ -178,12 +178,14 @@ async function validateAndResolveTeamContext(
   tx: Prisma.TransactionClient,
   input: CreateTaskTemplateParsedInput,
   managerUserId: string,
+  teamIds: string[],
 ): Promise<void> {
   let workstationTeamId: string | null = null;
   if (input.workstationId) {
     const workstation = await tx.workstation.findFirst({
       where: {
         id: input.workstationId,
+        teamId: { in: teamIds },
         team: { is: { managerId: managerUserId } },
       },
       select: { teamId: true },
@@ -320,6 +322,7 @@ export async function createTaskTemplateTransactional(input: {
   userId: string;
   body: unknown;
   db?: PrismaClient;
+  teamIds?: string[];
 }): Promise<TaskTemplateWithRelations> {
   const db = input.db ?? prisma;
   const body = CreateTaskTemplateSchema.parse(input.body);
@@ -334,7 +337,12 @@ export async function createTaskTemplateTransactional(input: {
     try {
       return await db.$transaction(
         async (tx) => {
-          await validateAndResolveTeamContext(tx, body, input.userId);
+          await validateAndResolveTeamContext(
+            tx,
+            body,
+            input.userId,
+            input.teamIds ?? [],
+          );
 
           const taskTemplate = await tx.taskTemplate.create({
             data: {
