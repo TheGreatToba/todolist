@@ -34,8 +34,8 @@ export function TasksDateFilters({
 }: TasksDateFiltersProps) {
   return (
     <>
-      <div className="flex flex-wrap gap-2 mb-4">
-        <span className="text-sm text-muted-foreground self-center">
+      <div className="mb-4 flex items-center gap-2 overflow-x-auto whitespace-nowrap pb-1">
+        <span className="text-sm text-muted-foreground self-center shrink-0">
           Historique :
         </span>
         {[...Array(8)].map((_, i) => {
@@ -48,7 +48,7 @@ export function TasksDateFilters({
             <button
               key={dateStr}
               onClick={() => onDateChange(dateStr)}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+              className={`shrink-0 px-3 py-1.5 rounded-lg text-sm font-medium transition ${
                 selectedDate === dateStr
                   ? "bg-primary text-primary-foreground"
                   : "bg-secondary/50 text-foreground hover:bg-secondary"
@@ -61,10 +61,10 @@ export function TasksDateFilters({
         })}
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 mb-6 justify-between">
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="mb-6 space-y-3">
+        <div className="flex items-center gap-2 overflow-x-auto whitespace-nowrap pb-1">
           <Filter className="w-4 h-4 text-muted-foreground" />
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 shrink-0">
             <Calendar className="w-4 h-4 text-muted-foreground" />
             <input
               type="date"
@@ -77,7 +77,7 @@ export function TasksDateFilters({
           <select
             value={selectedEmployee ?? ""}
             onChange={(e) => onEmployeeChange(e.target.value || null)}
-            className="px-4 py-2 rounded-lg border border-input bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            className="shrink-0 px-4 py-2 rounded-lg border border-input bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary"
             aria-label="Filtrer par employé"
           >
             <option value="">Tous les employés</option>
@@ -90,7 +90,7 @@ export function TasksDateFilters({
           <select
             value={selectedWorkstation ?? ""}
             onChange={(e) => onWorkstationChange(e.target.value || null)}
-            className="px-4 py-2 rounded-lg border border-input bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            className="shrink-0 px-4 py-2 rounded-lg border border-input bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary"
             aria-label="Filtrer par poste"
           >
             <option value="">Tous les postes</option>
@@ -102,10 +102,10 @@ export function TasksDateFilters({
             ))}
           </select>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-col sm:flex-row gap-2">
           <button
             onClick={onToggleMultiSelect}
-            className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition ${
+            className={`inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-medium transition sm:w-auto ${
               isMultiSelectMode
                 ? "bg-primary text-primary-foreground hover:bg-primary/90"
                 : "border border-input text-foreground hover:bg-secondary"
@@ -118,7 +118,7 @@ export function TasksDateFilters({
           </button>
           <button
             onClick={onExportCsv}
-            className="inline-flex items-center gap-2 px-4 py-2 border border-input hover:bg-secondary text-foreground rounded-lg font-medium transition"
+            className="inline-flex w-full sm:w-auto items-center justify-center gap-2 px-4 py-2 bg-[#FF85C2] hover:bg-[#E91E8C] text-white rounded-lg font-medium transition"
             type="button"
           >
             <Download className="w-4 h-4" />
@@ -126,7 +126,7 @@ export function TasksDateFilters({
           </button>
           <button
             onClick={onNewTask}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-medium transition"
+            className="inline-flex w-full sm:w-auto items-center justify-center gap-2 px-4 py-2 bg-[#E91E8C] hover:bg-[#cc1578] text-white rounded-lg font-medium transition"
             type="button"
           >
             <Plus className="w-4 h-4" />
