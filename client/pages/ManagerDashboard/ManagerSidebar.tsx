@@ -29,7 +29,7 @@ export function ManagerSidebar({
   onLogout,
 }: ManagerSidebarProps) {
   return (
-    <aside className="hidden md:flex w-64 flex-shrink-0 min-h-screen glass-panel border-r flex-col shadow-[4px_0_24px_rgba(0,0,0,0.02)] z-20">
+    <aside className="hidden w-64 flex-shrink-0 min-h-screen glass-panel border-r md:flex flex-col shadow-[4px_0_24px_rgba(0,0,0,0.02)] z-20">
       <div className="p-6 border-b border-border/50">
         <h1 className="text-2xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-br from-primary via-primary to-accent drop-shadow-sm">
           {teamName}
