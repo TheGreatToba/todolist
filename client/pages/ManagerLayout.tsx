@@ -40,6 +40,13 @@ export default function ManagerLayout() {
     navigate("/", { replace: true });
   };
 
+  const mobileTabs = [
+    { to: "/manager/dashboard", label: "Dashboard", Icon: LayoutDashboard },
+    { to: "/manager/today", label: "Aujourd'hui", Icon: Calendar },
+    { to: "/manager/task", label: "Modeles", Icon: ClipboardList },
+    { to: "/manager/pilotage", label: "Pilotage", Icon: Gauge },
+  ];
+
   return (
     <div className="flex h-screen bg-background text-foreground overflow-hidden selection:bg-primary/30 relative">
       <div className="absolute inset-0 pointer-events-none mesh-gradient-bg opacity-30 z-0"></div>
