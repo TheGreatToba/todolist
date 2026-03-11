@@ -20,15 +20,22 @@ const NotFound = () => {
           <span className="text-4xl">❌</span>
         </div>
         <h1 className="text-5xl font-bold text-foreground mb-2">404</h1>
-        <h2 className="text-2xl font-semibold text-foreground mb-4">
+        <h2
+          className="text-2xl font-semibold text-foreground mb-4"
+          aria-label="Page not found"
+        >
           Page introuvable
         </h2>
         <p className="text-muted-foreground mb-8">
           La page que vous recherchez n&apos;existe pas. Elle a peut-être été
           supprimée ou l&apos;adresse est incorrecte.
+          <span className="sr-only">
+            The page you&apos;re looking for doesn&apos;t exist.
+          </span>
         </p>
         <button
           onClick={() => navigate("/")}
+          aria-label="Return to Home"
           className="px-6 py-3 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-medium transition inline-block"
         >
           Retour à l&apos;accueil

@@ -1,7 +1,5 @@
 import React from "react";
 import type { ManagerDashboard as ManagerDashboardType } from "@shared/api";
-import { todayLocalISO } from "@/lib/date-utils";
-import { TasksSummaryCards } from "./TasksSummaryCards";
 import { TasksProgressBar } from "./TasksProgressBar";
 import { TasksDateFilters } from "./TasksDateFilters";
 import { TasksByWorkstationList } from "./TasksByWorkstationList";
@@ -52,7 +50,6 @@ export function TasksTab({
   isBatchUpdatingTasks = false,
 }: TasksTabProps) {
   const filteredTasks = dashboard.dailyTasks;
-  const [showPreparePanel, setShowPreparePanel] = React.useState(false);
   const [selectedEmployeeByTemplate, setSelectedEmployeeByTemplate] =
     React.useState<Record<string, string>>({});
   const [selectedTaskIds, setSelectedTaskIds] = React.useState<string[]>([]);
@@ -61,26 +58,14 @@ export function TasksTab({
     React.useState<boolean>(false);
   const completedCount = filteredTasks.filter((t) => t.isCompleted).length;
   const totalCount = filteredTasks.length;
-  const recurringCount = filteredTasks.filter(
-    (t) => t.taskTemplate.isRecurring,
-  ).length;
-  const oneShotCount = totalCount - recurringCount;
-  const recurringToAssign =
-    dashboard.dayPreparation?.recurringUnassignedCount ?? 0;
-  const dayPrepared =
-    dashboard.dayPreparation?.isPrepared ?? recurringToAssign === 0;
-  const now = new Date();
-  const isTodaySelected = selectedDate === todayLocalISO();
-  const showLateOpeningWarning =
-    !dayPrepared && isTodaySelected && now.getHours() >= 14;
   const progressPercent =
     totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
   const tasksByWorkstation = buildTasksByWorkstation(filteredTasks);
+  const overdueTaskIds =
+    dashboard.attention?.overdueCritical?.map((t) => t.taskId) ?? [];
   const unassignedRecurringTemplates =
     dashboard.dayPreparation?.unassignedRecurringTemplates ?? [];
-
-  const prepareStartRef = React.useRef<number | null>(null);
-  const lastPrepareDateRef = React.useRef<string | null>(null);
+  const showPreparePanel = unassignedRecurringTemplates.length > 0;
 
   React.useEffect(() => {
     setSelectedTaskIds([]);
@@ -112,65 +97,8 @@ export function TasksTab({
     });
   }, [unassignedRecurringTemplates]);
 
-  React.useEffect(() => {
-    if (!showPreparePanel) return;
-    if (!dayPrepared) return;
-    if (!prepareStartRef.current) return;
-    const durationMs = Date.now() - prepareStartRef.current;
-    trackManagerKpiEvent("manager.prepare_day_completed", {
-      date: lastPrepareDateRef.current ?? selectedDate,
-      durationMs,
-      recurringToAssign,
-      recurringTemplatesTotal: recurringCount,
-    });
-    prepareStartRef.current = null;
-    lastPrepareDateRef.current = null;
-  }, [
-    dayPrepared,
-    showPreparePanel,
-    selectedDate,
-    recurringToAssign,
-    recurringCount,
-  ]);
-
   return (
     <>
-      <TasksSummaryCards
-        teamMembersCount={teamMembers.length}
-        totalTasks={totalCount}
-        progressPercent={progressPercent}
-        oneShotCount={oneShotCount}
-        recurringCount={recurringCount}
-        recurringToAssign={recurringToAssign}
-        dayPrepared={dayPrepared}
-        showLateOpeningWarning={showLateOpeningWarning}
-        onPrepareMyDay={() =>
-          setShowPreparePanel((prev) => {
-            const next = !prev;
-            if (next) {
-              prepareStartRef.current = Date.now();
-              lastPrepareDateRef.current = selectedDate;
-              trackManagerKpiEvent("manager.prepare_day_started", {
-                date: selectedDate,
-                recurringToAssign,
-                recurringTemplatesTotal: recurringCount,
-              });
-            } else if (prev && !next && prepareStartRef.current) {
-              const durationMs = Date.now() - prepareStartRef.current;
-              trackManagerKpiEvent("manager.prepare_day_cancelled", {
-                date: lastPrepareDateRef.current ?? selectedDate,
-                durationMs,
-                recurringToAssign,
-                recurringTemplatesTotal: recurringCount,
-              });
-              prepareStartRef.current = null;
-              lastPrepareDateRef.current = null;
-            }
-            return next;
-          })
-        }
-      />
-
       <TasksProgressBar
         completedCount={completedCount}
         totalCount={totalCount}
@@ -360,6 +288,7 @@ export function TasksTab({
       <TasksByWorkstationList
         tasksByWorkstation={tasksByWorkstation}
         teamMembers={teamMembers}
+        overdueTaskIds={overdueTaskIds}
         onToggleTask={onToggleTask}
         onReassignTask={onReassignTask}
         pendingTaskId={pendingTaskId}

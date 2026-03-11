@@ -1,7 +1,21 @@
 import React from "react";
-import { Calendar, CheckSquare, Download, Filter, Plus } from "lucide-react";
+import {
+  CheckSquare,
+  Download,
+  Filter,
+  Plus,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
 import type { ManagerDashboard as ManagerDashboardType } from "@shared/api";
 import type { TeamMember } from "./types";
+
+function toISODate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
 
 interface TasksDateFiltersProps {
   selectedDate: string;
@@ -32,80 +46,48 @@ export function TasksDateFilters({
   isMultiSelectMode,
   onToggleMultiSelect,
 }: TasksDateFiltersProps) {
-  return (
-    <>
-      <div className="flex flex-wrap gap-2 mb-4">
-        <span className="text-sm text-muted-foreground self-center">
-          Historique :
-        </span>
-        {[...Array(8)].map((_, i) => {
-          const d = new Date();
-          d.setDate(d.getDate() - i);
-          const dateStr = d.toISOString().split("T")[0];
-          const label =
-            i === 0 ? "Aujourd'hui" : i === 1 ? "Hier" : `-${i} jours`;
-          return (
-            <button
-              key={dateStr}
-              onClick={() => onDateChange(dateStr)}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
-                selectedDate === dateStr
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-secondary/50 text-foreground hover:bg-secondary"
-              }`}
-              type="button"
-            >
-              {label}
-            </button>
-          );
-        })}
-      </div>
+  const handlePrevDay = () => {
+    const d = new Date(selectedDate);
+    d.setDate(d.getDate() - 1);
+    onDateChange(toISODate(d));
+  };
 
-      <div className="flex flex-wrap items-center gap-2 mb-6 justify-between">
-        <div className="flex flex-wrap items-center gap-2">
-          <Filter className="w-4 h-4 text-muted-foreground" />
-          <div className="flex items-center gap-1">
-            <Calendar className="w-4 h-4 text-muted-foreground" />
-            <input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => onDateChange(e.target.value)}
-              className="px-4 py-2 rounded-lg border border-input bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              aria-label="Sélectionner une date"
-            />
-          </div>
-          <select
-            value={selectedEmployee ?? ""}
-            onChange={(e) => onEmployeeChange(e.target.value || null)}
-            className="px-4 py-2 rounded-lg border border-input bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-            aria-label="Filtrer par employé"
+  const handleNextDay = () => {
+    const d = new Date(selectedDate);
+    d.setDate(d.getDate() + 1);
+    onDateChange(toISODate(d));
+  };
+
+  return (
+    <div className="flex flex-col gap-4 mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handlePrevDay}
+            className="p-2 rounded-lg border border-input bg-background hover:bg-secondary text-foreground transition-colors"
+            aria-label="Jour précédent"
           >
-            <option value="">Tous les employés</option>
-            {teamMembers.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name}
-              </option>
-            ))}
-          </select>
-          <select
-            value={selectedWorkstation ?? ""}
-            onChange={(e) => onWorkstationChange(e.target.value || null)}
-            className="px-4 py-2 rounded-lg border border-input bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-            aria-label="Filtrer par poste"
+            <ChevronLeft className="w-5 h-5" />
+          </button>
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={(e) => onDateChange(e.target.value)}
+            className="px-4 py-2 rounded-lg border border-input bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary font-medium"
+          />
+          <button
+            onClick={handleNextDay}
+            className="p-2 rounded-lg border border-input bg-background hover:bg-secondary text-foreground transition-colors"
+            aria-label="Jour suivant"
           >
-            <option value="">Tous les postes</option>
-            <option value="__direct__">Affectations directes</option>
-            {workstations.map((ws) => (
-              <option key={ws.id} value={ws.id}>
-                {ws.name}
-              </option>
-            ))}
-          </select>
+            <ChevronRight className="w-5 h-5" />
+          </button>
         </div>
-        <div className="flex gap-2">
+
+        <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
           <button
             onClick={onToggleMultiSelect}
-            className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition ${
+            className={`inline-flex justify-center items-center gap-2 px-4 py-2 rounded-lg font-medium transition w-full sm:w-auto ${
               isMultiSelectMode
                 ? "bg-primary text-primary-foreground hover:bg-primary/90"
                 : "border border-input text-foreground hover:bg-secondary"
@@ -118,15 +100,15 @@ export function TasksDateFilters({
           </button>
           <button
             onClick={onExportCsv}
-            className="inline-flex items-center gap-2 px-4 py-2 border border-input hover:bg-secondary text-foreground rounded-lg font-medium transition"
+            className="inline-flex justify-center items-center gap-2 px-4 py-2 border border-input hover:bg-secondary text-foreground rounded-lg font-medium transition w-full sm:w-auto"
             type="button"
           >
             <Download className="w-4 h-4" />
-            Exporter en CSV
+            Exporter
           </button>
           <button
             onClick={onNewTask}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-medium transition"
+            className="inline-flex justify-center items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-medium transition w-full sm:w-auto"
             type="button"
           >
             <Plus className="w-4 h-4" />
@@ -134,6 +116,37 @@ export function TasksDateFilters({
           </button>
         </div>
       </div>
-    </>
+
+      <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2">
+        <div className="hidden sm:flex items-center">
+          <Filter className="w-4 h-4 text-muted-foreground" />
+        </div>
+        <select
+          value={selectedEmployee ?? ""}
+          onChange={(e) => onEmployeeChange(e.target.value || null)}
+          className="w-full sm:w-auto px-4 py-2 rounded-lg border border-input bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+        >
+          <option value="">Tous les employés</option>
+          {teamMembers.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.name}
+            </option>
+          ))}
+        </select>
+        <select
+          value={selectedWorkstation ?? ""}
+          onChange={(e) => onWorkstationChange(e.target.value || null)}
+          className="w-full sm:w-auto px-4 py-2 rounded-lg border border-input bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+        >
+          <option value="">Tous les postes</option>
+          <option value="__direct__">Affectations directes</option>
+          {workstations.map((ws) => (
+            <option key={ws.id} value={ws.id}>
+              {ws.name}
+            </option>
+          ))}
+        </select>
+      </div>
+    </div>
   );
 }

@@ -15,7 +15,7 @@ export default function Login() {
     setLocalError(null);
 
     if (!email || !password) {
-      setLocalError("Merci de renseigner tous les champs");
+      setLocalError("Please fill in all fields");
       return;
     }
 
@@ -34,7 +34,7 @@ export default function Login() {
   React.useEffect(() => {
     if (user) {
       if (user.role === "MANAGER") {
-        navigate("/manager/today", { replace: true });
+        navigate("/manager/dashboard", { replace: true });
       } else if (user.role === "EMPLOYEE") {
         navigate("/employee", { replace: true });
       }
@@ -92,6 +92,7 @@ export default function Login() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="vous@example.com"
                 className="w-full px-4 py-3 rounded-xl border border-input/60 bg-background/50 backdrop-blur-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all duration-300 shadow-inner"
+                aria-label="Email"
               />
             </div>
 
@@ -109,12 +110,14 @@ export default function Login() {
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
                 className="w-full px-4 py-3 rounded-xl border border-input/60 bg-background/50 backdrop-blur-sm text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all duration-300 shadow-inner"
+                aria-label="Password"
               />
             </div>
 
             <button
               type="submit"
               disabled={isLoading}
+              aria-label={isLoading ? "Signing in..." : "Sign in"}
               className="w-full bg-primary text-primary-foreground font-bold py-3.5 rounded-xl transition-all duration-300 shadow-[0_0_20px_rgba(233,30,99,0.3)] hover:shadow-[0_0_30px_rgba(233,30,99,0.5)] hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none flex items-center justify-center gap-2 mt-2"
             >
               {isLoading ? (
@@ -143,6 +146,7 @@ export default function Login() {
                   type="button"
                   onClick={() => navigate("/signup")}
                   className="text-primary hover:text-primary/90 font-medium transition"
+                  aria-label="Create one"
                 >
                   Créer un compte
                 </button>
@@ -154,7 +158,10 @@ export default function Login() {
         {/* Demo Info */}
         <div className="mt-8 relative z-10 glass-card rounded-xl p-5 border border-border/50 text-center shadow-lg">
           <p className="text-sm text-muted-foreground leading-relaxed">
-            <strong className="text-foreground">Identifiants de démonstration :</strong>
+            <strong className="text-foreground">
+              Identifiants de démonstration :
+            </strong>
+            <span className="sr-only">Demo credentials</span>
             <br />
             Employé : emp@test.com / password
             <br />

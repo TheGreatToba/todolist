@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import type { ManagerDashboard as ManagerDashboardType } from "@shared/api";
 import type { PilotageAction } from "@shared/api";
-import type { TeamMember } from "@shared/api";
+import type { TeamMember, TodayBoardTask } from "@shared/api";
 import { useManagerDashboardQuery } from "@/hooks/queries";
 import { useManagerTodayBoardQuery } from "@/hooks/queries";
 import { todayLocalISO } from "@/lib/date-utils";
@@ -27,6 +27,8 @@ import {
 type DashboardTask = ManagerDashboardType["dailyTasks"][number];
 
 interface PilotageTabProps {
+  /** Quand fourni, suivi par date (page Pilotage dédiée). Sinon = aujourd'hui (intégré au tableau de bord). */
+  selectedDate?: string;
   teamMembers: TeamMember[];
   onToggleTask: (taskId: string, isCompleted: boolean) => void;
   onBatchAssignTasks: (taskIds: string[], employeeId: string) => void;
@@ -81,9 +83,7 @@ function buildTopActions(
   return actions.sort((a, b) => b.priorityScore - a.priorityScore).slice(0, 5);
 }
 
-function computeOverloadedEmployees(
-  dailyTasks: DashboardTask[],
-): Array<{
+function computeOverloadedEmployees(dailyTasks: DashboardTask[]): Array<{
   employeeId: string;
   name: string;
   taskCount: number;
@@ -146,6 +146,7 @@ function computeHotWorkstations(
 }
 
 export function PilotageTab({
+  selectedDate: selectedDateProp,
   teamMembers,
   onToggleTask,
   onBatchAssignTasks,
@@ -155,10 +156,13 @@ export function PilotageTab({
   isTaskUpdating = false,
 }: PilotageTabProps) {
   const today = todayLocalISO();
+  const selectedDate = selectedDateProp ?? today;
+  const isToday = selectedDate === today;
+
   const { data: dashboard, isLoading: dashboardLoading } =
-    useManagerDashboardQuery({ date: today });
+    useManagerDashboardQuery({ date: selectedDate });
   const { data: todayBoard, isLoading: todayBoardLoading } =
-    useManagerTodayBoardQuery();
+    useManagerTodayBoardQuery(undefined, { enabled: isToday });
 
   const [batchEmployeeId, setBatchEmployeeId] = useState("");
   const [selectedOverdueIds, setSelectedOverdueIds] = useState<string[]>([]);
@@ -176,12 +180,16 @@ export function PilotageTab({
     );
   }, [dashboard?.dailyTasks]);
 
+  /** Tâches en retard : soit todayBoard (aujourd'hui, avec détail), soit dashboard.attention (autre date, liste résumée). */
   const overdueCritical = useMemo(() => {
-    const list = todayBoard?.overdue ?? [];
-    return [...list].sort(
-      (a, b) => (b.priorityScore ?? 0) - (a.priorityScore ?? 0),
-    );
-  }, [todayBoard?.overdue]);
+    if (isToday && todayBoard?.overdue) {
+      return [...todayBoard.overdue].sort(
+        (a, b) => (b.priorityScore ?? 0) - (a.priorityScore ?? 0),
+      );
+    }
+    return dashboard?.attention?.overdueCritical ?? [];
+  }, [isToday, todayBoard?.overdue, dashboard?.attention?.overdueCritical]);
+  const overdueIsFullTasks = isToday && todayBoard?.overdue != null;
 
   const overloadedEmployees = useMemo(
     () =>
@@ -241,7 +249,9 @@ export function PilotageTab({
     setSelectedOverdueIds([]);
   };
 
-  if (dashboardLoading || todayBoardLoading) {
+  const isLoading = dashboardLoading || (isToday && todayBoardLoading);
+
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center py-16">
         <div className="text-muted-foreground text-sm">
@@ -254,21 +264,13 @@ export function PilotageTab({
   if (!dashboard) {
     return (
       <div className="rounded-xl border border-border bg-card p-6 text-center text-muted-foreground">
-        Aucune donnée de tableau de bord pour aujourd&apos;hui.
+        Aucune donnée de tableau de bord pour cette date.
       </div>
     );
   }
 
   return (
     <div className="space-y-8">
-      <div>
-        <h2 className="text-xl font-semibold text-foreground mb-1">Pilotage</h2>
-        <p className="text-sm text-muted-foreground">
-          Sections critiques et actions prioritaires pour {today}. Agissez
-          depuis cette page ou ouvrez l&apos;onglet Tâches avec des filtres.
-        </p>
-      </div>
-
       {topActions.length > 0 && (
         <Card>
           <CardHeader>
@@ -334,7 +336,9 @@ export function PilotageTab({
               Retards critiques
             </CardTitle>
             <CardDescription>
-              Tâches en retard (date avant aujourd&apos;hui, non terminées)
+              {overdueIsFullTasks
+                ? "Tâches en retard (date avant aujourd'hui, non terminées)"
+                : "Tâches en retard pour cette date"}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -342,10 +346,10 @@ export function PilotageTab({
               <p className="text-sm text-muted-foreground">
                 Aucune tâche en retard.
               </p>
-            ) : (
+            ) : overdueIsFullTasks ? (
               <>
                 <div className="space-y-2 max-h-48 overflow-y-auto">
-                  {overdueCritical.map((task) => (
+                  {(overdueCritical as TodayBoardTask[]).map((task) => (
                     <div
                       key={task.id}
                       className="flex items-center gap-2 rounded-md border border-border p-2"
@@ -403,6 +407,42 @@ export function PilotageTab({
                     </Button>
                   </div>
                 )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full"
+                  onClick={() => onGoToTasksWithFilters({})}
+                >
+                  Ouvrir dans Tâches <ChevronRight className="h-4 w-4 ml-1" />
+                </Button>
+              </>
+            ) : (
+              <>
+                <div className="space-y-2 max-h-48 overflow-y-auto">
+                  {(
+                    overdueCritical as Array<{
+                      taskId: string;
+                      title: string;
+                      date: string;
+                      workstationName?: string;
+                    }>
+                  ).map((item) => (
+                    <div
+                      key={item.taskId}
+                      className="flex items-center gap-2 rounded-md border border-border p-2"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium truncate">
+                          {item.title}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {item.workstationName ?? "—"} ·{" "}
+                          {item.date?.slice(0, 10)}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
                 <Button
                   variant="ghost"
                   size="sm"

@@ -20,7 +20,7 @@ export default function Home() {
   if (user) {
     return (
       <Navigate
-        to={user.role === "MANAGER" ? "/manager/today" : "/employee"}
+        to={user.role === "MANAGER" ? "/manager/dashboard" : "/employee"}
         replace
       />
     );
@@ -48,12 +48,14 @@ export default function Home() {
           <div className="hidden md:flex items-center gap-3">
             <button
               onClick={() => navigate("/login")}
+              aria-label="Sign in"
               className="px-4 py-2 text-foreground font-semibold hover:text-primary transition-colors"
             >
               Se connecter
             </button>
             <button
               onClick={() => navigate("/signup")}
+              aria-label="Get started"
               className="px-5 py-2.5 bg-primary/90 hover:bg-primary text-primary-foreground rounded-xl font-bold transition-all duration-300 shadow-lg hover:shadow-xl hover:-translate-y-0.5"
             >
               Commencer
@@ -67,7 +69,11 @@ export default function Home() {
               className="p-2 text-foreground"
               aria-label="Menu"
             >
-              {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+              {isMobileMenuOpen ? (
+                <X className="w-6 h-6" />
+              ) : (
+                <Menu className="w-6 h-6" />
+              )}
             </button>
           </div>
         </div>
@@ -77,12 +83,14 @@ export default function Home() {
           <div className="md:hidden border-t border-border/50 bg-background/95 backdrop-blur-xl p-4 flex flex-col gap-4 animate-fade-in-up">
             <button
               onClick={() => navigate("/login")}
+              aria-label="Sign in"
               className="w-full px-4 py-3 text-foreground font-semibold bg-secondary/50 rounded-xl transition-colors"
             >
               Se connecter
             </button>
             <button
               onClick={() => navigate("/signup")}
+              aria-label="Get started"
               className="w-full px-5 py-3 bg-primary/90 hover:bg-primary text-primary-foreground rounded-xl font-bold shadow-lg"
             >
               Commencer
@@ -100,13 +108,22 @@ export default function Home() {
           </span>
           Nouvelle version disponible
         </div>
-        <h2 className="text-5xl md:text-7xl font-black mb-8 tracking-tight text-foreground drop-shadow-sm max-w-4xl mx-auto leading-tight">
-          La gestion des tâches quotidiennes, <span className="bg-clip-text text-transparent bg-gradient-to-r from-primary via-accent to-primary animate-pulse-glow">simplifiée</span>
+        <h2
+          className="text-5xl md:text-7xl font-black mb-8 tracking-tight text-foreground drop-shadow-sm max-w-4xl mx-auto leading-tight"
+          aria-label="Daily task management made simple"
+        >
+          La gestion des tâches quotidiennes,{" "}
+          <span className="bg-clip-text text-transparent bg-gradient-to-r from-primary via-accent to-primary animate-pulse-glow">
+            simplifiée
+          </span>
         </h2>
         <p className="text-lg md:text-xl text-muted-foreground mb-10 max-w-2xl mx-auto font-medium">
-          Donnez à vos équipes une checklist mobile dynamique. Suivez l&apos;avancement
-          des tâches en temps réel. Pilotez votre espace avec clarté et
-          sérénité.
+          Donnez à vos équipes une checklist mobile dynamique. Suivez
+          l&apos;avancement des tâches en temps réel. Pilotez votre espace avec
+          clarté et sérénité.
+          <span className="sr-only">
+            Empower your employees with a mobile-first checklist
+          </span>
         </p>
 
         <div className="flex flex-col sm:flex-row gap-4 justify-center mb-24 w-full">
@@ -137,7 +154,9 @@ export default function Home() {
                     <div className="w-14 h-14 rounded-2xl bg-primary/20 flex items-center justify-center shadow-inner group-hover:scale-110 transition-transform duration-500">
                       <span className="text-2xl">📱</span>
                     </div>
-                    <span className="text-xs font-bold uppercase tracking-wider text-primary bg-primary/10 px-3 py-1 rounded-full">Vue employé</span>
+                    <span className="text-xs font-bold uppercase tracking-wider text-primary bg-primary/10 px-3 py-1 rounded-full">
+                      Vue employé
+                    </span>
                   </div>
                   <div className="space-y-5">
                     <div className="flex items-start gap-4 p-3 rounded-xl bg-card border border-border/50 shadow-sm">
@@ -145,16 +164,24 @@ export default function Home() {
                         <CheckCircle2 className="w-3 h-3 text-white" />
                       </div>
                       <div>
-                        <p className="font-semibold text-foreground">Préparation salle</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">Terminée à 09:30</p>
+                        <p className="font-semibold text-foreground">
+                          Préparation salle
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Terminée à 09:30
+                        </p>
                       </div>
                     </div>
                     <div className="flex items-start gap-4 p-3 rounded-xl bg-card border border-border/50 shadow-sm relative overflow-hidden group/task">
                       <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary"></div>
                       <div className="mt-1 w-5 h-5 rounded-full border-2 border-primary flex-shrink-0"></div>
                       <div>
-                        <p className="font-semibold text-foreground">Check réapprovisionnement</p>
-                        <p className="text-xs text-primary mt-0.5 font-medium">À faire maintenant</p>
+                        <p className="font-semibold text-foreground">
+                          Check réapprovisionnement
+                        </p>
+                        <p className="text-xs text-primary mt-0.5 font-medium">
+                          À faire maintenant
+                        </p>
                       </div>
                     </div>
                   </div>
@@ -169,25 +196,37 @@ export default function Home() {
                     <div className="w-14 h-14 rounded-2xl bg-accent/20 flex items-center justify-center shadow-inner group-hover:scale-110 transition-transform duration-500">
                       <span className="text-2xl">📊</span>
                     </div>
-                    <span className="text-xs font-bold uppercase tracking-wider text-accent bg-accent/10 px-3 py-1 rounded-full">Vue manager</span>
+                    <span className="text-xs font-bold uppercase tracking-wider text-accent bg-accent/10 px-3 py-1 rounded-full">
+                      Vue manager
+                    </span>
                   </div>
                   <div className="space-y-4">
                     <div className="flex items-center justify-between p-4 rounded-xl bg-card border border-border/50 shadow-sm">
                       <div>
-                        <p className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Taux d'achèvement</p>
-                        <p className="text-3xl font-black bg-clip-text text-transparent bg-gradient-to-r from-primary to-accent mt-1">84%</p>
+                        <p className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                          Taux d'achèvement
+                        </p>
+                        <p className="text-3xl font-black bg-clip-text text-transparent bg-gradient-to-r from-primary to-accent mt-1">
+                          84%
+                        </p>
                       </div>
                       <div className="w-16 h-16 rounded-full border-4 border-primary/20 border-t-primary border-r-primary flex items-center justify-center">
-                        <span className="text-xs font-bold text-foreground">Auj.</span>
+                        <span className="text-xs font-bold text-foreground">
+                          Auj.
+                        </span>
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="p-3 rounded-xl bg-card border border-border/50 shadow-sm text-center">
-                        <p className="text-xs text-muted-foreground font-semibold">Tâches</p>
+                        <p className="text-xs text-muted-foreground font-semibold">
+                          Tâches
+                        </p>
                         <p className="text-xl font-bold text-foreground">42</p>
                       </div>
                       <div className="p-3 rounded-xl bg-card border border-border/50 shadow-sm text-center border-l-2 border-l-red-500">
-                        <p className="text-xs text-muted-foreground font-semibold">Retards</p>
+                        <p className="text-xs text-muted-foreground font-semibold">
+                          Retards
+                        </p>
                         <p className="text-xl font-bold text-foreground">2</p>
                       </div>
                     </div>
@@ -201,7 +240,10 @@ export default function Home() {
 
       {/* Features Section */}
       <section className="max-w-6xl mx-auto px-4 py-24 relative z-10">
-        <h2 className="text-4xl md:text-5xl font-black text-foreground mb-16 text-center tracking-tight drop-shadow-sm">
+        <h2
+          className="text-4xl md:text-5xl font-black text-foreground mb-16 text-center tracking-tight drop-shadow-sm"
+          aria-label="Key Features"
+        >
           Fonctionnalités <span className="text-primary">Clés</span>
         </h2>
 
@@ -210,7 +252,10 @@ export default function Home() {
             <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-6 group-hover:bg-primary group-hover:text-primary-foreground transition-colors duration-300 group-hover:shadow-[0_0_20px_rgba(233,30,99,0.4)]">
               <Users className="w-7 h-7 text-primary group-hover:text-current" />
             </div>
-            <h3 className="text-xl font-bold text-foreground mb-3">
+            <h3
+              className="text-xl font-bold text-foreground mb-3"
+              aria-label="Team management"
+            >
               Gestion d&apos;équipe
             </h3>
             <p className="text-muted-foreground leading-relaxed">
@@ -227,7 +272,9 @@ export default function Home() {
               Mises à jour en direct
             </h3>
             <p className="text-muted-foreground leading-relaxed">
-              Visualisez les tâches terminées instantanément. Sans rechargement, restez informé de l'avancement de votre équipe.
+              Visualisez les tâches terminées instantanément. Sans rechargement,
+              restez informé de l'avancement de votre équipe.
+              <span className="sr-only">Real-time updates</span>
             </p>
           </div>
 
@@ -265,7 +312,8 @@ export default function Home() {
               Haute sécurité
             </h3>
             <p className="text-muted-foreground leading-relaxed">
-              Vos données sont protégées avec des droits d&apos;accès stricts par rôle et une authentification renforcée.
+              Vos données sont protégées avec des droits d&apos;accès stricts
+              par rôle et une authentification renforcée.
             </p>
           </div>
 
@@ -334,7 +382,9 @@ export default function Home() {
                 </div>
               </div>
               <div>
-                <h3 className="text-xl font-bold text-foreground mb-2">Santé & Cliniques</h3>
+                <h3 className="text-xl font-bold text-foreground mb-2">
+                  Santé & Cliniques
+                </h3>
                 <p className="text-muted-foreground text-lg leading-relaxed">
                   Checklists de soins aux patients et répartition des tâches par
                   service de santé.
@@ -371,8 +421,8 @@ export default function Home() {
               Prêt à transformer votre gestion ?
             </h2>
             <p className="text-xl text-muted-foreground mb-12 max-w-2xl mx-auto">
-              Rejoignez les équipes qui utilisent déjà Tasty Crousty pour digitaliser
-              leurs opérations efficacement.
+              Rejoignez les équipes qui utilisent déjà Tasty Crousty pour
+              digitaliser leurs opérations efficacement.
             </p>
 
             <div className="flex flex-col sm:flex-row gap-4 justify-center w-full">
@@ -391,11 +441,18 @@ export default function Home() {
       <footer className="bg-background/80 backdrop-blur-md border-t border-border/50 py-10 relative z-10">
         <div className="max-w-6xl mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <img src="/logo.png" alt="Tasty Crousty" className="h-8 w-auto grayscale opacity-50" />
-            <span className="text-base font-bold text-muted-foreground">Tasty Crousty</span>
+            <img
+              src="/logo.png"
+              alt="Tasty Crousty"
+              className="h-8 w-auto grayscale opacity-50"
+            />
+            <span className="text-base font-bold text-muted-foreground">
+              Tasty Crousty
+            </span>
           </div>
           <p className="text-muted-foreground font-medium text-sm">
-            &copy; {new Date().getFullYear()} Tasty Crousty. Tous droits réservés.
+            &copy; {new Date().getFullYear()} Tasty Crousty. Tous droits
+            réservés.
           </p>
         </div>
       </footer>

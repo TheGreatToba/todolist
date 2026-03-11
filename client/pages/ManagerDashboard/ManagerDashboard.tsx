@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   useManagerDashboardQuery,
@@ -12,7 +12,7 @@ import {
   useBatchUpdateTaskTemplatesMutation,
   useManagerWeeklyReportQuery,
 } from "@/hooks/queries";
-import { Loader2, LogOut, Search } from "lucide-react";
+import { LogOut, Plus, Search, ChevronLeft, ChevronRight } from "lucide-react";
 import { toastError, toastInfo, toastSuccess } from "@/lib/toast";
 import { formatBatchConflictSummary } from "@/lib/batch-conflict-messages";
 import { getErrorMessage } from "@/lib/get-error-message";
@@ -22,6 +22,7 @@ import { useManagerDashboardModals } from "./useManagerDashboardModals";
 import { useManagerDashboardMutations } from "./useManagerDashboardMutations";
 import { TasksTab } from "./TasksTab";
 import { PilotageTab } from "./PilotageTab";
+import { OverviewTab } from "./OverviewTab";
 import { WorkstationsTab } from "./WorkstationsTab";
 import { EmployeesTab } from "./EmployeesTab";
 import { TemplatesTab } from "./TemplatesTab";
@@ -45,8 +46,41 @@ import {
 
 type ConfirmDeleteType = "workstation" | "employee" | "template";
 
+function haptic() {
+  if (typeof navigator !== "undefined" && navigator.vibrate) {
+    navigator.vibrate(50);
+  }
+}
+
+function hapticError() {
+  if (typeof navigator !== "undefined" && navigator.vibrate) {
+    navigator.vibrate([30, 50, 30]);
+  }
+}
+
+/** View is derived from URL only; no tab state is kept in component or filters. */
+function getManagerViewFromPath(pathname: string): string | null {
+  const match = pathname.match(/^\/manager\/([^/]+)/);
+  if (!match) return null;
+  const segment = match[1];
+  if (
+    [
+      "dashboard",
+      "pilotage",
+      "tasks",
+      "workstations",
+      "employees",
+      "templates",
+    ].includes(segment)
+  )
+    return segment;
+  return null;
+}
+
 export default function ManagerDashboard() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const view = getManagerViewFromPath(location.pathname);
   const { logout } = useAuth();
 
   const filters = useManagerDashboardFilters();
@@ -63,7 +97,7 @@ export default function ManagerDashboard() {
   const { data: workstations = [] } = useWorkstationsQuery();
   const { data: teamMembers = [] } = useTeamMembersQuery();
   const { data: templates = [] } = useTaskTemplatesQuery();
-  const { data: weeklyReport } = useManagerWeeklyReportQuery({
+  useManagerWeeklyReportQuery({
     date: filters.selectedDate,
   });
   const updateDailyTask = useUpdateDailyTaskMutation();
@@ -71,6 +105,7 @@ export default function ManagerDashboard() {
   const batchUpdateDailyTasks = useBatchUpdateDailyTasksMutation();
   const batchUpdateTaskTemplates = useBatchUpdateTaskTemplatesMutation();
   const [isGlobalSearchOpen, setIsGlobalSearchOpen] = useState(false);
+  const [pilotageDate, setPilotageDate] = useState(() => todayLocalISO());
   const [confirmDelete, setConfirmDelete] = useState<{
     type: ConfirmDeleteType;
     id: string;
@@ -227,7 +262,9 @@ export default function ManagerDashboard() {
   ) => {
     try {
       await updateDailyTask.mutateAsync({ taskId, isCompleted: !isCompleted });
+      haptic();
     } catch (error) {
+      hapticError();
       toastError(
         getErrorMessage(
           error,
@@ -240,7 +277,9 @@ export default function ManagerDashboard() {
   const handleReassignTask = async (taskId: string, employeeId: string) => {
     try {
       await updateDailyTask.mutateAsync({ taskId, employeeId });
+      haptic();
     } catch (error) {
+      hapticError();
       const fallback =
         error instanceof Error && /CONFLICT/i.test(error.message)
           ? "Cet employé a déjà cette tâche aujourd'hui."
@@ -462,25 +501,25 @@ export default function ManagerDashboard() {
   };
 
   const handleSelectEmployeeFromSearch = (employeeId: string) => {
-    filters.setActiveTab("tasks");
+    navigate("/manager/tasks");
     filters.setSelectedEmployee(employeeId);
     filters.setSelectedWorkstation(null);
   };
 
   const handleSelectWorkstationFromSearch = (workstationId: string) => {
-    filters.setActiveTab("tasks");
+    navigate("/manager/tasks");
     filters.setSelectedWorkstation(workstationId);
     filters.setSelectedEmployee(null);
   };
 
   const handleSelectTemplateFromSearch = () => {
-    filters.setActiveTab("templates");
+    navigate("/manager/templates");
   };
 
   const handleSelectTaskFromSearch = (taskId: string) => {
     const task = dashboard?.dailyTasks.find((t) => t.id === taskId);
     if (!task) return;
-    filters.setActiveTab("tasks");
+    navigate("/manager/tasks");
     const empId =
       (task as { employeeId?: string | null; employee?: { id: string } })
         .employeeId ?? task.employee?.id;
@@ -494,7 +533,7 @@ export default function ManagerDashboard() {
     employeeId?: string | null;
     workstationId?: string | null;
   }) => {
-    filters.setActiveTab("tasks");
+    navigate("/manager/tasks");
     filters.setSelectedDate(todayLocalISO());
     filters.setSelectedEmployee(
       options.employeeId !== undefined ? options.employeeId : null,
@@ -557,7 +596,10 @@ export default function ManagerDashboard() {
           <div className="h-8 w-64 bg-card/60 rounded-md border border-border/50"></div>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="h-32 bg-card/50 backdrop-blur-md rounded-xl border border-border/40"></div>
+              <div
+                key={i}
+                className="h-32 bg-card/50 backdrop-blur-md rounded-xl border border-border/40"
+              ></div>
             ))}
           </div>
           <div className="h-96 w-full bg-card/50 backdrop-blur-md rounded-xl border border-border/40 mt-8"></div>
@@ -594,93 +636,95 @@ export default function ManagerDashboard() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-primary/5 to-background">
-      <div className="max-w-6xl mx-auto px-4 py-8">
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+      <div className="max-w-6xl mx-auto px-4 py-6 md:py-8">
+        <div className="mb-6 flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">
-              Tableau de bord manager
+            <h1 className="text-2xl font-bold text-foreground tracking-tight">
+              {view === "dashboard" && "Tableau de bord"}
+              {view === "pilotage" && "Pilotage"}
+              {view === "tasks" && "Tâches"}
+              {view === "workstations" && "Postes"}
+              {view === "employees" && "Employés"}
+              {view === "templates" && "Modèles de tâches"}
             </h1>
-            <p className="text-sm text-muted-foreground">
-              Recherchez des employés, postes, modèles et tâches.
-            </p>
           </div>
           <button
             type="button"
             onClick={() => setIsGlobalSearchOpen(true)}
-            className="inline-flex items-center gap-2 rounded-lg border border-input bg-background px-3 py-2 text-sm font-medium text-foreground shadow-sm hover:bg-secondary"
-            aria-label="Ouvrir la recherche globale manager"
+            className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-secondary/50 hover:bg-secondary text-foreground transition-colors"
+            aria-label="Rechercher"
           >
-            <Search className="h-4 w-4" />
-            <span className="hidden sm:inline">Rechercher...</span>
+            <Search className="h-5 w-5" />
           </button>
         </div>
 
-        {weeklyReport && (
-          <div className="mb-6">
-            <div className="glass-card rounded-xl border border-border/50 p-6 shadow-lg relative overflow-hidden group transition-all duration-300 hover:shadow-xl">
-              <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-              <div className="flex flex-wrap items-start justify-between gap-3 relative z-10">
-                <div>
-                  <p className="text-lg font-bold text-foreground tracking-tight drop-shadow-sm">
-                    Analyse hebdomadaire ({weeklyReport.weekStart} -{" "}
-                    {weeklyReport.weekEnd})
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {weeklyReport.summary.completedTasks} terminées -{" "}
-                    {weeklyReport.summary.overdueTasks} en retard -{" "}
-                    {weeklyReport.recurringDelays.length} récurrences à
-                    surveiller
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                  {weeklyReport.bottlenecks.employees[0] && (
-                    <span className="rounded-full bg-secondary/60 px-2 py-1">
-                      Goulot d&apos;étranglement principal :{" "}
-                      {weeklyReport.bottlenecks.employees[0].name} (
-                      {weeklyReport.bottlenecks.employees[0].peakDayTaskCount}{" "}
-                      tâches/jour au pic)
-                    </span>
-                  )}
-                  {weeklyReport.bottlenecks.workstations[0] && (
-                    <span className="rounded-full bg-secondary/60 px-2 py-1">
-                      Poste sensible :{" "}
-                      {weeklyReport.bottlenecks.workstations[0].name} (
-                      {
-                        weeklyReport.bottlenecks.workstations[0]
-                          .peakDayUncompletedCount
-                      }{" "}
-                      inachevée/jour au pic)
-                    </span>
-                  )}
-                  {weeklyReport.recurringDelays[0] && (
-                    <span className="rounded-full bg-secondary/60 px-2 py-1">
-                      Retard récurrent : {weeklyReport.recurringDelays[0].title}{" "}
-                      (
-                      {Math.round(
-                        weeklyReport.recurringDelays[0].delayRate * 100,
-                      )}
-                      % en retard)
-                    </span>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {filters.activeTab === "pilotage" && (
-          <PilotageTab
-            teamMembers={teamMembers}
+        {view === "dashboard" && (
+          <OverviewTab
+            dashboard={dashboard}
             onToggleTask={handleToggleManagerTask}
-            onBatchAssignTasks={handleBatchAssignTasks}
-            onGoToTasksWithFilters={handleGoToTasksWithFilters}
-            isBatchUpdatingTasks={batchUpdateDailyTasks.isPending}
             pendingTaskId={updateDailyTask.variables?.taskId ?? null}
             isTaskUpdating={updateDailyTask.isPending}
           />
         )}
 
-        {filters.activeTab === "tasks" && (
+        {view === "pilotage" && (
+          <>
+            <div className="flex items-center gap-2 mb-6">
+              <button
+                type="button"
+                onClick={() => {
+                  const d = new Date(pilotageDate);
+                  d.setDate(d.getDate() - 1);
+                  setPilotageDate(d.toISOString().slice(0, 10));
+                }}
+                className="p-2 rounded-lg border border-input bg-background hover:bg-secondary text-foreground transition-colors"
+                aria-label="Jour précédent"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+              <input
+                id="pilotage-date"
+                type="date"
+                value={pilotageDate}
+                onChange={(e) => setPilotageDate(e.target.value)}
+                className="px-4 py-2 rounded-lg border border-input bg-background text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary font-medium"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const d = new Date(pilotageDate);
+                  d.setDate(d.getDate() + 1);
+                  setPilotageDate(d.toISOString().slice(0, 10));
+                }}
+                className="p-2 rounded-lg border border-input bg-background hover:bg-secondary text-foreground transition-colors"
+                aria-label="Jour suivant"
+              >
+                <ChevronRight className="w-5 h-5" />
+              </button>
+              {pilotageDate !== todayLocalISO() && (
+                <button
+                  type="button"
+                  onClick={() => setPilotageDate(todayLocalISO())}
+                  className="text-sm text-primary hover:underline ml-1"
+                >
+                  Aujourd&apos;hui
+                </button>
+              )}
+            </div>
+            <PilotageTab
+              selectedDate={pilotageDate}
+              teamMembers={teamMembers}
+              onToggleTask={handleToggleManagerTask}
+              onBatchAssignTasks={handleBatchAssignTasks}
+              onGoToTasksWithFilters={handleGoToTasksWithFilters}
+              isBatchUpdatingTasks={batchUpdateDailyTasks.isPending}
+              pendingTaskId={updateDailyTask.variables?.taskId ?? null}
+              isTaskUpdating={updateDailyTask.isPending}
+            />
+          </>
+        )}
+
+        {view === "tasks" && (
           <TasksTab
             dashboard={dashboard}
             teamMembers={teamMembers}
@@ -704,7 +748,7 @@ export default function ManagerDashboard() {
           />
         )}
 
-        {filters.activeTab === "workstations" && (
+        {view === "workstations" && (
           <WorkstationsTab
             workstations={workstations}
             teamMembers={teamMembers}
@@ -735,7 +779,7 @@ export default function ManagerDashboard() {
           />
         )}
 
-        {filters.activeTab === "employees" && (
+        {view === "employees" && (
           <EmployeesTab
             teamMembers={teamMembers}
             workstations={workstations}
@@ -752,7 +796,7 @@ export default function ManagerDashboard() {
           />
         )}
 
-        {filters.activeTab === "templates" && (
+        {view === "templates" && (
           <TemplatesTab
             templates={templates}
             onEdit={handleEditTemplate}
@@ -765,6 +809,22 @@ export default function ManagerDashboard() {
           />
         )}
       </div>
+
+      {view === "dashboard" && (
+        <button
+          type="button"
+          onClick={() => {
+            if (typeof navigator !== "undefined" && navigator.vibrate) {
+              navigator.vibrate(50);
+            }
+            modals.setShowNewTaskModal(true);
+          }}
+          className="fixed bottom-24 right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-transform hover:scale-105 hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 md:bottom-8 md:right-8 md:h-12 md:w-12"
+          aria-label="Créer une tâche"
+        >
+          <Plus className="h-7 w-7 md:h-6 md:w-6" strokeWidth={2.5} />
+        </button>
+      )}
 
       <ManagerGlobalSearch
         open={isGlobalSearchOpen}

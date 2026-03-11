@@ -131,13 +131,13 @@
 
   /* Glassmorphism primitives */
   .glass-card {
-    @apply bg-card/70 backdrop-blur-xl border border-border/50 shadow-xl;
+    @apply bg-card/80 backdrop-blur-xl border border-border/60 shadow-xl;
   }
-  
+
   .glass-panel {
     @apply bg-background/60 backdrop-blur-2xl border border-white/20 shadow-2xl;
   }
-  
+
   .dark .glass-panel {
     @apply border-white/5;
   }
@@ -145,16 +145,32 @@
   /* Rich backgrounds */
   .mesh-gradient-bg {
     background-color: hsl(var(--background));
-    background-image: 
-      radial-gradient(at 40% 20%, hsla(330, 90%, 60%, 0.15) 0px, transparent 50%),
-      radial-gradient(at 80% 0%, hsla(280, 80%, 60%, 0.15) 0px, transparent 50%),
+    background-image:
+      radial-gradient(
+        at 40% 20%,
+        hsla(330, 90%, 60%, 0.15) 0px,
+        transparent 50%
+      ),
+      radial-gradient(
+        at 80% 0%,
+        hsla(280, 80%, 60%, 0.15) 0px,
+        transparent 50%
+      ),
       radial-gradient(at 0% 50%, hsla(330, 90%, 60%, 0.1) 0px, transparent 50%);
   }
-  
+
   .dark .mesh-gradient-bg {
-    background-image: 
-      radial-gradient(at 40% 20%, hsla(330, 85%, 65%, 0.15) 0px, transparent 50%),
-      radial-gradient(at 80% 0%, hsla(280, 85%, 65%, 0.15) 0px, transparent 50%),
+    background-image:
+      radial-gradient(
+        at 40% 20%,
+        hsla(330, 85%, 65%, 0.15) 0px,
+        transparent 50%
+      ),
+      radial-gradient(
+        at 80% 0%,
+        hsla(280, 85%, 65%, 0.15) 0px,
+        transparent 50%
+      ),
       radial-gradient(at 0% 50%, hsla(330, 85%, 65%, 0.1) 0px, transparent 50%);
   }
 }

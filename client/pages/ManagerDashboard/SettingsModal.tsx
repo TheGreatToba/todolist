@@ -62,6 +62,7 @@ export function SettingsModal({
         className="bg-card rounded-xl shadow-lg max-w-md w-full p-6 border border-border max-h-[90vh] overflow-y-auto"
         role="dialog"
         aria-modal="true"
+        aria-label="Team settings"
         aria-labelledby="settings-modal-title"
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
@@ -72,11 +73,12 @@ export function SettingsModal({
             className="text-xl font-bold text-foreground"
           >
             Paramètres de l&apos;équipe
+            <span className="sr-only">Team settings</span>
           </h2>
           <button
             onClick={onClose}
             className="p-1 hover:bg-secondary rounded-lg transition"
-            aria-label="Fermer la fenêtre des paramètres"
+            aria-label="Close settings modal"
             type="button"
           >
             <X className="w-5 h-5 text-muted-foreground" />
@@ -242,6 +244,7 @@ export function SettingsModal({
           <button
             type="button"
             onClick={onClose}
+            aria-label="Close"
             className="px-4 py-2 border border-input text-foreground rounded-lg hover:bg-secondary transition text-sm font-medium"
           >
             Fermer

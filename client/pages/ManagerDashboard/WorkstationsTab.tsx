@@ -92,7 +92,7 @@ export function WorkstationsTab({
           return (
             <div
               key={ws.id}
-              className="bg-card rounded-xl border border-border p-6 shadow-sm"
+              className="bg-card rounded-xl border border-border p-4 md:p-6 shadow-sm"
             >
               <div className="flex items-center justify-between mb-3">
                 <h3 className="font-semibold text-foreground text-lg">

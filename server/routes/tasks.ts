@@ -2,6 +2,7 @@ import { RequestHandler } from "express";
 import { z } from "zod";
 import { getIO } from "../lib/socket";
 import { sendErrorResponse } from "../lib/errors";
+import prisma from "../lib/db";
 import { getAuthOrThrow } from "../middleware/requireAuth";
 import { getTenantOrThrow } from "../middleware/requireTenantContext";
 import { assignDailyTasksForDate } from "../jobs/daily-task-assignment";
@@ -639,7 +640,15 @@ export const handleUpdateDailyTask: RequestHandler = async (req, res) => {
     });
 
     if (!task) {
-      res.status(403).json({ error: "Forbidden" });
+      const existingTask = await prisma.dailyTask.findUnique({
+        where: { id: taskId },
+        select: { id: true },
+      });
+      if (existingTask) {
+        res.status(403).json({ error: "Forbidden" });
+        return;
+      }
+      res.status(404).json({ error: "Task not found" });
       return;
     }
 
@@ -867,6 +876,10 @@ export const handleManagerBatchUpdateDailyTasks: RequestHandler = async (
       res.status(404).json({ error: "One or more tasks not found" });
       return;
     }
+    const taskById = new Map(tasks.map((task) => [task.id, task]));
+    const orderedTasks = uniqueTaskIds
+      .map((id) => taskById.get(id))
+      .filter((task): task is (typeof tasks)[number] => Boolean(task));
 
     let targetEmployee: {
       id: string;
@@ -897,7 +910,7 @@ export const handleManagerBatchUpdateDailyTasks: RequestHandler = async (
 
     const taskScopeTeamIds = new Map<string, string | null>();
 
-    for (const task of tasks) {
+    for (const task of orderedTasks) {
       let taskTeamId: string | null = null;
 
       if (
@@ -941,7 +954,7 @@ export const handleManagerBatchUpdateDailyTasks: RequestHandler = async (
     }
 
     if (targetEmployee) {
-      for (const task of tasks) {
+      for (const task of orderedTasks) {
         const taskTeamId = taskScopeTeamIds.get(task.id);
         if (
           taskTeamId &&
@@ -968,7 +981,7 @@ export const handleManagerBatchUpdateDailyTasks: RequestHandler = async (
         // 1) Intra-selection conflict detection: avoid assigning twice the same
         //    template/snapshot to the same employee for the same date in a single batch.
         const seenScopes = new Map<string, string>();
-        for (const task of tasks) {
+        for (const task of orderedTasks) {
           const snapshotSourceId = normalizeSnapshotValue(
             task.templateSourceId,
           );
@@ -988,7 +1001,7 @@ export const handleManagerBatchUpdateDailyTasks: RequestHandler = async (
         }
 
         // 2) Existing DB conflicts for other tasks on the same day.
-        for (const task of tasks) {
+        for (const task of orderedTasks) {
           if (
             conflictTaskIds.has(task.id) ||
             body.employeeId === task.employeeId
@@ -1042,7 +1055,7 @@ export const handleManagerBatchUpdateDailyTasks: RequestHandler = async (
         };
         const unassignGroups = new Map<string, UnassignGroup>();
 
-        for (const task of tasks) {
+        for (const task of orderedTasks) {
           if (!task.taskTemplateId) continue;
           const willBecomeUnassigned =
             task.employeeId !== null || task.status !== "UNASSIGNED";
@@ -1093,8 +1106,8 @@ export const handleManagerBatchUpdateDailyTasks: RequestHandler = async (
 
       const tasksToUpdate =
         mode === "partial"
-          ? tasks.filter((t) => !conflictTaskIds.has(t.id))
-          : tasks;
+          ? orderedTasks.filter((t) => !conflictTaskIds.has(t.id))
+          : orderedTasks;
 
       const results: DailyTaskWithSnapshotProjection[] = [];
       for (const task of tasksToUpdate) {
@@ -3218,12 +3231,10 @@ export const handleGetManagerDashboard: RequestHandler = async (req, res) => {
       members,
     };
 
-    const existingPreparation = await prisma.dayPreparation.findUnique({
+    const existingPreparation = await prisma.dayPreparation.findFirst({
       where: {
-        managerId_date: {
-          managerId: payload.userId,
-          date: taskDate,
-        },
+        managerId: payload.userId,
+        date: taskDate,
       },
       select: { preparedAt: true },
     });

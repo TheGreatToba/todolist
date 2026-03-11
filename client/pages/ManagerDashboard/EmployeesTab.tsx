@@ -49,7 +49,7 @@ export function EmployeesTab({
 
         <form
           onSubmit={onSubmitCreate}
-          className="bg-card rounded-xl border border-border p-6 shadow-sm mb-8 space-y-4"
+          className="bg-card rounded-xl border border-border p-4 md:p-6 shadow-sm mb-8 space-y-4"
         >
           <p className="text-sm text-muted-foreground -mt-2">
             L&apos;employé recevra un e-mail avec un lien sécurisé pour définir
@@ -72,7 +72,7 @@ export function EmployeesTab({
                   onNewEmployeeChange({ ...newEmployee, name: e.target.value })
                 }
                 placeholder="Jean Dupont"
-                className="w-full px-4 py-2 rounded-lg border border-input bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                className="w-full px-4 py-2 rounded-lg border border-pink-100 bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
               />
             </div>
 
@@ -95,7 +95,7 @@ export function EmployeesTab({
                   })
                 }
                 placeholder="jean@example.com"
-                className="w-full px-4 py-2 rounded-lg border border-input bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                className="w-full px-4 py-2 rounded-lg border border-pink-100 bg-background text-foreground placeholder-muted-foreground focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
               />
             </div>
 
@@ -103,7 +103,7 @@ export function EmployeesTab({
               <label className="block text-sm font-medium text-foreground mb-2">
                 Postes (sélectionnez-en un ou plusieurs)
               </label>
-              <div className="space-y-2 max-h-40 overflow-y-auto border border-input rounded-lg p-3 bg-background">
+              <div className="space-y-2 max-h-40 overflow-y-auto border border-pink-100 rounded-lg p-3 bg-background">
                 {workstations.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
                     Aucun poste disponible. Créez-en un dans l&apos;onglet
@@ -136,7 +136,7 @@ export function EmployeesTab({
                             });
                           }
                         }}
-                        className="w-4 h-4 rounded border-input"
+                        className="w-4 h-4 rounded border-input text-pink-500 focus:ring-pink-500"
                       />
                       <span className="text-sm text-foreground">{ws.name}</span>
                     </label>
@@ -148,7 +148,7 @@ export function EmployeesTab({
 
           <button
             type="submit"
-            className="w-full px-6 py-3 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-medium transition"
+            className="w-full px-6 py-3 bg-pink-500 hover:bg-pink-600 text-white rounded-lg font-medium transition"
           >
             Créer l&apos;employé
           </button>
@@ -171,7 +171,7 @@ export function EmployeesTab({
               key={member.id}
               className={`bg-card rounded-lg border transition ${
                 editingEmployee === member.id
-                  ? "border-primary"
+                  ? "border-pink-500"
                   : "border-border"
               } p-4`}
             >
@@ -183,7 +183,7 @@ export function EmployeesTab({
                       {member.email}
                     </p>
                   </div>
-                  <div className="space-y-2 max-h-48 overflow-y-auto border border-input rounded-lg p-3 bg-background">
+                  <div className="space-y-2 max-h-48 overflow-y-auto border border-pink-100 rounded-lg p-3 bg-background">
                     {workstations.map((ws) => (
                       <label
                         key={ws.id}
@@ -206,7 +206,7 @@ export function EmployeesTab({
                               );
                             }
                           }}
-                          className="w-4 h-4 rounded border-input"
+                          className="w-4 h-4 rounded border-input text-pink-500 focus:ring-pink-500"
                         />
                         <span className="text-sm text-foreground">
                           {ws.name}
@@ -217,7 +217,7 @@ export function EmployeesTab({
                   <div className="flex gap-2 flex-wrap">
                     <button
                       onClick={() => onSaveWorkstations(member.id)}
-                      className="flex-1 min-w-0 px-3 py-2 bg-primary hover:bg-primary/90 text-primary-foreground rounded-lg font-medium transition text-sm"
+                      className="flex-1 min-w-0 px-3 py-2 bg-pink-500 hover:bg-pink-600 text-white rounded-lg font-medium transition text-sm"
                       type="button"
                     >
                       Enregistrer
@@ -253,7 +253,7 @@ export function EmployeesTab({
                         {member.workstations.map((ws) => (
                           <span
                             key={ws.id}
-                            className="inline-block px-2 py-1 bg-primary/15 text-primary text-xs rounded-full"
+                            className="inline-block px-2 py-1 bg-pink-100 text-pink-700 text-xs rounded-full"
                           >
                             {ws.name}
                           </span>
@@ -278,7 +278,7 @@ export function EmployeesTab({
                           member.workstations.map((ws) => ws.id),
                         );
                       }}
-                      className="p-2 text-primary hover:bg-primary/10 rounded-lg transition"
+                      className="p-2 text-pink-600 hover:bg-pink-50 rounded-lg transition"
                       title="Modifier les postes"
                       type="button"
                       aria-label={`Modifier les postes de ${member.name}`}

@@ -88,6 +88,7 @@ export function TemplatesTab({
             <button
               type="button"
               onClick={() => setTaskTypeTab("recurring")}
+              aria-label={`Récurrentes (${recurringTemplates.length})`}
               className={`min-h-11 rounded-lg px-3 py-3 text-sm font-medium transition ${
                 taskTypeTab === "recurring"
                   ? "bg-background text-foreground shadow-sm"
@@ -99,13 +100,14 @@ export function TemplatesTab({
             <button
               type="button"
               onClick={() => setTaskTypeTab("one-shot")}
+              aria-label={`One-shot (${oneShotTemplates.length})`}
               className={`min-h-11 rounded-lg px-3 py-3 text-sm font-medium transition ${
                 taskTypeTab === "one-shot"
                   ? "bg-background text-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              {`Ponctuelles (${oneShotTemplates.length})`}
+              {`One-shot (${oneShotTemplates.length})`}
             </button>
           </div>
         </div>
@@ -116,7 +118,7 @@ export function TemplatesTab({
           <p className="text-muted-foreground mb-4">
             {taskTypeTab === "recurring"
               ? "Aucune tâche récurrente."
-              : "Aucune tâche ponctuelle."}
+              : "Aucune tâche one-shot."}
           </p>
           {templates.length === 0 && (
             <button
@@ -133,8 +135,8 @@ export function TemplatesTab({
           {selectedTemplateIds.length > 0 && (
             <div className="mb-6 flex flex-col gap-3 rounded-xl border border-primary/40 bg-primary/5 p-3 md:flex-row md:items-center md:justify-between">
               <div className="text-sm text-foreground">
-                {selectedTemplateIds.length} modele
-                {selectedTemplateIds.length > 1 ? "s" : ""} selectionne
+                {selectedTemplateIds.length} template
+                {selectedTemplateIds.length > 1 ? "s" : ""} selected
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <select
@@ -142,7 +144,7 @@ export function TemplatesTab({
                   onChange={(e) => setBatchEmployeeId(e.target.value)}
                   className="h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground"
                   disabled={isBatchUpdatingTemplates}
-                  aria-label="Sélectionner un employé pour l'affectation en lot"
+                  aria-label="Select employee for batch template assignment"
                 >
                   <option value="">Assigner à un employé…</option>
                   {teamMembers.map((member) => (
@@ -153,6 +155,7 @@ export function TemplatesTab({
                 </select>
                 <button
                   type="button"
+                  aria-label="Assign to employee"
                   onClick={() => {
                     if (!batchEmployeeId || !onBatchUpdateTemplates) return;
                     onBatchUpdateTemplates({
@@ -182,7 +185,7 @@ export function TemplatesTab({
                   onChange={(e) => setBatchWorkstationId(e.target.value)}
                   className="h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground"
                   disabled={isBatchUpdatingTemplates}
-                  aria-label="Sélectionner un poste pour l'affectation en lot"
+                  aria-label="Select workstation for batch template assignment"
                 >
                   <option value="">Assigner à un poste…</option>
                   {workstations.map((ws) => (
@@ -193,6 +196,7 @@ export function TemplatesTab({
                 </select>
                 <button
                   type="button"
+                  aria-label="Assign to workstation"
                   onClick={() => {
                     if (!batchWorkstationId || !onBatchUpdateTemplates) return;
                     onBatchUpdateTemplates({
@@ -219,6 +223,7 @@ export function TemplatesTab({
 
                 <button
                   type="button"
+                  aria-label="Clear assignment"
                   onClick={() => {
                     if (!onBatchUpdateTemplates) return;
                     onBatchUpdateTemplates({
@@ -259,7 +264,7 @@ export function TemplatesTab({
             {filteredTemplates.map((template) => (
               <div
                 key={template.id}
-                className="bg-card rounded-xl border border-border p-6 shadow-sm"
+                className="bg-card rounded-xl border border-border p-4 md:p-6 shadow-sm"
               >
                 <div className="flex items-start justify-between mb-3 gap-3">
                   <div className="flex items-start gap-2 flex-1 min-w-0">
@@ -268,7 +273,7 @@ export function TemplatesTab({
                       checked={selectedTemplateIds.includes(template.id)}
                       onChange={() => toggleTemplateSelection(template.id)}
                       className="mt-1 h-4 w-4 flex-shrink-0 rounded border-border text-primary focus:ring-primary"
-                      aria-label={`Selectionner le modele ${template.title}`}
+                      aria-label={`Select template ${template.title}`}
                     />
                     <div className="min-w-0">
                       <h3 className="font-semibold text-foreground text-lg mb-1">

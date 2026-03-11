@@ -181,14 +181,18 @@ async function validateAndResolveTeamContext(
 ): Promise<void> {
   let workstationTeamId: string | null = null;
   if (input.workstationId) {
-    const workstation = await tx.workstation.findFirst({
-      where: {
-        id: input.workstationId,
-        team: { is: { managerId: managerUserId } },
+    const workstation = await tx.workstation.findUnique({
+      where: { id: input.workstationId },
+      select: {
+        teamId: true,
+        team: { select: { managerId: true } },
       },
-      select: { teamId: true },
     });
-    if (!workstation || !workstation.teamId) {
+    if (
+      !workstation ||
+      !workstation.teamId ||
+      workstation.team?.managerId !== managerUserId
+    ) {
       throw new AppError(404, "Not found");
     }
     workstationTeamId = workstation.teamId;
@@ -196,15 +200,20 @@ async function validateAndResolveTeamContext(
 
   let employeeTeamId: string | null = null;
   if (input.assignedToEmployeeId) {
-    const employee = await tx.user.findFirst({
-      where: {
-        id: input.assignedToEmployeeId,
-        role: "EMPLOYEE",
-        team: { is: { managerId: managerUserId } },
+    const employee = await tx.user.findUnique({
+      where: { id: input.assignedToEmployeeId },
+      select: {
+        role: true,
+        teamId: true,
+        team: { select: { managerId: true } },
       },
-      select: { teamId: true },
     });
-    if (!employee || !employee.teamId) {
+    if (
+      !employee ||
+      employee.role !== "EMPLOYEE" ||
+      !employee.teamId ||
+      employee.team?.managerId !== managerUserId
+    ) {
       throw new AppError(404, "Not found");
     }
     employeeTeamId = employee.teamId;
