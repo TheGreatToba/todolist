@@ -31,6 +31,33 @@ function canAccessTeam(tenant: TenantContext, teamId: string | null): boolean {
   }
 }
 
+const UpdateTeamNameSchema = z.object({
+  name: z.string().min(1),
+});
+
+export const handleUpdateTeamName: RequestHandler = async (req, res) => {
+  try {
+    const tenant = getTenantOrThrow(req, res);
+    if (!tenant) return;
+    const teamId = paramString(req.params["teamId"]);
+    if (!teamId) {
+      res.status(400).json({ success: false, error: "teamId is required" });
+      return;
+    }
+    assertManagerOwnsTeam(tenant, teamId);
+    const body = UpdateTeamNameSchema.parse(req.body);
+    const scoped = scopedPrisma(tenant);
+    const team = await scoped.team.update({
+      where: { id: teamId },
+      data: { name: body.name },
+      select: { id: true, name: true },
+    });
+    res.json({ success: true, team });
+  } catch (error) {
+    sendErrorResponse(res, error, req);
+  }
+};
+
 const CreateWorkstationSchema = z.object({
   name: z.string().min(1),
   teamId: z.string().optional(),
@@ -41,10 +68,11 @@ const CreateEmployeeSchema = z.object({
   email: z.string().email(),
   workstationIds: z
     .array(z.string())
-    .min(1)
     .refine((ids) => new Set(ids).size === ids.length, {
       message: "workstationIds must not contain duplicates",
-    }),
+    })
+    .optional()
+    .default([]),
 });
 
 const UpdateEmployeeWorkstationsSchema = z.object({
@@ -191,49 +219,57 @@ export const handleCreateEmployee: RequestHandler = async (req, res) => {
       return;
     }
 
-    const requestedWorkstations = await scoped.workstation.findMany({
-      where: {
-        id: { in: body.workstationIds },
-        teamId: { in: teamIds },
-      },
-    });
+    let employeeTeamId: string;
+    let workstations: Awaited<ReturnType<typeof scoped.workstation.findMany>> =
+      [];
 
-    if (requestedWorkstations.length !== body.workstationIds.length) {
-      res.status(400).json({ error: "One or more workstations not found" });
-      return;
-    }
-
-    const allowed = requestedWorkstations.every((ws) =>
-      canAccessTeam(tenant, ws.teamId),
-    );
-    if (!allowed) {
-      res.status(403).json({
-        error: "One or more workstations do not belong to your team(s).",
+    if (body.workstationIds.length > 0) {
+      const requestedWorkstations = await scoped.workstation.findMany({
+        where: {
+          id: { in: body.workstationIds },
+          teamId: { in: teamIds },
+        },
       });
-      return;
-    }
 
-    // Business rule: employee is assigned to one team; all workstations must belong to that same team.
-    const workstationTeamIds = [
-      ...new Set(requestedWorkstations.map((ws) => ws.teamId).filter(Boolean)),
-    ] as string[];
-    if (workstationTeamIds.length === 0) {
-      res.status(400).json({
-        error:
-          "Selected workstations have no team. Please choose valid workstations.",
-      });
-      return;
-    }
-    if (workstationTeamIds.length > 1) {
-      res.status(400).json({
-        error:
-          "All workstations must belong to the same team. Please select workstations from a single team.",
-      });
-      return;
-    }
-    const employeeTeamId = workstationTeamIds[0];
+      if (requestedWorkstations.length !== body.workstationIds.length) {
+        res.status(400).json({ error: "One or more workstations not found" });
+        return;
+      }
 
-    const workstations = requestedWorkstations;
+      const allowed = requestedWorkstations.every((ws) =>
+        canAccessTeam(tenant, ws.teamId),
+      );
+      if (!allowed) {
+        res.status(403).json({
+          error: "One or more workstations do not belong to your team(s).",
+        });
+        return;
+      }
+
+      const workstationTeamIds = [
+        ...new Set(
+          requestedWorkstations.map((ws) => ws.teamId).filter(Boolean),
+        ),
+      ] as string[];
+      if (workstationTeamIds.length === 0) {
+        res.status(400).json({
+          error:
+            "Selected workstations have no team. Please choose valid workstations.",
+        });
+        return;
+      }
+      if (workstationTeamIds.length > 1) {
+        res.status(400).json({
+          error:
+            "All workstations must belong to the same team. Please select workstations from a single team.",
+        });
+        return;
+      }
+      employeeTeamId = workstationTeamIds[0];
+      workstations = requestedWorkstations;
+    } else {
+      employeeTeamId = teamIds[0];
+    }
 
     // Placeholder password - user will set real password via email link
     const placeholderPassword = crypto.randomBytes(24).toString("hex");
@@ -792,7 +828,9 @@ export const handleUpdateWorkstationEmployees: RequestHandler = async (
     });
 
     if (employees.length !== body.employeeIds.length) {
-      res.status(400).json({ error: "One or more employees not found" });
+      res.status(403).json({
+        error: "One or more employees do not belong to your managed team.",
+      });
       return;
     }
 
@@ -825,7 +863,7 @@ export const handleUpdateWorkstationEmployees: RequestHandler = async (
       }
     });
 
-    const updatedWorkstation = await scoped.workstation.findFirst({
+    const updatedWorkstation = await scoped.workstation.findUnique({
       where: { id: workstationId },
       include: {
         employees: {

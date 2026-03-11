@@ -64,6 +64,7 @@ import {
   handleGetTeamMembers,
   handleUpdateEmployeeWorkstations,
   handleUpdateWorkstationEmployees,
+  handleUpdateTeamName,
 } from "./routes/workstations";
 import { handleTrackManagerKpiEvent } from "./routes/metrics";
 
@@ -363,6 +364,13 @@ export function createApp(): Express {
     "/api/workstations/:workstationId/employees",
     ...withManagerTenantContext,
     handleUpdateWorkstationEmployees,
+  );
+
+  // Team routes
+  app.patch(
+    "/api/team/:teamId",
+    ...withManagerTenantContext,
+    handleUpdateTeamName,
   );
 
   // Employee management routes (rate-limited)

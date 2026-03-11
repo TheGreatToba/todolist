@@ -14,10 +14,10 @@ const SetPassword = React.lazy(() => import("./pages/SetPassword"));
 const ForgotPassword = React.lazy(() => import("./pages/ForgotPassword"));
 const ResetPassword = React.lazy(() => import("./pages/ResetPassword"));
 const EmployeeDashboard = React.lazy(() => import("./pages/EmployeeDashboard"));
-const TodayBoard = React.lazy(() => import("./pages/TodayBoard"));
 const ManagerDashboard = React.lazy(() => import("./pages/ManagerDashboard"));
 const ManagerLayout = React.lazy(() => import("./pages/ManagerLayout"));
 const NotFound = React.lazy(() => import("./pages/NotFound"));
+const Onboarding = React.lazy(() => import("./pages/Onboarding"));
 
 const queryClient = new QueryClient();
 
@@ -94,7 +94,7 @@ function ProtectedRoute({
   if (requiredRole && user.role !== requiredRole) {
     return (
       <Navigate
-        to={user.role === "MANAGER" ? "/manager/today" : "/employee"}
+        to={user.role === "MANAGER" ? "/manager/dashboard" : "/employee"}
         replace
       />
     );
@@ -135,13 +135,25 @@ const App = () => (
                   }
                 >
                   <Route index element={<Navigate to="dashboard" replace />} />
-                  <Route path="today" element={<TodayBoard />} />
+                  <Route
+                    path="today"
+                    element={<Navigate to="/manager/dashboard" replace />}
+                  />
                   <Route path="dashboard" element={<ManagerDashboard />} />
                   <Route path="pilotage" element={<ManagerDashboard />} />
+                  <Route path="tasks" element={<ManagerDashboard />} />
+                  <Route path="templates" element={<ManagerDashboard />} />
                   <Route path="workstations" element={<ManagerDashboard />} />
                   <Route path="employees" element={<ManagerDashboard />} />
-                  <Route path="task" element={<ManagerDashboard />} />
                 </Route>
+                <Route
+                  path="/onboarding"
+                  element={
+                    <ProtectedRoute requiredRole="MANAGER">
+                      <Onboarding />
+                    </ProtectedRoute>
+                  }
+                />
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                 <Route path="*" element={<NotFound />} />
               </Routes>
